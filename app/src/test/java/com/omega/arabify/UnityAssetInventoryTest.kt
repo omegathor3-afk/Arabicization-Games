@@ -329,4 +329,22 @@ class UnityAssetInventoryTest {
         })
     }
 
+
+    @Test fun mapsUnityFsStorageBlockCompressionFlagsAndCopiesUncompressedBlocksSafely() {
+        assertEquals(UnityCompressionCodec.NONE, unityCompressionCodecFromFlags(0))
+        assertEquals(UnityCompressionCodec.LZMA_ALONE, unityCompressionCodecFromFlags(1))
+        assertEquals(UnityCompressionCodec.LZ4_BLOCK, unityCompressionCodecFromFlags(2))
+        assertEquals(UnityCompressionCodec.LZ4_BLOCK, unityCompressionCodecFromFlags(3))
+        assertNull(unityCompressionCodecFromFlags(4))
+        assertNull(unityCompressionCodecFromFlags(-1))
+
+        val original = byteArrayOf(3, 1, 4, 1, 5)
+        assertArrayEquals(
+            original,
+            UnityFsBlockDecompressor.decompress(
+                UnityCompressionCodec.NONE, original, original.size.toLong()
+            )
+        )
+    }
+
 }
