@@ -129,6 +129,17 @@ internal object AndroidAssetLocalizer {
  private val supported=setOf("json","txt","properties","strings")
  private val allowedRoots=listOf("assets/","res/raw/","localization/","strings/")
 
+ internal fun isSupportedTextAsset(
+  path:String,
+  size:Long,
+  allowedPathPrefixes:List<String> = allowedRoots
+ ):Boolean {
+  val extension=path.substringAfterLast('.', "").lowercase()
+  return supported.contains(extension) &&
+   allowedPathPrefixes.any { path.startsWith(it) } &&
+   size in 1..MAX_FILE_BYTES
+ }
+
  suspend fun localize(
   context:Context,inputApk:File,unsignedApk:File,signedApk:File,
   translator:OfflineArabicTranslator,onProgress:(Int,Int)->Unit={_,_->},
@@ -155,8 +166,7 @@ internal object AndroidAssetLocalizer {
    while(entries.hasMoreElements()){
     val entry=entries.nextElement()
     if(entry.name.startsWith("lib/")&&entry.name.endsWith(".so",true))hasNativeLibraries=true
-    val ext=entry.name.substringAfterLast('.',"").lowercase()
-    if(!entry.isDirectory&&supported.contains(ext)&&allowedPathPrefixes.any{entry.name.startsWith(it)}&&entry.size in 1..MAX_FILE_BYTES){
+    if(!entry.isDirectory&&isSupportedTextAsset(entry.name,entry.size,allowedPathPrefixes)){
      candidates+=entry
     }
    }
