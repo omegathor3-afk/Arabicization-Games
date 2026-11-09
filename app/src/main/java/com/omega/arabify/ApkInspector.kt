@@ -9,7 +9,8 @@ import java.util.zip.ZipFile
 internal data class ApkScanResult(
  val fileName:String,val fileSize:Long,val packageName:String?,val versionName:String?,
  val engine:GameEngine,val entryCount:Int,val dexCount:Int,
- val candidateFiles:List<String>,val extractedTextSamples:List<String>,val notes:List<String>,val fontAssessments:List<ArabicFontAssessment>
+ val candidateFiles:List<String>,val extractedTextSamples:List<String>,val notes:List<String>,val fontAssessments:List<ArabicFontAssessment>,
+ val unityAssetInventory:UnityAssetInventory? = null
 )
 internal object ApkInspector {
  private const val MAX_APK_BYTES=1_500L*1024L*1024L
@@ -52,6 +53,8 @@ internal object ApkInspector {
     }
    }
    val engine=EngineDetector.detect(paths)
+   val unityInventory=if(engine==GameEngine.UNITY) UnityAssetInventoryScanner.inspect(temp) else null
+   unityInventory?.notes?.forEach { notes += it }
    if(paths.any{it=="resources.arsc"})notes+="موارد Android الثنائية موجودة؛ لم يتم فك resources.arsc بعد."
    if(dex>0)notes+="تم العثور على $dex ملف DEX؛ نصوص الكود تحتاج محلل DEX/Smali."
    if(engine==GameEngine.UNITY)notes+="تم اكتشاف Unity؛ النصوص قد تكون في Assets أو Bundles أو ملفات IL2CPP/Mono."
@@ -60,7 +63,7 @@ internal object ApkInspector {
    if(fonts.isEmpty())notes+="لم يتم العثور على ملفات TTF/OTF واضحة يمكن فحص تغطيتها العربية."
    else if(fonts.none{it.suitableForArabic})notes+="الخطوط المفحوصة لا تحتوي تغطية عربية كافية؛ يلزم خط عربي بديل مدمج واختبار ربطه بمحرك اللعبة."
    notes+="فحص أولي للقراءة فقط؛ ليس تعريبًا ولا يثبت اكتمال النصوص."
-   return ApkScanResult(name,copied,info?.packageName,info?.versionName,engine,count,dex,candidates.take(100),samples,notes.distinct(),ArabicFontAnalyzer.rank(fonts))
+   return ApkScanResult(name,copied,info?.packageName,info?.versionName,engine,count,dex,candidates.take(100),samples,notes.distinct(),ArabicFontAnalyzer.rank(fonts),unityInventory)
   }finally{temp.delete()}
  }
 }
