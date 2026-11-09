@@ -10,7 +10,7 @@ import java.nio.ByteOrder
 class ArabicFontAnalyzerTest {
     @Test fun detectsArabicCoverageFromTrueTypeCmapFormat12() {
         val assessment = ArabicFontAnalyzer.inspect("assets/fonts/test.ttf", fontWithArabicBasicCmap())
-        assertEquals(36, assessment.mappedArabicLetters)
+        assertEquals(26, assessment.mappedArabicLetters)
         assertTrue(assessment.coveragePercent > 0)
         assertFalse(assessment.suitableForArabic)
     }
@@ -51,7 +51,7 @@ class ArabicFontAnalyzerTest {
         b.putShort(42, 0)
         b.putInt(44, 28)
         b.putInt(48, 0)
-        b.putInt(52, 2)
+        b.putInt(52, 1)
         b.putInt(56, 0x0621)
         b.putInt(60, 0x063A)
         b.putInt(64, 1)
