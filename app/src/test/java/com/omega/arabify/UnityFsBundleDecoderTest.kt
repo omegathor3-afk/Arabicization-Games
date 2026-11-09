@@ -182,11 +182,10 @@ class UnityFsBundleDecoderTest {
     @Test fun acceptsHeaderFlagsWithUnityFsOptionsOutsideCompressionBits() {
         val payload = "flags".toByteArray()
         val bundle = makeBundle(payload, infoAtEnd = true)
-        val infoSizeOffset = bundle.size - 4
         // The final four bytes in the header are at offset 39 for this fixture.
         ByteBuffer.wrap(bundle).order(ByteOrder.BIG_ENDIAN).putInt(39, 0x00010282)
-        // Recreate a valid bundle with option bits on the header flags without changing block layout.
         val result = decode(bundle).first
-        assertTrue(result == null || result.header.flags == 0x00010282L)
+        assertNotNull(result)
+        assertEquals(0x00010282L, result!!.header.flags)
     }
 }
