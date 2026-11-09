@@ -9,7 +9,8 @@ internal data class UnityFsDecodeLimits(
     val maxDecodedBlockBytes: Long = 64L * 1024L * 1024L,
     val maxTotalDecodedBytes: Long = 512L * 1024L * 1024L,
     val maxBlockInfoBytes: Long = 64L * 1024L * 1024L,
-    val maxLzmaMemoryBytes: Long = 64L * 1024L * 1024L
+    val maxLzmaMemoryBytes: Long = 64L * 1024L * 1024L,
+    val maxWorkingSetBytes: Long = 192L * 1024L * 1024L
 )
 
 internal data class UnityFsDecodeResult(
@@ -80,6 +81,7 @@ internal object UnityFsBundleDecoder {
 
                 val headerCodec = unityCompressionCodecFromFlags(header.flags)
                     ?: error("Unsupported UnityFS block-info compression")
+                requireWorkingSet(compressedInfoSize, uncompressedInfoSize, headerCodec, limits)
                 val compressedInfo = readRange(input, infoOffset, compressedInfoSize.toInt())
                 val decodedInfo = UnityFsBlockDecompressor.decompress(
                     headerCodec,
@@ -108,10 +110,11 @@ internal object UnityFsBundleDecoder {
                 var cursor = dataStart
                 var totalDecoded = 0L
                 for (block in blockInfo.blocks) {
-                    val compressedBytes = readRange(input, cursor, block.compressedSize.toInt())
-                    cursor = Math.addExact(cursor, block.compressedSize)
                     val codec = unityCompressionCodecFromFlags(block.flags.toLong())
                         ?: error("Unsupported UnityFS storage-block compression")
+                    requireWorkingSet(block.compressedSize, block.uncompressedSize, codec, limits)
+                    val compressedBytes = readRange(input, cursor, block.compressedSize.toInt())
+                    cursor = Math.addExact(cursor, block.compressedSize)
                     totalDecoded = Math.addExact(totalDecoded, block.uncompressedSize)
                     require(totalDecoded <= limits.maxTotalDecodedBytes)
                     val decoded = UnityFsBlockDecompressor.decompress(
@@ -174,6 +177,21 @@ internal object UnityFsBundleDecoder {
 
     private fun align16(value: Long): Long = Math.addExact(value, (16L - (value and 15L)) and 15L)
 
+    private fun requireWorkingSet(
+        compressedBytes: Long,
+        decodedBytes: Long,
+        codec: UnityCompressionCodec,
+        limits: UnityFsDecodeLimits
+    ) {
+        var required = Math.addExact(compressedBytes, decodedBytes)
+        if (codec == UnityCompressionCodec.LZMA_ALONE) {
+            required = Math.addExact(required, limits.maxLzmaMemoryBytes)
+        }
+        require(required <= limits.maxWorkingSetBytes) {
+            "UnityFS block exceeds the configured working-set budget"
+        }
+    }
+
     private fun readRange(input: RandomAccessFile, offset: Long, size: Int): ByteArray {
         require(offset >= 0L && size > 0)
         require(offset <= input.length() && size.toLong() <= input.length() - offset)
@@ -188,5 +206,6 @@ internal object UnityFsBundleDecoder {
             limits.maxDecodedBlockBytes in 1..Int.MAX_VALUE.toLong() &&
             limits.maxTotalDecodedBytes > 0L &&
             limits.maxBlockInfoBytes in 1..Int.MAX_VALUE.toLong() &&
-            limits.maxLzmaMemoryBytes >= 1024L
+            limits.maxLzmaMemoryBytes >= 1024L &&
+            limits.maxWorkingSetBytes > 0L
 }
