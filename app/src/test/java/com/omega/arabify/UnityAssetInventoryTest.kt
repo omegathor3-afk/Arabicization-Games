@@ -10,6 +10,7 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 
 class UnityAssetInventoryTest {
@@ -72,6 +73,62 @@ class UnityAssetInventoryTest {
         assertEquals("UnityFS", UnityArchiveHeaderParser.detect("UnityFS\u0000".toByteArray()))
         assertEquals("UnityRaw", UnityArchiveHeaderParser.detect("UnityRaw\u0000".toByteArray()))
         assertNull(UnityArchiveHeaderParser.detect("not-a-bundle".toByteArray()))
+    }
+
+    @Test fun integrityVerifierAcceptsByteIdenticalUnityResourcesAfterRepack() {
+        val directory = createTempDir(prefix = "arabify-unity-integrity-")
+        try {
+            val source = File(directory, "source.apk")
+            val output = File(directory, "output.apk")
+            val entries = linkedMapOf(
+                "assets/bin/Data/resources.assets" to byteArrayOf(1, 2, 3, 4),
+                "assets/bin/Data/content.bundle" to "UnityFS\u0000".toByteArray(),
+                "assets/bin/Data/sharedassets0.assets.resS" to byteArrayOf(9, 8, 7),
+                "assets/bin/Data/Managed/Assembly-CSharp.dll" to byteArrayOf(0x4d, 0x5a, 0, 1)
+            )
+            fun write(file: File, values: Map<String, ByteArray>) {
+                ZipOutputStream(file.outputStream()).use { zip ->
+                    values.forEach { (path, bytes) ->
+                        zip.putNextEntry(ZipEntry(path))
+                        zip.write(bytes)
+                        zip.closeEntry()
+                    }
+                }
+            }
+            write(source, entries)
+            write(output, entries)
+            val report = UnityAssetIntegrityVerifier.verifyUnchanged(source, output)
+            assertEquals(4, report.filesVerified)
+            assertEquals(entries.values.sumOf { it.size.toLong() }, report.totalBytesVerified)
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test fun integrityVerifierRejectsChangedSerializedAssetBytes() {
+        val directory = createTempDir(prefix = "arabify-unity-integrity-fail-")
+        try {
+            val source = File(directory, "source.apk")
+            val output = File(directory, "output.apk")
+            fun write(file: File, bytes: ByteArray) {
+                ZipOutputStream(file.outputStream()).use { zip ->
+                    zip.putNextEntry(ZipEntry("assets/bin/Data/resources.assets"))
+                    zip.write(bytes)
+                    zip.closeEntry()
+                }
+            }
+            write(source, byteArrayOf(1, 2, 3))
+            write(output, byteArrayOf(1, 2, 4))
+            var rejected = false
+            try {
+                UnityAssetIntegrityVerifier.verifyUnchanged(source, output)
+            } catch (_: IllegalArgumentException) {
+                rejected = true
+            }
+            assertTrue(rejected)
+        } finally {
+            directory.deleteRecursively()
+        }
     }
 
     @Test fun inventorySeparatesTextCandidatesSerializedFilesBundlesAndExternalStreams() {
