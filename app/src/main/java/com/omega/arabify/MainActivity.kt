@@ -23,6 +23,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
@@ -50,6 +51,13 @@ private fun ArabifyApp(context: Context) {
  var result by remember { mutableStateOf<ApkScanResult?>(null) }
  var error by remember { mutableStateOf<String?>(null) }
  var busy by remember { mutableStateOf(false) }
+ var modelReady by remember { mutableStateOf(false) }
+ var translationInput by remember { mutableStateOf("The gate is locked. Find the ancient key.") }
+ var translatedText by remember { mutableStateOf<String?>(null) }
+ var translationBusy by remember { mutableStateOf(false) }
+ var translationError by remember { mutableStateOf<String?>(null) }
+ val offlineTranslator = remember(context) { OfflineArabicTranslator(context) }
+ DisposableEffect(offlineTranslator) { onDispose { offlineTranslator.close() } }
  val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri:Uri? ->
   if(uri!=null) {
    busy=true;error=null;result=null
@@ -67,6 +75,34 @@ private fun ArabifyApp(context: Context) {
      Text("ARABIFY",color=Color(0xFFD7B77A),fontSize=30.sp,fontWeight=FontWeight.Black)
      Text("محرك تعريب الألعاب والتطبيقات",color=Color(0xFFE8E1D5),fontSize=18.sp,fontWeight=FontWeight.SemiBold)
      Text("تحليل محلي • خصوصية • دعم محركات متعددة",color=Color(0xFF9CA5B1),fontSize=12.sp)
+    }
+    item {
+     Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF202630)),shape=RoundedCornerShape(20.dp)) {
+      Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+       Text("مترجم محلي إلى العربية",color=Color.White,fontSize=18.sp,fontWeight=FontWeight.Bold)
+       Text("حمّل نموذج اللغة مرة واحدة عبر Wi-Fi؛ بعد اكتمال تنزيله تتم الترجمة على الجهاز دون إرسال النصوص إلى خادم.",color=Color(0xFFB9C1CB),fontSize=12.sp)
+       Button(onClick={
+        translationBusy=true;translationError=null
+        scope.launch {
+         try { withContext(Dispatchers.IO){offlineTranslator.prepareForOfflineUse()};modelReady=true }
+         catch(e:Exception){translationError=e.message ?: "تعذر تجهيز نموذج الترجمة."}
+         finally{translationBusy=false}
+        }
+       },enabled=!translationBusy,modifier=Modifier.fillMaxWidth()){Text(if(modelReady) "نموذج العربية جاهز على الجهاز" else "تنزيل نموذج الترجمة")}
+       OutlinedTextField(value=translationInput,onValueChange={translationInput=it},label={Text("نص إنجليزي للتجربة")},modifier=Modifier.fillMaxWidth())
+       Button(onClick={
+        translationBusy=true;translationError=null;translatedText=null
+        scope.launch {
+         try { translatedText=withContext(Dispatchers.IO){offlineTranslator.translateEnglishToArabic(translationInput)} }
+         catch(e:Exception){translationError=e.message ?: "فشلت الترجمة."}
+         finally{translationBusy=false}
+        }
+       },enabled=modelReady&&!translationBusy&&translationInput.isNotBlank(),modifier=Modifier.fillMaxWidth()){Text("ترجمة إلى العربية")}
+       if(translationBusy) CircularProgressIndicator()
+       translatedText?.let{Text(it,color=Color(0xFFE7D5AF),fontSize=17.sp)}
+       translationError?.let{Text(it,color=Color(0xFFFF9B91),fontSize=12.sp)}
+      }
+     }
     }
     item {
      Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF202630)),shape=RoundedCornerShape(20.dp)) {
