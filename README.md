@@ -25,8 +25,8 @@
 ## حدود الإصدار الحالي — مهم
 
 هذا ليس بعدُ مترجمًا عامًا لكل الألعاب:
-- مسار إعادة البناء الحالي يترجم موارد Android من النوع `string` فقط، وليس النصوص داخل DEX أو الصور أو الصوت أو ملفات الألعاب الثنائية.
-- **Unity: غير مدعوم للتعريب حاليًا**؛ الموجود هو اكتشاف مؤشرات فقط. لا يوجد استخراج/إعادة بناء Unity AssetBundles أو Resources أو ترجمة Mono/IL2CPP.
+- مسار Android Native الحالي يعالج موارد `string` الافتراضية. ومسار assets التجريبي يعالج فقط ملفات JSON/TXT/Properties/Strings النصية الواضحة ضمن المسارات المسموح بها؛ لا يترجم DEX أو الصور أو الصوت أو الملفات الثنائية.
+- **Unity Mono: دعم أولي محدود** لملفات JSON/TXT/Properties/Strings الواضحة داخل `assets/bin/Data/StreamingAssets/`، مع اكتشاف Mono ورفض IL2CPP وإعادة بناء ZIP/توقيع APK عبر المسار الحالي. لا يغيّر هذا المسار `Assembly-CSharp.dll` أو `resources.assets` أو AssetBundles. **Unity IL2CPP غير مدعوم بعد**، ولا توجد إعادة بناء لملفات Resources أو AssetBundles.
 - **Unreal Engine: غير مدعوم للتعريب حاليًا**؛ الموجود هو اكتشاف مؤشرات فقط. لا يوجد قارئ/كاتب PAK أو IoStore (UCAS/UTOC)، ولا فك ضغط/تشفير أو إعادة بناء الحزم.
 - Godot: لا يوجد محول تعريب مكتمل.
 - لا يتم حاليًا تعريب `plurals` أو `string-array` أو XML أو ملفات localization الخاصة بمحركات الألعاب.
@@ -52,7 +52,9 @@
 - [ ] تحليل ملفات XML وPO/CSV مع الحفاظ على بنيتها.
 - [ ] معالجة plurals وstring-arrays وملفات XML المعقدة.
 - [ ] دعم ملفات JSON/TXT/CSV وملفات الترجمة في assets.
-- [ ] محول Unity Mono ثم Unity IL2CPP.
+- [x] محول Unity Mono محدود لمسارات StreamingAssets مع ZIP fixtures واختبارات حفظ الملفات الثنائية.
+- [ ] اختبار محول Mono على APK لعبة حقيقية، ثم دعم موارد Unity serialized وملفات Mono managed عند وجود صيغة آمنة.
+- [ ] محول Unity IL2CPP مستقل بعد بناء قارئ metadata وملفات data.
 - [ ] محول Unreal وGodot.
 - [ ] اختيار اللغة المصدر واكتشافها تلقائيًا.
 - [x] فحص خطوط TTF/OTF وتقييم تغطية الحروف العربية وترتيب المرشحين.
