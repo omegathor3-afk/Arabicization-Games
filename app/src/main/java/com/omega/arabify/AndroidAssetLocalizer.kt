@@ -131,7 +131,8 @@ internal object AndroidAssetLocalizer {
 
  suspend fun localize(
   context:Context,inputApk:File,unsignedApk:File,signedApk:File,
-  translator:OfflineArabicTranslator,onProgress:(Int,Int)->Unit={_,_->}
+  translator:OfflineArabicTranslator,onProgress:(Int,Int)->Unit={_,_->},
+  allowedPathPrefixes:List<String> = allowedRoots
  ):AssetLocalizationReport {
   require(inputApk.isFile){"ملف APK الأصلي غير موجود."}
   val archiveInfo=try{
@@ -155,7 +156,7 @@ internal object AndroidAssetLocalizer {
     val entry=entries.nextElement()
     if(entry.name.startsWith("lib/")&&entry.name.endsWith(".so",true))hasNativeLibraries=true
     val ext=entry.name.substringAfterLast('.',"").lowercase()
-    if(!entry.isDirectory&&supported.contains(ext)&&allowedRoots.any{entry.name.startsWith(it)}&&entry.size in 1..MAX_FILE_BYTES){
+    if(!entry.isDirectory&&supported.contains(ext)&&allowedPathPrefixes.any{entry.name.startsWith(it)}&&entry.size in 1..MAX_FILE_BYTES){
      candidates+=entry
     }
    }
