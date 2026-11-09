@@ -2,12 +2,16 @@ package com.omega.arabify
 
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -33,6 +37,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -115,10 +120,12 @@ private fun ArabifyApp(context: Context) {
        Text("اختر من تطبيقات وألعاب هاتفك",color=Color.White,fontSize=19.sp,fontWeight=FontWeight.Bold)
        Text("تظهر هنا التطبيقات المثبتة التي لها أيقونة تشغيل. اختر تطبيقًا لقراءة ملف التثبيت الأساسي محليًا.",color=Color(0xFFB9C1CB),fontSize=12.sp)
        OutlinedTextField(value=appSearch,onValueChange={appSearch=it},label={Text("ابحث عن لعبة أو تطبيق")},modifier=Modifier.fillMaxWidth(),singleLine=true)
-       val visibleApps=installedApps.filter { it.label.contains(appSearch,true) || it.packageName.contains(appSearch,true) }.take(30)
+       val visibleApps=installedApps.filter { it.label.contains(appSearch,true) || it.packageName.contains(appSearch,true) }
        if(visibleApps.isEmpty()) Text("لا توجد نتائج. تأكد من تثبيت التطبيق أو استخدم اختيار APK اليدوي.",color=Color(0xFF9BB1D8),fontSize=12.sp)
        visibleApps.forEach { app ->
-        Row(Modifier.fillMaxWidth().padding(vertical=3.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(9.dp)) {
+        Row(Modifier.fillMaxWidth().padding(vertical=5.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(11.dp)) {
+         val appIcon=remember(app.packageName) { drawableToBitmap(context.packageManager.getApplicationIcon(app.packageName)).asImageBitmap() }
+         Image(bitmap=appIcon,contentDescription="أيقونة التطبيق",modifier=Modifier.height(44.dp).fillMaxWidth(0.13f))
          Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)) {
           Text(app.label,color=Color.White,fontWeight=FontWeight.SemiBold,fontSize=14.sp)
           Text(app.packageName,color=Color(0xFF91A7D4),fontSize=10.sp)
@@ -379,6 +386,16 @@ private fun copyUriToCache(context:Context,uri:Uri):File {
 
 
 internal data class InstalledApp(val label:String,val packageName:String,val apkPath:String,val splitCount:Int)
+
+private fun drawableToBitmap(drawable:Drawable):Bitmap {
+ val width=drawable.intrinsicWidth.coerceAtLeast(1).coerceAtMost(192)
+ val height=drawable.intrinsicHeight.coerceAtLeast(1).coerceAtMost(192)
+ val bitmap=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888)
+ val canvas=Canvas(bitmap)
+ drawable.setBounds(0,0,width,height)
+ drawable.draw(canvas)
+ return bitmap
+}
 
 @Suppress("DEPRECATION")
 private fun loadInstalledApps(context:Context):List<InstalledApp> {
