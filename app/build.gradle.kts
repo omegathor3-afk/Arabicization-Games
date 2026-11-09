@@ -29,6 +29,8 @@ dependencies {
  implementation("androidx.compose.ui:ui-tooling-preview")
  implementation("androidx.compose.material3:material3")
  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+ implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
+ implementation("com.google.mlkit:translate:17.0.3")
  debugImplementation("androidx.compose.ui:ui-tooling")
  testImplementation("junit:junit:4.13.2")
 }
