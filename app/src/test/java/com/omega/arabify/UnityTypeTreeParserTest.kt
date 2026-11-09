@@ -11,12 +11,12 @@ import java.nio.ByteOrder
 class UnityTypeTreeParserTest {
     private fun fixture(version: Int, badChildLevel: Int? = null, badStringOffset: Boolean = false): ByteArray {
         val strings = "Base\u0000GameObject\u0000m_Name\u0000".toByteArray(Charsets.UTF_8)
-        val nodeSize = if (version >= 19) 31 else 23
+        val nodeSize = if (version >= 19) 32 else 24
         val output = ByteBuffer.allocate(8 + nodeSize * 2 + strings.size).order(ByteOrder.LITTLE_ENDIAN)
         output.putInt(2)
         output.putInt(strings.size)
         fun node(level: Int, typeOffset: Int, nameOffset: Int) {
-            output.put(1)
+            output.putShort(1)
             output.put(level.toByte())
             output.put(0)
             output.putInt(typeOffset)
@@ -53,7 +53,7 @@ class UnityTypeTreeParserTest {
     @Test fun preservesUnresolvedCommonStringOffsetsWithoutGuessingNames() {
         val bytes = fixture(19)
         // Type string offset on the root uses the common-string high bit.
-        ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).putInt(11, 0x80000001.toInt())
+        ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).putInt(12, 0x80000001.toInt())
         val tree = UnityTypeTreeParser.parse(bytes, 19)
         assertNotNull(tree)
         assertEquals(null, tree!!.nodes[0].typeName)
