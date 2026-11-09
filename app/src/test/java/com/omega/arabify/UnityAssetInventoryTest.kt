@@ -259,4 +259,74 @@ class UnityAssetInventoryTest {
         assertNull(UnityBlockInfoParser.parse(badCount))
     }
 
+
+    @Test fun decompressesUnityLz4RawBlockAndChecksExactOutputLength() {
+        val original = "UnityFS bounded LZ4 fixture — مرحباً".toByteArray(Charsets.UTF_8)
+        val compressed = net.jpountz.lz4.LZ4Factory.fastestInstance()
+            .fastCompressor().compress(original)
+        val decoded = UnityFsBlockDecompressor.decompress(
+            UnityCompressionCodec.LZ4_BLOCK, compressed, original.size.toLong()
+        )
+        assertArrayEquals(original, decoded)
+        var rejected = false
+        try {
+            UnityFsBlockDecompressor.decompress(
+                UnityCompressionCodec.LZ4_BLOCK, compressed, original.size.toLong() - 1
+            )
+        } catch (_: IllegalArgumentException) {
+            rejected = true
+        }
+        assertTrue(rejected)
+    }
+
+    @Test fun decompressesUnityLzmaAloneStreamWithinMemoryAndOutputBudgets() {
+        val original = "UnityFS bounded LZMA fixture — النص العربي".toByteArray(Charsets.UTF_8)
+        val encoded = java.io.ByteArrayOutputStream()
+        org.tukaani.xz.LZMAOutputStream(
+            encoded, org.tukaani.xz.LZMA2Options(), original.size.toLong()
+        ).use { it.write(original) }
+
+        val decoded = UnityFsBlockDecompressor.decompress(
+            UnityCompressionCodec.LZMA_ALONE,
+            encoded.toByteArray(),
+            original.size.toLong(),
+            maxOutputBytes = 1024,
+            maxLzmaMemoryBytes = 16L * 1024L * 1024L
+        )
+        assertArrayEquals(original, decoded)
+    }
+
+    @Test fun rejectsUnityCompressionBombsAndMalformedStreamsBeforeUnboundedAllocation() {
+        val compressed = byteArrayOf(1, 2, 3, 4)
+        fun rejected(block: () -> Unit): Boolean = try {
+            block()
+            false
+        } catch (_: Exception) {
+            true
+        }
+        assertTrue(rejected {
+            UnityFsBlockDecompressor.decompress(
+                UnityCompressionCodec.LZ4_BLOCK, compressed, 4096,
+                maxOutputBytes = 1024
+            )
+        })
+        assertTrue(rejected {
+            UnityFsBlockDecompressor.decompress(
+                UnityCompressionCodec.LZ4_BLOCK, compressed, 16,
+                maxCompressedBytes = 3
+            )
+        })
+        assertTrue(rejected {
+            UnityFsBlockDecompressor.decompress(
+                UnityCompressionCodec.LZ4_BLOCK, compressed, 16
+            )
+        })
+        assertTrue(rejected {
+            UnityFsBlockDecompressor.decompress(
+                UnityCompressionCodec.LZMA_ALONE, compressed, 16,
+                maxLzmaMemoryBytes = 1024
+            )
+        })
+    }
+
 }
