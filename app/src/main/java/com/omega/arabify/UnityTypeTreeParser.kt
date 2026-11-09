@@ -32,23 +32,23 @@ internal data class UnityTypeTree(
 internal object UnityTypeTreeParser {
     private const val MAX_NODES = 250_000
     private const val MAX_STRING_BUFFER_BYTES = 16 * 1024 * 1024
-    private const val BASE_NODE_BYTES = 23
-    private const val REF_NODE_BYTES = 31
+    private const val BASE_NODE_BYTES = 24
+    private const val REF_NODE_BYTES = 32
     private const val COMMON_STRING_FLAG = 0x80000000L
 
     fun parse(
         bytes: ByteArray,
-        serializedFormatVersion: Int,
+        typeTreeFormatVersion: Int,
         byteOrder: ByteOrder = ByteOrder.LITTLE_ENDIAN
     ): UnityTypeTree? {
-        if (serializedFormatVersion !in 12..100 || bytes.size < 8) return null
+        if (typeTreeFormatVersion !in 12..100 || bytes.size < 8) return null
         return runCatching {
             val input = ByteBuffer.wrap(bytes).order(byteOrder)
             val nodeCount = input.int
             val stringBufferSize = input.int
             require(nodeCount in 1..MAX_NODES)
             require(stringBufferSize in 0..MAX_STRING_BUFFER_BYTES)
-            val nodeBytes = if (serializedFormatVersion >= 19) REF_NODE_BYTES else BASE_NODE_BYTES
+            val nodeBytes = if (typeTreeFormatVersion >= 19) REF_NODE_BYTES else BASE_NODE_BYTES
             val requiredNodeBytes = Math.multiplyExact(nodeCount.toLong(), nodeBytes.toLong())
             require(requiredNodeBytes <= input.remaining().toLong())
             require(stringBufferSize.toLong() <= input.remaining().toLong() - requiredNodeBytes)
@@ -63,7 +63,7 @@ internal object UnityTypeTreeParser {
             val raw = ArrayList<RawNode>(nodeCount)
             var previousLevel = -1
             repeat(nodeCount) {
-                val version = input.get().toInt() and 0xff
+                val version = input.short.toInt()
                 val level = input.get().toInt() and 0xff
                 val flags = input.get().toInt() and 0xff
                 val typeOffset = input.int.toLong() and 0xffffffffL
@@ -71,7 +71,7 @@ internal object UnityTypeTreeParser {
                 val byteSize = input.int
                 val index = input.int
                 val metaFlags = input.int
-                val refHash = if (serializedFormatVersion >= 19) input.long else null
+                val refHash = if (typeTreeFormatVersion >= 19) input.long else null
                 require(if (raw.isEmpty()) level == 0 else level in 1..(previousLevel + 1))
                 require(byteSize >= -1)
                 raw += RawNode(version, level, flags, typeOffset, nameOffset, byteSize, index, metaFlags, refHash)
