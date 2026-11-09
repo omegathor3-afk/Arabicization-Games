@@ -53,7 +53,7 @@ class UnityTypeTreeParserTest {
     @Test fun preservesUnresolvedCommonStringOffsetsWithoutGuessingNames() {
         val bytes = fixture(19)
         // Type string offset on the root uses the common-string high bit.
-        ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).putInt(16, 0x80000001.toInt())
+        ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).putInt(11, 0x80000001.toInt())
         val tree = UnityTypeTreeParser.parse(bytes, 19)
         assertNotNull(tree)
         assertEquals(null, tree!!.nodes[0].typeName)
