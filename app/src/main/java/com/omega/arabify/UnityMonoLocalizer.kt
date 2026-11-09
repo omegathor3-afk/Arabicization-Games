@@ -3,6 +3,7 @@ package com.omega.arabify
 import android.content.Context
 import java.io.File
 import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
 
 internal enum class UnityRuntimeKind { MONO, IL2CPP, UNKNOWN }
 

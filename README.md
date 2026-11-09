@@ -16,6 +16,12 @@
 - إعادة بناء APK وإزالة التوقيع القديم، ثم توقيع الناتج بمفتاح خاص بالتطبيق في Android Keystore والتحقق من التوقيع باستخدام apksig.
 - اختبارات وحدة وGitHub Actions لبناء APK.
 
+## Unity Mono — أول محول محدود النطاق
+
+أُضيف محول أولي لمسار Unity Mono يكتشف وجود `assets/bin/Data/Managed/Assembly-CSharp.dll` ويرفض حزم IL2CPP عند ظهور `libil2cpp.so` أو `global-metadata.dat`. يمكنه إعادة بناء APK عبر مسار ZIP والتوقيع الحالي عندما تكون النصوص في ملفات واضحة مدعومة (JSON/TXT/Properties/Strings) داخل `assets/`، بما فيها StreamingAssets.
+
+**هذا ليس بعدُ محولًا كاملًا لملفات Unity:** لا يغيّر CIL داخل Assembly-CSharp.dll، ولا يقرأ أو يعيد بناء `resources.assets` أو AssetBundles. ملفات DLL والموارد الثنائية تُحفظ كما هي. أضيفت اختبارات ZIP fixture لتأكيد اكتشاف Mono/IL2CPP وحفظ DLL وعدم إفساد موارد النصوص. يلزم اختبار لعبة Mono حقيقية قبل توسيع الادعاء بالتوافق.
+
 ## حدود الإصدار الحالي — مهم
 
 هذا ليس بعدُ مترجمًا عامًا لكل الألعاب:
