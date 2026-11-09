@@ -23,10 +23,15 @@ internal object UnitySerializedMetadataPrefixParser {
     private const val MAX_TYPES = 100_000
     private const val MIN_TYPE_RECORD_BYTES = 20
 
-    fun parse(header: UnitySerializedHeader, metadata: ByteArray): UnitySerializedMetadataPrefix? {
+    fun parse(
+        header: UnitySerializedHeader,
+        metadata: ByteArray,
+        allowPartialMetadataPrefix: Boolean = false
+    ): UnitySerializedMetadataPrefix? {
         if (header.formatVersion !in 9..100) return null
         if (header.endian == null || metadata.isEmpty()) return null
-        if (metadata.size.toLong() != header.metadataSize ||
+        if (metadata.size.toLong() > header.metadataSize ||
+            (!allowPartialMetadataPrefix && metadata.size.toLong() != header.metadataSize) ||
             metadata.size > MAX_METADATA_BYTES
         ) return null
 
@@ -74,8 +79,14 @@ internal object UnitySerializedMetadataPrefixParser {
             val typeCount = input.int
             require(typeCount in 0..MAX_TYPES)
             val minimumTypeBytes = Math.multiplyExact(typeCount.toLong(), MIN_TYPE_RECORD_BYTES.toLong())
-            require(minimumTypeBytes <= input.remaining().toLong()) {
-                "SerializedFile type records exceed remaining metadata"
+            val declaredBytesAfterPrefix = header.metadataSize - input.position().toLong()
+            require(declaredBytesAfterPrefix >= 0L && minimumTypeBytes <= declaredBytesAfterPrefix) {
+                "SerializedFile type records exceed declared metadata size"
+            }
+            if (!allowPartialMetadataPrefix) {
+                require(minimumTypeBytes <= input.remaining().toLong()) {
+                    "SerializedFile type records exceed available metadata bytes"
+                }
             }
 
             UnitySerializedMetadataPrefix(
