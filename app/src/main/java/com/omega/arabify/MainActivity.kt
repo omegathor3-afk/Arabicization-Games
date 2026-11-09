@@ -240,9 +240,9 @@ private fun ArabifyApp(context: Context) {
                 scope.launch { assetProgress=done to total }
                }
               } else {
-               AndroidAssetLocalizer.localize(context,input,File(context.cacheDir,"arabify-assets-$stamp-unsigned.apk"),File(context.cacheDir,"arabify-assets-$stamp-signed.apk"),offlineTranslator) { done,total ->
+               AndroidAssetLocalizer.localize(context,input,File(context.cacheDir,"arabify-assets-$stamp-unsigned.apk"),File(context.cacheDir,"arabify-assets-$stamp-signed.apk"),offlineTranslator,onProgress = { done,total ->
                scope.launch { assetProgress=done to total }
-              }
+              })
               }
              }
              assetReport=report
