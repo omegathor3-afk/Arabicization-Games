@@ -34,6 +34,14 @@ License statements are based on upstream repository license files/readmes at the
 - UI report explicitly says what is and is not parsed.
 - Header parser round-trip tests assert byte-for-byte preservation of unknown serialized payload bytes.
 
+## SerializedFile / TypeTree progress (read-only)
+
+- A bounded standalone parser now reads the flat TypeTree node/string-buffer representation for SerializedFile format versions 12–100.
+- It validates node counts, record-buffer arithmetic, hierarchy levels, local string offsets, NUL termination, UTF-8 validity, and trailing bytes before accepting a tree.
+- For format version 19+, it preserves each node's 64-bit reference-type hash. Common-string-table offsets are retained as unresolved references rather than guessed or silently mapped to the wrong field name.
+- This parser is **not yet wired into the SerializedFile metadata/type-record reader**. It does not parse object tables, object payloads, script IDs, external references, or write assets. No automatic translation or asset mutation is enabled.
+- Synthetic tests cover versions 18/19, local strings, unresolved common-string references, malformed counts, hierarchy, offsets, and trailing data. Real Unity fixtures and differential comparison against UnityPy/UnityDataTools remain required.
+
 ## Required gate before any asset edit
 
 1. Parse archive block tables and decompression safely with strict limits (entry count, total expanded bytes, per-block size, recursion depth, CPU/time).
