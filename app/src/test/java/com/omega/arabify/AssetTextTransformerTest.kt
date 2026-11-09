@@ -14,6 +14,15 @@ class AssetTextTransformerTest {
   assertEquals(1,result.translated)
  }
 
+ @Test fun jsonTranslatesValuesKeepsKeysAndRestoresPlaceholders()=runBlocking {
+  val source="""{"menu":"Start Game","dialogue":{"welcome":"Hello {player}","url":"https://example.com"}}"""
+  val result=AssetTextTransformer.transform("assets/localization/en.json",source){"AR:$it"}
+  assertTrue(result.text.contains("\"menu\": \"AR:Start Game\""))
+  assertTrue(result.text.contains("AR:Hello {player}"))
+  assertTrue(result.text.contains("https://example.com"))
+  assertEquals(2,result.translated)
+ }
+
  @Test fun propertiesKeepsKeysAndComments()=runBlocking {
   val source="# menu\nmenu.start=Start Game\nmenu.exit=Exit"
   val result=AssetTextTransformer.transform("assets/lang.properties",source){ "AR:$it" }
