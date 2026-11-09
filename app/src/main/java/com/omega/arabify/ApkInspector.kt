@@ -34,7 +34,11 @@ internal object ApkInspector {
     val en=zip.entries()
     while(en.hasMoreElements()){
      val e=en.nextElement();if(e.isDirectory)continue
-     count++;val path=e.name;paths+=path\n     if(ArabicFontAnalyzer.isFontPath(path)&&e.size in 1..(20L*1024L*1024L)&&fonts.size<64)try{\n      val fontBytes=zip.getInputStream(e).use{it.readBytes()}\n      fonts+=ArabicFontAnalyzer.inspect(path,fontBytes)\n     }catch(_:Exception){notes+="تعذر تحليل ملف الخط: $path"}
+     count++;val path=e.name;paths += path
+     if(ArabicFontAnalyzer.isFontPath(path)&&e.size in 1..(20L*1024L*1024L)&&fonts.size<64)try {
+      val fontBytes=zip.getInputStream(e).use{it.readBytes()}
+      fonts +=ArabicFontAnalyzer.inspect(path,fontBytes)
+     } catch(_:Exception){notes+="تعذر تحليل ملف الخط: $path"}
      if(path.matches(Regex("(^|.*/)classes([0-9]+)?\\.dex",RegexOption.IGNORE_CASE)))dex++
      val ext=path.substringAfterLast('.',"").lowercase()
      if(ext in extensions && (path.startsWith("assets/")||path.startsWith("res/raw/")||path.startsWith("localization/")||path.startsWith("strings/"))){
@@ -52,7 +56,8 @@ internal object ApkInspector {
    if(dex>0)notes+="تم العثور على $dex ملف DEX؛ نصوص الكود تحتاج محلل DEX/Smali."
    if(engine==GameEngine.UNITY)notes+="تم اكتشاف Unity؛ النصوص قد تكون في Assets أو Bundles أو ملفات IL2CPP/Mono."
    if(engine==GameEngine.UNREAL)notes+="تم اكتشاف Unreal؛ ملفات PAK/IoStore قد تكون مضغوطة أو مشفرة."
-   if(candidates.isEmpty())notes+="لم يتم العثور على ملفات نصية واضحة في المسارات المدعومة."\n   if(fonts.isEmpty())notes+="لم يتم العثور على ملفات TTF/OTF واضحة يمكن فحص تغطيتها العربية."\n   else if(fonts.none{it.suitableForArabic})notes+="الخطوط المفحوصة لا تحتوي تغطية عربية كافية؛ يلزم خط عربي بديل مدمج واختبار ربطه بمحرك اللعبة."
+   if(candidates.isEmpty())notes += "لم يتم العثور على ملفات نصية واضحة في المسارات المدعومة."
+   if(fonts.isEmpty())notes+="لم يتم العثور على ملفات TTF/OTF واضحة يمكن فحص تغطيتها العربية."\n   else if(fonts.none{it.suitableForArabic})notes+="الخطوط المفحوصة لا تحتوي تغطية عربية كافية؛ يلزم خط عربي بديل مدمج واختبار ربطه بمحرك اللعبة."
    notes+="فحص أولي للقراءة فقط؛ ليس تعريبًا ولا يثبت اكتمال النصوص."
    return ApkScanResult(name,copied,info?.packageName,info?.versionName,engine,count,dex,candidates.take(100),samples,notes.distinct(),ArabicFontAnalyzer.rank(fonts))
   }finally{temp.delete()}
