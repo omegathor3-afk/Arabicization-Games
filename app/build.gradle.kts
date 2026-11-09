@@ -33,6 +33,8 @@ dependencies {
  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
  implementation("com.google.mlkit:translate:17.0.3")
  implementation("io.github.reandroid:ARSCLib:1.4.0")
+ implementation("org.lz4:lz4-java:1.8.0")
+ implementation("org.tukaani:xz:1.10")
  implementation("com.android.tools.build:apksig:8.13.2")
  debugImplementation("androidx.compose.ui:ui-tooling")
  testImplementation("junit:junit:4.13.2")
