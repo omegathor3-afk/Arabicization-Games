@@ -58,7 +58,7 @@ internal object TranslationModelPackageVerifier {
             if (!sha256Pattern.matches(entry.sha256)) return rejected("sha256_invalid")
             val relative = entry.relativePath
             if (relative.isBlank() || File(relative).isAbsolute ||
-                relative.replace("\\\\", "/").split('/').any { it == ".." || it.isBlank() }) {
+                relative.replace('\\', '/').split('/').any { it == ".." || it.isBlank() }) {
                 return rejected("unsafe_relative_path")
             }
             val file = File(canonicalRoot, relative).canonicalFile
