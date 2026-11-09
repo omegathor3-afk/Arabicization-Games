@@ -16,13 +16,12 @@ import org.tukaani.xz.LZMA2Options
 import org.tukaani.xz.LZMAOutputStream
 
 class UnityFsBundleDecoderTest {
-    private fun compressLz4(bytes: ByteArray): ByteArray =
-        LZ4Factory.fastestInstance().fastCompressor().let { compressor ->
-            ByteArray(compressor.maxCompressedLength(bytes.size)).also { target ->
-                val length = compressor.compress(bytes, 0, bytes.size, target, 0, target.size)
-                return@let target.copyOf(length)
-            }
-        }
+    private fun compressLz4(bytes: ByteArray): ByteArray {
+        val compressor = LZ4Factory.fastestInstance().fastCompressor()
+        val target = ByteArray(compressor.maxCompressedLength(bytes.size))
+        val length = compressor.compress(bytes, 0, bytes.size, target, 0, target.size)
+        return target.copyOf(length)
+    }
 
     private fun compressLzma(bytes: ByteArray): ByteArray {
         val output = ByteArrayOutputStream()
@@ -209,6 +208,19 @@ class UnityFsBundleDecoderTest {
             payload, engineVersion = "2021.3.2f1", needsPadding = true
         )
         assertNull(decode(legacy).first)
+    }
+
+    @Test fun enforcesAggregateWorkingSetForLzmaDictionaryAndBlockBuffers() {
+        val bundle = makeBundle(
+            ByteArray(128) { it.toByte() },
+            blockCodec = UnityCompressionCodec.LZMA_ALONE
+        )
+        assertNull(
+            decode(
+                bundle,
+                UnityFsDecodeLimits(maxWorkingSetBytes = 1024)
+            ).first
+        )
     }
 
     @Test fun rejectsUnknownCompressionFlagsAndNonUnityFsSignatures() {
