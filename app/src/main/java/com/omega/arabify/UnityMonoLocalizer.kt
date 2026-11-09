@@ -69,7 +69,8 @@ internal object UnityMonoLocalizer {
             unsignedApk = unsignedApk,
             signedApk = signedApk,
             translator = translator,
-            onProgress = onProgress
+            onProgress = onProgress,
+            allowedPathPrefixes = listOf("assets/bin/Data/StreamingAssets/")
         )
     }
 
