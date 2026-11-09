@@ -83,7 +83,7 @@ private fun ArabifyApp(context: Context) {
  DisposableEffect(offlineTranslator) { onDispose { offlineTranslator.close() } }
  val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri:Uri? ->
   if(uri!=null) {
-   selectedUri=uri;busy=true;error=null;result=null;localizationReport=null;generatedApk=null
+   selectedUri=uri;selectedInstalledApp=null;busy=true;error=null;result=null;localizationReport=null;generatedApk=null
    scope.launch {
     try { result=withContext(Dispatchers.IO){ApkInspector.inspect(context,uri)} }
     catch(e:Exception){error=e.message ?: "حدث خطأ أثناء فحص الملف."}
@@ -129,21 +129,21 @@ private fun ArabifyApp(context: Context) {
          Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)) {
           Text(app.label,color=Color.White,fontWeight=FontWeight.SemiBold,fontSize=14.sp)
           Text(app.packageName,color=Color(0xFF91A7D4),fontSize=10.sp)
-          if(app.splitCount>0) Text("حزمة أساسية + ${app.splitCount} ملفات إضافية؛ دعم الحزم المنقسمة قيد التطوير",color=Color(0xFFFFC46B),fontSize=10.sp)
+          if(app.splitCount>0) Text("حزمة أساسية + ${app.splitCount} ملفات Split إضافية",color=Color(0xFFFFC46B),fontSize=10.sp)
          }
          Button(onClick={
           selectedInstalledApp=app
           selectedUri=Uri.fromFile(File(app.apkPath))
           busy=true;error=null;result=null;localizationReport=null;generatedApk=null
           scope.launch {
-           try { result=withContext(Dispatchers.IO){ApkInspector.inspect(context,Uri.fromFile(File(app.apkPath)))} }
+           try { result=withContext(Dispatchers.IO){inspectInstalledPackage(context,app)} }
            catch(e:Exception){error=e.message ?: "تعذر فحص التطبيق المثبت."}
            finally{busy=false}
           }
          },enabled=!busy) { Text(if(selectedInstalledApp?.packageName==app.packageName) "محدد" else "اختيار") }
         }
        }
-       Text("مهم: أندرويد قد يثبت اللعبة كعدة ملفات Split APK. هذه النسخة تقرأ APK الأساسي فقط؛ لن أصف هذا بأنه تعريب كامل قبل دعم كل الأجزاء وملفات المحرك.",color=Color(0xFFFFC46B),fontSize=11.sp)
+       Text("يتم فحص ملفات APK الأساسية وملفات Split الإضافية كلٌ على حدة. إعادة بناء وتوقيع مجموعة Split كحزمة قابلة للتثبيت ما زالت غير مفعّلة؛ لذلك يتوقف التصدير الآمن لهذه الألعاب بدل إنتاج تثبيت ناقص.",color=Color(0xFFFFC46B),fontSize=11.sp)
       }
      }
     }
@@ -251,7 +251,7 @@ private fun ArabifyApp(context: Context) {
             finally { localizeBusy=false }
            }
           }
-         },enabled=modelReady&&!localizeBusy&&selectedUri!=null,modifier=Modifier.fillMaxWidth()) {
+         },enabled=modelReady&&!localizeBusy&&selectedUri!=null&&(selectedInstalledApp?.splitCount ?: 0)==0,modifier=Modifier.fillMaxWidth()) {
           Text(if(localizeBusy) "جارٍ التعريب..." else "ابدأ تعريب موارد اللعبة")
          }
          if(localizeBusy) {
@@ -316,7 +316,7 @@ private fun ArabifyApp(context: Context) {
             finally { assetBusy=false }
            }
           }
-         },enabled=modelReady&&!assetBusy&&selectedUri!=null,modifier=Modifier.fillMaxWidth()) {
+         },enabled=modelReady&&!assetBusy&&selectedUri!=null&&(selectedInstalledApp?.splitCount ?: 0)==0,modifier=Modifier.fillMaxWidth()) {
           Text(if(assetBusy) "جارٍ تعريب ملفات النصوص..." else "تعريب ملفات النصوص وإنشاء APK")
          }
          if(assetBusy) {
@@ -385,7 +385,7 @@ private fun copyUriToCache(context:Context,uri:Uri):File {
 }
 
 
-internal data class InstalledApp(val label:String,val packageName:String,val apkPath:String,val splitCount:Int)
+internal data class InstalledApp(val label:String,val packageName:String,val apkPath:String,val splitApkPaths:List<String>) { val splitCount:Int get()=splitApkPaths.size }
 
 private fun drawableToBitmap(drawable:Drawable):Bitmap {
  val width=drawable.intrinsicWidth.coerceAtLeast(1).coerceAtMost(192)
@@ -402,6 +402,33 @@ private fun loadInstalledApps(context:Context):List<InstalledApp> {
  val pm=context.packageManager
  return pm.getInstalledApplications(PackageManager.GET_META_DATA)
   .filter { pm.getLaunchIntentForPackage(it.packageName)!=null && it.sourceDir!=null }
-  .map { info -> InstalledApp(pm.getApplicationLabel(info).toString(),info.packageName,info.sourceDir,info.splitSourceDirs?.size ?: 0) }
+  .map { info -> InstalledApp(pm.getApplicationLabel(info).toString(),info.packageName,info.sourceDir,info.splitSourceDirs?.toList() ?: emptyList()) }
   .sortedBy { it.label.lowercase() }
+}
+
+
+private fun inspectInstalledPackage(context:Context, app:InstalledApp):ApkScanResult {
+ val files=listOf(app.apkPath)+app.splitApkPaths
+ val scans=files.mapIndexed { index,path ->
+  ApkInspector.inspect(context,Uri.fromFile(File(path))).let { scan ->
+   if(index==0) scan else scan.copy(fileName="split-$index-${File(path).name}")
+  }
+ }
+ val base=scans.first()
+ if(scans.size==1) return base
+ val allFonts=scans.flatMap { it.fontAssessments }
+ val allCandidates=scans.flatMap { scan -> scan.candidateFiles.map { "${scan.fileName}:$it" } }.distinct()
+ val allSamples=scans.flatMap { it.extractedTextSamples }.take(100)
+ val allNotes=scans.flatMap { it.notes }.distinct().toMutableList()
+ allNotes += "تم فحص APK الأساسي و${scans.size-1} ملفات Split إضافية للقراءة فقط. لم يتم بعد إعادة بناء مجموعة Split وتوقيعها كحزمة واحدة؛ التصدير معطل لهذه الحالة."
+ return base.copy(
+  fileName=app.label,
+  fileSize=scans.sumOf { it.fileSize },
+  entryCount=scans.sumOf { it.entryCount },
+  dexCount=scans.sumOf { it.dexCount },
+  candidateFiles=allCandidates.take(200),
+  extractedTextSamples=allSamples,
+  notes=allNotes,
+  fontAssessments=ArabicFontAnalyzer.rank(allFonts)
+ )
 }
