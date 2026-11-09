@@ -255,29 +255,49 @@ internal object UnityAssetInventoryScanner {
                             "مرشح نصي؛ يحتاج تحقق الترميز والبنية قبل الترجمة"
                         )
                     isSerializedName -> {
-                        val header = UnitySerializedFileHeaderParser.parse(prefix, size)
-                        if (header != null) {
-                            val metadataPrefix = if (prefix.size > header.headerSize) {
-                                prefix.copyOfRange(header.headerSize, prefix.size)
-                            } else {
-                                byteArrayOf()
+                        val inspection = try {
+                            zip.getInputStream(entry).use { stream ->
+                                UnitySerializedFileInspector.inspect(stream, size)
                             }
-                            val metadata = UnitySerializedMetadataPrefixParser.parse(
-                                header, metadataPrefix, allowPartialMetadataPrefix = true
-                            )
-                            val metadataDetail = metadata?.let {
-                                "؛ Unity=${it.unityVersion ?: "unknown"}؛ platform=${it.targetPlatform ?: -1}؛ TypeTree=${it.typeTreeEnabled ?: "unknown"}؛ types=${it.typeCount}"
-                            } ?: "؛ metadata preamble غير مكتمل أو غير مدعوم"
+                        } catch (_: Exception) {
+                            null
+                        }
+                        if (inspection != null) {
+                            val metadata = inspection.metadataPrefix
+                            val typeCount = metadata?.typeCount?.toString() ?: "unknown"
+                            val objectCount = inspection.objectTable?.objects?.size?.toString() ?: "not parsed"
+                            val stage = inspection.stage.name
+                            val detail = "SerializedFile v${inspection.header.formatVersion}, endian=${inspection.header.endian}; Unity=${metadata?.unityVersion ?: "unknown"}; platform=${metadata?.targetPlatform ?: -1}; TypeTree=${metadata?.typeTreeEnabled ?: "default"}; types=$typeCount; objects=$objectCount; stage=$stage؛ فحص قراءة فقط، بيانات الكائنات لم تُقرأ أو تُعدّل"
                             UnityAssetInventoryItem(
                                 path, size, UnityAssetKind.SERIALIZED_FILE,
                                 UnityAssetSupport.HEADER_PARSED_READ_ONLY,
-                                "SerializedFile header v${header.formatVersion}, endian=${header.endian}$metadataDetail؛ لم يتم تحليل type records أو object table أو payloads"
+                                detail
                             )
-                        } else UnityAssetInventoryItem(
-                            path, size, UnityAssetKind.SERIALIZED_FILE,
-                            UnityAssetSupport.PRESERVE_UNSUPPORTED,
-                            "اسم ملف SerializedFile محتمل لكن الترويسة غير مؤكدة؛ محفوظ دون تعديل"
-                        )
+                        } else {
+                            val header = UnitySerializedFileHeaderParser.parse(prefix, size)
+                            if (header != null) {
+                                val metadataPrefix = if (prefix.size > header.headerSize) {
+                                    prefix.copyOfRange(header.headerSize, prefix.size)
+                                } else {
+                                    byteArrayOf()
+                                }
+                                val metadata = UnitySerializedMetadataPrefixParser.parse(
+                                    header, metadataPrefix, allowPartialMetadataPrefix = true
+                                )
+                                val metadataDetail = metadata?.let {
+                                    "؛ Unity=${it.unityVersion ?: "unknown"}؛ platform=${it.targetPlatform ?: -1}؛ TypeTree=${it.typeTreeEnabled ?: "unknown"}؛ types=${it.typeCount}"
+                                } ?: "؛ metadata preamble غير مكتمل أو غير مدعوم"
+                                UnityAssetInventoryItem(
+                                    path, size, UnityAssetKind.SERIALIZED_FILE,
+                                    UnityAssetSupport.HEADER_PARSED_READ_ONLY,
+                                    "SerializedFile header v${header.formatVersion}, endian=${header.endian}$metadataDetail؛ فهرسة object table غير متاحة، الملف محفوظ دون تعديل"
+                                )
+                            } else UnityAssetInventoryItem(
+                                path, size, UnityAssetKind.SERIALIZED_FILE,
+                                UnityAssetSupport.PRESERVE_UNSUPPORTED,
+                                "اسم ملف SerializedFile محتمل لكن الترويسة غير مؤكدة؛ محفوظ دون تعديل"
+                            )
+                        }
                     }
                     UnityArchiveHeaderParser.detect(prefix) != null -> {
                         val archiveHeader = UnityArchiveHeaderParser.parse(prefix, size)
@@ -301,7 +321,7 @@ internal object UnityAssetInventoryScanner {
             }
         }
         if (items.any { it.kind == UnityAssetKind.SERIALIZED_FILE }) {
-            notes += "فحص SerializedFile هنا يقرأ الترويسة فقط؛ لا يقرأ TypeTrees أو object table أو مراجع الكائنات."
+            notes += "يتم تحليل Metadata وObject Table ضمن حدود ذاكرة محددة عند دعم الإصدار؛ تظل بيانات الكائنات نفسها للقراءة فقط ولا تُعدّل."
         }
         if (items.any { it.kind == UnityAssetKind.UNITY_ARCHIVE }) {
             notes += "تم التعرف على توقيع AssetBundle فقط؛ الضغط الداخلي وكتل البيانات وملفات CAB تحتاج محلل Archive مستقل."
