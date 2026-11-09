@@ -9,6 +9,7 @@ internal data class ArabicFontAssessment(
     val mappedArabicLetters: Int,
     val totalArabicLetters: Int,
     val coveragePercent: Int,
+    val hasArabicShapingTables: Boolean,
     val suitableForArabic: Boolean,
     val fileSize: Int
 )
@@ -29,6 +30,7 @@ internal object ArabicFontAnalyzer {
         val mapped = runCatching { mappedCodePoints(bytes) }.getOrDefault(emptySet())
         val count = arabicLetters.count { it in mapped }
         val percent = if (arabicLetters.isEmpty()) 0 else count * 100 / arabicLetters.size
+        val shapingTables = runCatching { hasArabicShapingTables(bytes) }.getOrDefault(false)
         val ext = path.substringAfterLast('.', "font").uppercase()
         return ArabicFontAssessment(
             path = path,
@@ -36,15 +38,66 @@ internal object ArabicFontAnalyzer {
             mappedArabicLetters = count,
             totalArabicLetters = arabicLetters.size,
             coveragePercent = percent,
-            suitableForArabic = percent >= 75,
+            hasArabicShapingTables = shapingTables,
+            suitableForArabic = percent >= 75 && shapingTables,
             fileSize = bytes.size
         )
     }
 
     fun rank(fonts: List<ArabicFontAssessment>): List<ArabicFontAssessment> =
         fonts.sortedWith(compareByDescending<ArabicFontAssessment> { it.suitableForArabic }
+            .thenByDescending { it.hasArabicShapingTables }
             .thenByDescending { it.coveragePercent }
             .thenBy { it.fileSize })
+
+    private fun hasArabicShapingTables(bytes: ByteArray): Boolean {
+        val gsub = findTable(bytes, "GSUB") ?: return false
+        val gpos = findTable(bytes, "GPOS") ?: return false
+        return hasArabicScriptRecord(bytes, gsub.first, gsub.second) &&
+            hasArabicScriptRecord(bytes, gpos.first, gpos.second)
+    }
+
+    private fun findTable(bytes: ByteArray, wantedTag: String): Pair<Int, Int>? {
+        if (bytes.size < 12) return null
+        val data = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN)
+        val tableCount = u16(data, 4)
+        if (tableCount !in 1..256 || 12L + tableCount * 16L > bytes.size) return null
+        for (i in 0 until tableCount) {
+            val record = 12 + i * 16
+            val tag = String(bytes, record, 4, Charsets.US_ASCII)
+            if (tag != wantedTag) continue
+            val offset = data.getInt(record + 8)
+            val length = data.getInt(record + 12)
+            if (offset < 0 || length < 10 || offset.toLong() + length > bytes.size) return null
+            return offset to length
+        }
+        return null
+    }
+
+    /** Checks for an actual `arab` ScriptRecord in an OpenType GSUB/GPOS table. */
+    private fun hasArabicScriptRecord(bytes: ByteArray, offset: Int, length: Int): Boolean {
+        val data = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN)
+        val limit = offset + length
+        if (offset < 0 || length < 10 || limit > bytes.size || u16(data, offset) != 1) return false
+        val scriptListOffset = u16(data, offset + 4)
+        if (scriptListOffset == 0) return false
+        val scriptList = offset + scriptListOffset
+        if (scriptList < offset || scriptList + 2 > limit) return false
+        val scriptCount = u16(data, scriptList)
+        if (scriptCount !in 1..1024 || scriptList.toLong() + 2L + scriptCount * 6L > limit) return false
+        for (i in 0 until scriptCount) {
+            val record = scriptList + 2 + i * 6
+            if (String(bytes, record, 4, Charsets.US_ASCII) != "arab") continue
+            val relativeOffset = u16(data, record + 4)
+            if (relativeOffset == 0) continue
+            val script = scriptList + relativeOffset
+            if (script < scriptList || script + 4 > limit) continue
+            val defaultLangSysOffset = u16(data, script)
+            val languageSystemCount = u16(data, script + 2)
+            if (defaultLangSysOffset > 0 || languageSystemCount > 0) return true
+        }
+        return false
+    }
 
     private fun mappedCodePoints(bytes: ByteArray): Set<Int> {
         require(bytes.size >= 12) { "Invalid font header" }
