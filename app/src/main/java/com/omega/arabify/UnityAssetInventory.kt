@@ -542,9 +542,13 @@ internal object UnityFsBlockDecompressor {
             }
             UnityCompressionCodec.LZ4_BLOCK -> {
                 val output = ByteArray(expected)
-                val written = net.jpountz.lz4.LZ4Factory.fastestInstance()
-                    .safeDecompressor()
-                    .decompress(compressed, 0, compressed.size, output, 0, output.size)
+                val written = try {
+                    net.jpountz.lz4.LZ4Factory.fastestInstance()
+                        .safeDecompressor()
+                        .decompress(compressed, 0, compressed.size, output, 0, output.size)
+                } catch (failure: net.jpountz.lz4.LZ4Exception) {
+                    throw IllegalArgumentException("Malformed UnityFS LZ4 block", failure)
+                }
                 require(written == expected) { "LZ4 output size does not match UnityFS block metadata" }
                 output
             }
