@@ -24,6 +24,36 @@ class AndroidAssetLocalizerPathTest {
         ))
     }
 
+    @Test fun unityStreamingAssetsRejectsTraversalAndAmbiguousPaths() {
+        val root = listOf("assets/bin/Data/StreamingAssets/")
+        assertFalse(AndroidAssetLocalizer.isSupportedTextAsset(
+            "assets/bin/Data/StreamingAssets/../Resources/config.json", 120, root
+        ))
+        assertFalse(AndroidAssetLocalizer.isSupportedTextAsset(
+            "assets/bin/Data/StreamingAssets/../../../../res/raw/payload.txt", 120, root
+        ))
+        assertFalse(AndroidAssetLocalizer.isSupportedTextAsset(
+            "/assets/bin/Data/StreamingAssets/dialogue.txt", 80, root
+        ))
+        assertFalse(AndroidAssetLocalizer.isSupportedTextAsset(
+            "assets/bin/Data/StreamingAssets//dialogue.txt", 80, root
+        ))
+        assertFalse(AndroidAssetLocalizer.isSupportedTextAsset(
+            "assets/bin/Data/StreamingAssets/./dialogue.txt", 80, root
+        ))
+        assertFalse(AndroidAssetLocalizer.isSupportedTextAsset(
+            "assets/bin/Data/StreamingAssets/dialogue.txt", 80,
+            listOf("assets/bin/Data/StreamingAssets/../")
+        ))
+    }
+
+    @Test fun normalizesBackslashSeparatorsBeforeApplyingUnityAllowlist() {
+        val root = listOf("assets/bin/Data/StreamingAssets/")
+        assertTrue(AndroidAssetLocalizer.isSupportedTextAsset(
+            "assets\\bin\\Data\\StreamingAssets\\dialogue.txt", 80, root
+        ))
+    }
+
     @Test fun defaultAndroidRootsRemainSupported() {
         assertTrue(AndroidAssetLocalizer.isSupportedTextAsset("assets/localization/en.json", 64))
         assertTrue(AndroidAssetLocalizer.isSupportedTextAsset("res/raw/dialogue.txt", 64))
