@@ -142,7 +142,7 @@ internal object UnityAssetInventoryScanner {
             while (entries.hasMoreElements()) {
                 val entry = entries.nextElement()
                 if (entry.isDirectory) continue
-                val path = entry.name.replace('\\\\', '/')
+                val path = entry.name.replace('\\', '/')
                 val lower = path.lowercase()
                 val inUnityData = lower.startsWith("assets/bin/data/")
                 val extension = lower.substringAfterLast('.', "")
