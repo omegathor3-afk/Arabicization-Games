@@ -118,8 +118,10 @@ class UnitySerializedTrailingMetadataParserTest {
         ))
 
         val malformed = fixture.metadata.copyOf()
-        val externalCountOffset = fixture.objects.bytesConsumed + 4 + 4 + 4 + 8
-        // The external count immediately follows the script reference.
+        val scriptBodyStart = fixture.objects.bytesConsumed + 4 + 4
+        val scriptPadding = ((4 - ((fixture.header.headerSize + scriptBodyStart) % 4)) % 4)
+        val externalCountOffset = scriptBodyStart + scriptPadding + 8
+        // The external count immediately follows the aligned 64-bit script identifier.
         ByteBuffer.wrap(malformed).order(ByteOrder.LITTLE_ENDIAN)
             .putInt(externalCountOffset, Int.MAX_VALUE)
         assertNull(UnitySerializedTrailingMetadataParser.parse(
