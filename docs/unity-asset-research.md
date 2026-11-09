@@ -42,7 +42,9 @@ License statements are based on upstream repository license files/readmes at the
 - It uses Unity's 24-byte node layout, expanding to 32 bytes when the TypeTree format version is 19+, and reads the node's 16-bit version field correctly.
 - It validates node counts, record-buffer arithmetic, hierarchy levels, local string offsets, NUL termination, UTF-8 validity, and trailing bytes before accepting a tree.
 - Common-string-table offsets are retained as unresolved references rather than guessed or silently mapped to the wrong field name.
-- The newer `mhtt` TypeTreeNodeInfoHandler wrapper used by SerializedFile versions 23+ is not parsed yet; the current reader accepts the inner raw node/string-buffer blob only.
+- The `mhtt` TypeTreeNodeInfoHandler envelope used by SerializedFile versions 23+ now has its own bounded parser, including per-tree format version and reference-hash arrays.
+- A bounded SerializedType table parser now reads class IDs, stripped flags, script type indices, applicable script IDs, type hashes, inline TypeTrees or v23+ handlers, and v21+ type dependencies.
+- This is still a metadata-only parser: it does not yet walk the object table, script reference list, external references, v20+ serialized-reference type table as a complete section, v26 shared-subtree table, or object payloads.
 - This parser is **not yet wired into the SerializedFile metadata/type-record reader**. It does not parse object tables, object payloads, script IDs, external references, or write assets. No automatic translation or asset mutation is enabled.
 - Synthetic tests cover versions 18/19, local strings, unresolved common-string references, malformed counts, hierarchy, offsets, and trailing data. Real Unity fixtures and differential comparison against UnityPy/UnityDataTools remain required.
 
