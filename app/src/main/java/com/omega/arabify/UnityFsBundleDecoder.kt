@@ -42,6 +42,14 @@ internal object UnityFsBundleDecoder {
                 require(header.signature == "UnityFS")
                 val declaredSize = header.declaredSize
                 require(declaredSize <= actualLength)
+                validateArchiveFlags(header)
+
+                val alignedHeaderEnd = if (needsHeaderAlignment(header)) {
+                    align16(header.headerSize.toLong())
+                } else {
+                    header.headerSize.toLong()
+                }
+                require(alignedHeaderEnd <= declaredSize)
 
                 val compressedInfoSize = header.compressedBlocksInfoSize
                 val uncompressedInfoSize = header.uncompressedBlocksInfoSize
@@ -52,12 +60,17 @@ internal object UnityFsBundleDecoder {
                 val infoOffset = if (header.blocksInfoAtEnd) {
                     declaredSize - compressedInfoSize
                 } else {
-                    header.headerSize.toLong()
+                    alignedHeaderEnd
                 }
-                val dataStart = if (header.blocksInfoAtEnd) {
-                    header.headerSize.toLong()
+                val afterInfo = if (header.blocksInfoAtEnd) {
+                    alignedHeaderEnd
                 } else {
-                    Math.addExact(header.headerSize.toLong(), compressedInfoSize)
+                    Math.addExact(alignedHeaderEnd, compressedInfoSize)
+                }
+                val dataStart = if ((header.flags and FLAG_BLOCK_INFO_NEEDS_PADDING_AT_START) != 0L) {
+                    align16(afterInfo)
+                } else {
+                    afterInfo
                 }
                 val dataEnd = if (header.blocksInfoAtEnd) infoOffset else declaredSize
                 require(infoOffset >= header.headerSize.toLong())
@@ -118,6 +131,48 @@ internal object UnityFsBundleDecoder {
             }
         }.getOrNull()
     }
+
+    private const val FLAG_BLOCK_INFO_NEEDS_PADDING_AT_START = 0x200L
+    private const val KNOWN_ARCHIVE_FLAGS = 0x3fL or 0x40L or 0x80L or 0x100L or 0x200L
+    private const val ENCRYPTION_FLAGS = 0x400L or 0x1000L
+
+    private fun validateArchiveFlags(header: UnityArchiveHeader) {
+        require((header.flags and ENCRYPTION_FLAGS) == 0L) { "Encrypted UnityFS bundles are not supported" }
+        require((header.flags and KNOWN_ARCHIVE_FLAGS.inv()) == 0L) { "Unknown UnityFS archive flags" }
+        if ((header.flags and FLAG_BLOCK_INFO_NEEDS_PADDING_AT_START) != 0L) {
+            val version = parseEngineVersion(header.engineVersion)
+                ?: error("Ambiguous UnityFS 0x200 flag without a parseable engine revision")
+            require(isPaddingFlagEra(version)) {
+                "UnityFS 0x200 flag denotes legacy encryption for this engine revision"
+            }
+        }
+    }
+
+    private fun parseEngineVersion(value: String): Triple<Int, Int, Int>? {
+        val match = Regex("(\\d+)\\.(\\d+)\\.(\\d+)").find(value) ?: return null
+        return runCatching {
+            Triple(match.groupValues[1].toInt(), match.groupValues[2].toInt(), match.groupValues[3].toInt())
+        }.getOrNull()
+    }
+
+    private fun isPaddingFlagEra(version: Triple<Int, Int, Int>): Boolean {
+        val (year, minor, patch) = version
+        return when {
+            year < 2020 -> false
+            year == 2020 -> minor > 3 || (minor == 3 && patch > 34)
+            year == 2021 -> minor > 3 || (minor == 3 && patch > 2)
+            year == 2022 -> minor > 1 || (minor == 1 && patch > 1)
+            else -> year > 2022
+        }
+    }
+
+    private fun needsHeaderAlignment(header: UnityArchiveHeader): Boolean {
+        if (header.formatVersion >= 7) return true
+        val version = parseEngineVersion(header.engineVersion) ?: return false
+        return version.first == 2019 && version.second == 4 && version.third >= 15
+    }
+
+    private fun align16(value: Long): Long = Math.addExact(value, (16L - (value and 15L)) and 15L)
 
     private fun readRange(input: RandomAccessFile, offset: Long, size: Int): ByteArray {
         require(offset >= 0L && size > 0)
