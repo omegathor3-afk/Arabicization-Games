@@ -11,7 +11,11 @@ internal data class ArabicFontAssessment(
     val coveragePercent: Int,
     val hasArabicShapingTables: Boolean,
     val suitableForArabic: Boolean,
-    val fileSize: Int
+    val fileSize: Int,
+    val familyName: String? = null,
+    val subfamilyName: String? = null,
+    val weightClass: Int? = null,
+    val italic: Boolean? = null
 )
 
 internal object ArabicFontAnalyzer {
@@ -31,6 +35,7 @@ internal object ArabicFontAnalyzer {
         val count = arabicLetters.count { it in mapped }
         val percent = if (arabicLetters.isEmpty()) 0 else count * 100 / arabicLetters.size
         val shapingTables = runCatching { hasArabicShapingTables(bytes) }.getOrDefault(false)
+        val metadata = runCatching { readFontMetadata(bytes) }.getOrDefault(FontMetadata())
         val ext = path.substringAfterLast('.', "font").uppercase()
         return ArabicFontAssessment(
             path = path,
@@ -40,7 +45,11 @@ internal object ArabicFontAnalyzer {
             coveragePercent = percent,
             hasArabicShapingTables = shapingTables,
             suitableForArabic = percent >= 75 && shapingTables,
-            fileSize = bytes.size
+            fileSize = bytes.size,
+            familyName = metadata.familyName,
+            subfamilyName = metadata.subfamilyName,
+            weightClass = metadata.weightClass,
+            italic = metadata.italic
         )
     }
 
@@ -49,6 +58,103 @@ internal object ArabicFontAnalyzer {
             .thenByDescending { it.hasArabicShapingTables }
             .thenByDescending { it.coveragePercent }
             .thenBy { it.fileSize })
+    
+    internal data class FontStyleProfile(
+        val familyName: String? = null,
+        val weightClass: Int? = null,
+        val italic: Boolean? = null
+    )
+
+    private data class FontMetadata(
+        val familyName: String? = null,
+        val subfamilyName: String? = null,
+        val weightClass: Int? = null,
+        val italic: Boolean? = null
+    )
+
+    /** Ranks Arabic-capable fonts against the original game's family/weight/style. */
+    fun rankForStyle(fonts: List<ArabicFontAssessment>, target: FontStyleProfile): List<ArabicFontAssessment> =
+        fonts.sortedWith(
+            compareByDescending<ArabicFontAssessment> { it.suitableForArabic }
+                .thenByDescending { it.hasArabicShapingTables }
+                .thenByDescending { familyMatch(it.familyName, target.familyName) }
+                .thenBy { weightDistance(it.weightClass, target.weightClass) }
+                .thenBy { italicMismatch(it.italic, target.italic) }
+                .thenByDescending { it.coveragePercent }
+                .thenBy { it.fileSize }
+        )
+
+    private fun familyMatch(actual: String?, expected: String?): Int {
+        if (actual.isNullOrBlank() || expected.isNullOrBlank()) return 0
+        return if (actual.trim().equals(expected.trim(), ignoreCase = true)) 1 else 0
+    }
+
+    private fun weightDistance(actual: Int?, expected: Int?): Int =
+        if (actual == null || expected == null) Int.MAX_VALUE else kotlin.math.abs(actual - expected)
+
+    private fun italicMismatch(actual: Boolean?, expected: Boolean?): Int =
+        if (actual == null || expected == null) 1 else if (actual == expected) 0 else 1
+
+    private fun readFontMetadata(bytes: ByteArray): FontMetadata {
+        val nameTable = findTable(bytes, "name")?.let { parseNameTable(bytes, it.first, it.second) } ?: emptyMap()
+        val os2 = findTable(bytes, "OS/2")
+        var weight: Int? = null
+        var italic: Boolean? = null
+        if (os2 != null && os2.second >= 64) {
+            val data = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN)
+            val offset = os2.first
+            weight = u16(data, offset + 4).takeIf { it in 1..1000 }
+            val selection = u16(data, offset + 62)
+            italic = (selection and 0x0001) != 0
+        }
+        return FontMetadata(
+            familyName = name[16] ?: name[1],
+            subfamilyName = name[17] ?: name[2],
+            weightClass = weight,
+            italic = italic
+        )
+    }
+
+    private fun parseNameTable(bytes: ByteArray, offset: Int, length: Int): Map<Int, String> {
+        val data = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN)
+        val limit = offset.toLong() + length
+        if (length < 6 || limit > bytes.size) return emptyMap()
+        val format = u16(data, offset)
+        if (format !in 0..1) return emptyMap()
+        val count = u16(data, offset + 2)
+        val storageOffset = u16(data, offset + 4)
+        if (count > 4096 || offset.toLong() + 6L + count * 12L > limit) return emptyMap()
+        val priorities = mutableMapOf<Int, Pair<Int, String>>()
+        for (i in 0 until count) {
+            val record = offset + 6 + i * 12
+            val platform = u16(data, record)
+            val encoding = u16(data, record + 2)
+            val language = u16(data, record + 4)
+            val nameId = u16(data, record + 6)
+            if (nameId !in setOf(1, 2, 4, 6, 16, 17)) continue
+            val byteLength = u16(data, record + 8)
+            val stringOffset = u16(data, record + 10)
+            val start = offset.toLong() + storageOffset + stringOffset
+            val end = start + byteLength
+            if (start < offset || end > limit || end > bytes.size) continue
+            val raw = bytes.copyOfRange(start.toInt(), end.toInt())
+            val value = when {
+                platform == 0 || platform == 3 -> if (raw.size % 2 == 0) String(raw, Charsets.UTF_16BE) else ""
+                platform == 1 -> String(raw, Charsets.ISO_8859_1)
+                else -> ""
+            }.trim().trim('\u0000')
+            if (value.isBlank()) continue
+            val priority = when {
+                platform == 3 && language == 0x0409 -> 4
+                platform == 3 -> 3
+                platform == 0 -> 2
+                platform == 1 -> 1
+                else -> 0
+            } + if (encoding == 10) 1 else 0
+            if (priority > (priorities[nameId]?.first ?: -1)) priorities[nameId] = priority to value
+        }
+        return priorities.mapValues { it.value.second }
+    }
 
     private fun hasArabicShapingTables(bytes: ByteArray): Boolean {
         val gsub = findTable(bytes, "GSUB") ?: return false
