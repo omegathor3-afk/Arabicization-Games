@@ -77,7 +77,7 @@ class UnityFsBundleDecoderTest {
             UnityCompressionCodec.NONE -> 0
             UnityCompressionCodec.LZ4_BLOCK -> 2
             UnityCompressionCodec.LZMA_ALONE -> 1
-        } or if (infoAtEnd) 0x80 else 0 or if (needsPadding) 0x200 else 0
+        } or (if (infoAtEnd) 0x80 else 0) or (if (needsPadding) 0x200 else 0)
 
         fun header(declaredSize: Long): ByteArray {
             val bytes = ByteArrayOutputStream()
@@ -182,6 +182,33 @@ class UnityFsBundleDecoderTest {
                 UnityFsDecodeLimits(maxCompressedBlockBytes = 1)
             ).first
         )
+    }
+
+    @Test fun alignsVersion7HeadersAndLate2019Version6Headers() {
+        val payload = "alignment".toByteArray()
+        listOf(
+            makeBundle(payload, formatVersion = 7),
+            makeBundle(payload, formatVersion = 6, engineVersion = "2019.4.15f1")
+        ).forEach { bundle ->
+            val (result, decoded) = decode(bundle)
+            assertNotNull(result)
+            assertArrayEquals(payload, decoded)
+        }
+    }
+
+    @Test fun appliesVersionedBlockInfoPaddingAndRejectsLegacyEncryptionMeaning() {
+        val payload = "padding".toByteArray()
+        val modern = makeBundle(
+            payload, engineVersion = "2021.3.3f1", needsPadding = true
+        )
+        val (result, decoded) = decode(modern)
+        assertNotNull(result)
+        assertArrayEquals(payload, decoded)
+
+        val legacy = makeBundle(
+            payload, engineVersion = "2021.3.2f1", needsPadding = true
+        )
+        assertNull(decode(legacy).first)
     }
 
     @Test fun rejectsUnknownCompressionFlagsAndNonUnityFsSignatures() {
