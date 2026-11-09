@@ -120,6 +120,7 @@ internal object UnitySerializedTypeTableParser {
             }
 
             val records = ArrayList<UnitySerializedTypeRecord>(metadataPrefix.typeCount)
+            val typeTreeEnabled = metadataPrefix.typeTreeEnabled ?: true
             repeat(metadataPrefix.typeCount) {
                 require(input.remaining() >= 4)
                 val classId = input.int
@@ -139,7 +140,7 @@ internal object UnitySerializedTypeTableParser {
                 var referenceNamespace: String? = null
                 var referenceAssemblyName: String? = null
 
-                if (metadataPrefix.typeTreeEnabled == true) {
+                if (typeTreeEnabled) {
                     when {
                         header.formatVersion >= 23 -> {
                             handler = readTypeTreeInfoHandler()
