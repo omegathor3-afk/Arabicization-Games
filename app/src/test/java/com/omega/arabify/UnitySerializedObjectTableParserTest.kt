@@ -101,6 +101,24 @@ class UnitySerializedObjectTableParserTest {
         assertEquals(0, table.objects[0].scriptTypeIndex)
     }
 
+    @Test fun parsesVersionSpecificObjectEntryLayouts() {
+        for (version in listOf(15, 16, 17, 21)) {
+            val fixture = fixture(version = version)
+            val table = UnitySerializedObjectTableParser.parse(
+                fixture.header, fixture.typeTable, fixture.metadata
+            )
+            assertNotNull("Failed to parse SerializedFile v$version", table)
+            assertEquals(2, table!!.objects.size)
+            if (version == 15 || version == 16) {
+                assertEquals(0, table.objects[0].stripped)
+            } else {
+                assertEquals(null, table.objects[0].stripped)
+            }
+            if (version < 16) assertEquals(1, table.objects[0].classId)
+            else assertEquals(null, table.objects[0].classId)
+        }
+    }
+
     @Test fun rejectsDuplicatePathIdsTruncatedRecordsAndOutOfFileRanges() {
         val duplicate = fixture(duplicatePathId = true)
         assertNull(UnitySerializedObjectTableParser.parse(
