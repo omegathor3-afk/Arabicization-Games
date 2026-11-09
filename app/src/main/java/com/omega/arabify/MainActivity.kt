@@ -24,6 +24,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -168,7 +169,7 @@ private fun ArabifyApp(context: Context) {
      }
     }
     item {
-     Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF202630)),shape=RoundedCornerShape(20.dp)) {
+     Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF101A32)),shape=RoundedCornerShape(20.dp)) {
       Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
        Text("أو اختر ملف APK يدويًا",color=Color.White,fontSize=18.sp,fontWeight=FontWeight.Bold)
        Text("هذا الخيار احتياطي للتطبيقات التي لا تظهر في القائمة أو لملف APK خارجي.",color=Color(0xFFB9C1CB),fontSize=13.sp)
@@ -181,7 +182,7 @@ private fun ArabifyApp(context: Context) {
     result?.let { scan ->
      item{SectionTitle("نتيجة الفحص")}
      item {
-      Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF1B2927))) {
+      Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF101A32))) {
        Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
         Text(scan.fileName,color=Color.White,fontWeight=FontWeight.Bold)
         Text("المحرك: ${scan.engine.displayName}",color=Color(0xFFD7B77A))
@@ -218,7 +219,7 @@ private fun ArabifyApp(context: Context) {
      }
      if(scan.engine==GameEngine.ANDROID) {
       item {
-       Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF26312D)),shape=RoundedCornerShape(18.dp)) {
+       Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF101A32)),shape=RoundedCornerShape(18.dp)) {
         Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
          Text("تعريب موارد Android",color=Color(0xFFE7D5AF),fontWeight=FontWeight.Bold,fontSize=17.sp)
          Text("هذا المسار التجريبي يضيف موارد string عربية إلى resources.arsc. لا يشمل النصوص المخبأة داخل DEX أو محركات الألعاب.",color=Color(0xFFD0D7D2),fontSize=12.sp)
@@ -247,8 +248,9 @@ private fun ArabifyApp(context: Context) {
           Text(if(localizeBusy) "جارٍ التعريب..." else "ابدأ تعريب موارد اللعبة")
          }
          if(localizeBusy) {
-          CircularProgressIndicator()
-          Text("تمت معالجة ${localizationProgress.first} من ${localizationProgress.second}",color=Color.White,fontSize=12.sp)
+          val fraction=if(localizationProgress.second>0) localizationProgress.first.toFloat()/localizationProgress.second.toFloat() else 0f
+          LinearProgressIndicator(progress={fraction.coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth())
+          Text(if(localizationProgress.second>0) "تعريب الموارد: ${localizationProgress.first} من ${localizationProgress.second} (${(fraction*100).toInt()}%)" else "تهيئة وفحص موارد التطبيق…",color=Color.White,fontSize=12.sp)
          }
          localizationReport?.let { report ->
           Text("اكتمل إنشاء الموارد العربية: ${report.translatedStrings} نصًا من ${report.discoveredStrings}.",color=Color(0xFFB8E4C8),fontSize=13.sp)
@@ -262,7 +264,7 @@ private fun ArabifyApp(context: Context) {
      }
      if(scan.candidateFiles.isNotEmpty()) {
       item {
-       Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF27302A)),shape=RoundedCornerShape(18.dp)) {
+       Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF101A32)),shape=RoundedCornerShape(18.dp)) {
         Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
          Text("تعريب ملفات النصوص داخل اللعبة",color=Color(0xFFE7D5AF),fontWeight=FontWeight.Bold,fontSize=17.sp)
          Text("يعالج هذا المسار ملفات JSON وTXT وProperties وStrings الموجودة داخل assets أو res/raw أو مجلدات localization/strings. يحافظ على مفاتيح JSON وخصائص الإعدادات والمتغيرات المعروفة.",color=Color(0xFFD0D7D2),fontSize=12.sp)
@@ -311,8 +313,9 @@ private fun ArabifyApp(context: Context) {
           Text(if(assetBusy) "جارٍ تعريب ملفات النصوص..." else "تعريب ملفات النصوص وإنشاء APK")
          }
          if(assetBusy) {
-          CircularProgressIndicator()
-          Text("تمت معالجة ${assetProgress.first} من ${assetProgress.second} ملف",color=Color.White,fontSize=12.sp)
+          val fraction=if(assetProgress.second>0) assetProgress.first.toFloat()/assetProgress.second.toFloat() else 0f
+          LinearProgressIndicator(progress={fraction.coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth())
+          Text(if(assetProgress.second>0) "تعريب الملفات: ${assetProgress.first} من ${assetProgress.second} (${(fraction*100).toInt()}%)" else "استخراج الملفات وتحليل النصوص…",color=Color.White,fontSize=12.sp)
          }
          assetReport?.let { report ->
           Text("الملفات: ${report.filesTranslated} / ${report.filesDiscovered} • النصوص المترجمة: ${report.stringsTranslated} • المتروكة: ${report.stringsSkipped}",color=Color(0xFFB8E4C8),fontSize=13.sp)
@@ -325,11 +328,11 @@ private fun ArabifyApp(context: Context) {
      }
      scan.unityAssetInventory?.let { inventory ->
       item {
-       Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF202A32)),shape=RoundedCornerShape(18.dp)) {
+       Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF101A32)),shape=RoundedCornerShape(18.dp)) {
         Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
          Text("جرد موارد Unity — قراءة فقط",color=Color(0xFFE7D5AF),fontWeight=FontWeight.Bold,fontSize=17.sp)
          Text(inventory.report,color=Color(0xFFD4D9DF),fontSize=12.sp)
-         Text("لم يتم تعديل resources.assets أو AssetBundles أو DLL. تحليل SerializedFile الحالي يقتصر على الترويسة، وليس جدول الكائنات أو TypeTree.",color=Color(0xFFE5C58C),fontSize=12.sp)
+         Text("الفحص الحالي يقرأ بيانات SerializedFile الوصفية وجداول الأنواع والكائنات ضمن حدود ذاكرة، ويظل للقراءة فقط. لم يتم تعديل object payloads أو AssetBundles أو DLL.",color=Color(0xFFE5C58C),fontSize=12.sp)
          inventory.items.take(12).forEach { asset ->
           val status = when(asset.support) {
            UnityAssetSupport.TEXT_CANDIDATE_READ_ONLY -> "مرشح نصي — غير معدل"
@@ -364,7 +367,7 @@ private fun ArabifyApp(context: Context) {
 }
 
 @Composable
-private fun SectionTitle(value:String){Text(value,color=Color(0xFFD7B77A),fontWeight=FontWeight.Bold,fontSize=16.sp)}
+private fun SectionTitle(value:String){Text(value,color=Color(0xFF36DFFF),fontWeight=FontWeight.Bold,fontSize=16.sp)}
 
 private fun copyUriToCache(context:Context,uri:Uri):File {
  val file=File(context.cacheDir,"arabify-import-${System.currentTimeMillis()}.apk")
