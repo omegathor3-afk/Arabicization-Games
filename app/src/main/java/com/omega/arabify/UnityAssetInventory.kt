@@ -256,11 +256,24 @@ internal object UnityAssetInventoryScanner {
                         )
                     isSerializedName -> {
                         val header = UnitySerializedFileHeaderParser.parse(prefix, size)
-                        if (header != null) UnityAssetInventoryItem(
-                            path, size, UnityAssetKind.SERIALIZED_FILE,
-                            UnityAssetSupport.HEADER_PARSED_READ_ONLY,
-                            "SerializedFile header v${header.formatVersion}, endian=${header.endian ?: "legacy"}؛ لم يتم تحليل TypeTree أو الكائنات"
-                        ) else UnityAssetInventoryItem(
+                        if (header != null) {
+                            val metadataPrefix = if (prefix.size > header.headerSize) {
+                                prefix.copyOfRange(header.headerSize, prefix.size)
+                            } else {
+                                byteArrayOf()
+                            }
+                            val metadata = UnitySerializedMetadataPrefixParser.parse(
+                                header, metadataPrefix, allowPartialMetadataPrefix = true
+                            )
+                            val metadataDetail = metadata?.let {
+                                "؛ Unity=${it.unityVersion ?: "unknown"}؛ platform=${it.targetPlatform ?: -1}؛ TypeTree=${it.typeTreeEnabled ?: "unknown"}؛ types=${it.typeCount}"
+                            } ?: "؛ metadata preamble غير مكتمل أو غير مدعوم"
+                            UnityAssetInventoryItem(
+                                path, size, UnityAssetKind.SERIALIZED_FILE,
+                                UnityAssetSupport.HEADER_PARSED_READ_ONLY,
+                                "SerializedFile header v${header.formatVersion}, endian=${header.endian}$metadataDetail؛ لم يتم تحليل type records أو object table أو payloads"
+                            )
+                        } else UnityAssetInventoryItem(
                             path, size, UnityAssetKind.SERIALIZED_FILE,
                             UnityAssetSupport.PRESERVE_UNSUPPORTED,
                             "اسم ملف SerializedFile محتمل لكن الترويسة غير مؤكدة؛ محفوظ دون تعديل"
