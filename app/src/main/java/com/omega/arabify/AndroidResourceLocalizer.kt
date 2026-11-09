@@ -40,7 +40,7 @@ internal object AndroidResourceLocalizer {
     if (!typeBlock.getResConfig().getQualifiers().isNullOrEmpty()) continue
     for (entry in typeBlock.listEntries(true)) {
      val name = entry.getName() ?: continue
-     val value = entry.getDataAsString() ?: continue
+     val value = entry.getValueAsString() ?: continue
      if (value.isNotBlank() && sources.none { it.first == name }) sources += name to value
     }
    }
@@ -72,7 +72,7 @@ internal object AndroidResourceLocalizer {
       skipped++
      } else {
       val restored = PlaceholderProtector.restore(translatedText, protected.tokens)
-      packageBlock.getOrCreate(arabicConfig, "string", name).setDataAsString(restored)
+      packageBlock.getOrCreate(arabicConfig, "string", name).setValueAsString(restored)
       translated++
      }
     } catch (e: Exception) {
