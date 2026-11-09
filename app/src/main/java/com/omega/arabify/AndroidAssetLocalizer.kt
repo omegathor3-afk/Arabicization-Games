@@ -178,7 +178,6 @@ internal object AndroidAssetLocalizer {
      val target=ZipEntry(entry.name).apply{
       time=entry.time
       comment=entry.comment
-      extra=entry.extra
      }
      out.putNextEntry(target)
      if(!entry.isDirectory){
