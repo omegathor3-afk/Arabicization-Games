@@ -7,7 +7,7 @@ import org.junit.Test
 
 class AssetTextTransformerTest {
  @Test fun textFileTranslatesLinesAndKeepsCommentsAndPlaceholders()=runBlocking {
-  val source="# dialogue\\nThe door is open, {player}.\\n"
+  val source="# dialogue\nThe door is open, {player}.\n"
   val result=AssetTextTransformer.transform("assets/dialogue.txt",source){ "الباب مفتوح، __ARABIFY_TOKEN_0__." }
   assertTrue(result.text.contains("# dialogue"))
   assertTrue(result.text.contains("الباب مفتوح، {player}."))
@@ -19,14 +19,14 @@ class AssetTextTransformerTest {
   val result=AssetTextTransformer.transform("assets/localization/en.json",source) {
    if(it=="Start Game") "ابدأ اللعبة" else "مرحباً __ARABIFY_TOKEN_0__"
   }
-  assertTrue(result.text.contains("\\\"menu\\\": \\\"ابدأ اللعبة\\\""))
+  assertTrue(result.text.contains("\"menu\": \"ابدأ اللعبة\""))
   assertTrue(result.text.contains("مرحباً {player}"))
   assertTrue(result.text.contains("https://example.com"))
   assertEquals(2,result.translated)
  }
 
  @Test fun propertiesKeepsKeysAndComments()=runBlocking {
-  val source="# menu\\nmenu.start=Start Game\\nmenu.exit=Exit"
+  val source="# menu\nmenu.start=Start Game\nmenu.exit=Exit"
   val result=AssetTextTransformer.transform("assets/lang.properties",source){ "ابدأ" }
   assertTrue(result.text.contains("menu.start=ابدأ"))
   assertTrue(result.text.contains("# menu"))
@@ -34,9 +34,9 @@ class AssetTextTransformerTest {
  }
 
  @Test fun appleStringsKeepsKeysAndSyntax()=runBlocking {
-  val source="\\\"start_button\\\" = \\\"Start Game\\\";\\n"
+  val source="\"start_button\" = \"Start Game\";\n"
   val result=AssetTextTransformer.transform("assets/en.strings",source){ "ابدأ اللعبة" }
-  assertEquals("\\\"start_button\\\" = \\\"ابدأ اللعبة\\\";",result.text.trim())
+  assertEquals("\"start_button\" = \"ابدأ اللعبة\";",result.text.trim())
   assertEquals(1,result.translated)
  }
 
