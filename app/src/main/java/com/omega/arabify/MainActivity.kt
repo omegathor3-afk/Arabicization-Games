@@ -62,6 +62,7 @@ private fun ArabifyApp(context: Context) {
  var selectedInstalledApp by remember { mutableStateOf<InstalledApp?>(null) }
  var error by remember { mutableStateOf<String?>(null) }
  var busy by remember { mutableStateOf(false) }
+ var inspectionProgress by remember { mutableStateOf(0 to 0) }
  var modelReady by remember { mutableStateOf(false) }
  var translationInput by remember { mutableStateOf("The gate is locked. Find the ancient key.") }
  var translatedText by remember { mutableStateOf<String?>(null) }
@@ -134,14 +135,19 @@ private fun ArabifyApp(context: Context) {
          Button(onClick={
           selectedInstalledApp=app
           selectedUri=Uri.fromFile(File(app.apkPath))
-          busy=true;error=null;result=null;localizationReport=null;generatedApk=null
+          busy=true;inspectionProgress=0 to (1+app.splitCount);error=null;result=null;localizationReport=null;generatedApk=null
           scope.launch {
-           try { result=withContext(Dispatchers.IO){inspectInstalledPackage(context,app)} }
+           try { result=withContext(Dispatchers.IO){inspectInstalledPackage(context,app){done,total -> scope.launch { inspectionProgress=done to total }}} }
            catch(e:Exception){error=e.message ?: "تعذر فحص التطبيق المثبت."}
            finally{busy=false}
           }
          },enabled=!busy) { Text(if(selectedInstalledApp?.packageName==app.packageName) "محدد" else "اختيار") }
         }
+       }
+       if(busy && selectedInstalledApp!=null) {
+        val fraction=if(inspectionProgress.second>0) inspectionProgress.first.toFloat()/inspectionProgress.second else 0f
+        LinearProgressIndicator(progress={fraction.coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth())
+        Text("فحص ملفات التثبيت: ${inspectionProgress.first} من ${inspectionProgress.second}",color=Color(0xFF9BDCF2),fontSize=11.sp)
        }
        Text("يتم فحص ملفات APK الأساسية وملفات Split الإضافية كلٌ على حدة. إعادة بناء وتوقيع مجموعة Split كحزمة قابلة للتثبيت ما زالت غير مفعّلة؛ لذلك يتوقف التصدير الآمن لهذه الألعاب بدل إنتاج تثبيت ناقص.",color=Color(0xFFFFC46B),fontSize=11.sp)
       }
@@ -407,12 +413,12 @@ private fun loadInstalledApps(context:Context):List<InstalledApp> {
 }
 
 
-private fun inspectInstalledPackage(context:Context, app:InstalledApp):ApkScanResult {
+private fun inspectInstalledPackage(context:Context, app:InstalledApp,onProgress:(Int,Int)->Unit={_,_->}):ApkScanResult {
  val files=listOf(app.apkPath)+app.splitApkPaths
  val scans=files.mapIndexed { index,path ->
-  ApkInspector.inspect(context,Uri.fromFile(File(path))).let { scan ->
-   if(index==0) scan else scan.copy(fileName="split-$index-${File(path).name}")
-  }
+  val scan=ApkInspector.inspect(context,Uri.fromFile(File(path)))
+  onProgress(index+1,files.size)
+  if(index==0) scan else scan.copy(fileName="split-$index-${File(path).name}")
  }
  val base=scans.first()
  if(scans.size==1) return base
