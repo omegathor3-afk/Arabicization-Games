@@ -100,7 +100,7 @@ internal object UnitySerializedTypeTableParser {
                 val parsed = UnityTypeTreeParser.parse(blob, formatVersion, order)
                     ?: error("Invalid SerializedType TypeTree blob")
                 input.position(end)
-                parsed
+                return parsed
             }
 
             fun readTypeTreeInfoHandler(): UnityTypeTreeInfoHandler {
@@ -116,7 +116,7 @@ internal object UnitySerializedTypeTableParser {
                     metadata.copyOfRange(start, end), order
                 ) ?: error("Invalid SerializedType TypeTree info handler")
                 input.position(end)
-                handler
+                return handler
             }
 
             val records = ArrayList<UnitySerializedTypeRecord>(metadataPrefix.typeCount)
