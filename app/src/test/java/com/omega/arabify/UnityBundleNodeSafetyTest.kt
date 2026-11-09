@@ -8,7 +8,7 @@ import org.junit.Test
 
 class UnityBundleNodeSafetyTest {
     @Test fun normalizesSafeRelativePathsAndRejectsTraversalOrAbsolutePaths() {
-        assertEquals("CAB-1/assets/shared.assets", UnityBundleNodeSafety.safeRelativePath("CAB-1\\\\assets/shared.assets"))
+        assertEquals("CAB-1/assets/shared.assets", UnityBundleNodeSafety.safeRelativePath("CAB-1\\assets/shared.assets"))
         listOf(
             "../outside", "CAB/../../outside", "/absolute/path", "\\\\server\\share",
             "C:\\temp\\file", "file://host/path", "a//b", "a/./b", "a/../b",
