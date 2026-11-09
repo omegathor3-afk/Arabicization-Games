@@ -10,6 +10,10 @@ Status: engineering gate / not yet a shipping translation engine.
 - **Reference implementation:** RTranslator 3.0 beta is Apache-2.0 at application level and contains a Bergamot JNI integration, but its bundled native components and model files retain their own licenses. Reuse only after a per-file audit; do not copy its app wholesale.
 - **Arabic coverage:** not assumed. Firefox/Bergamot model registries are pair-specific and coverage must be verified from the actual registry/model card. A multilingual MADLAD model may cover Arabic but can be far too large for a phone; its Apache-2.0 model card is not proof that an Android runtime/conversion is ready.
 
+## Arabic model availability
+
+Mozilla documents Arabic among Firefox Translations supported languages, and the Mozilla translations pipeline publishes direction-specific Bergamot-compatible model packages. This establishes Arabic as a viable candidate, not yet a pinned model artifact: before shipping, select the exact `en→ar` and `ar→en` registry entries, record each file revision/size/SHA-256/license, and run Arabic game-dialogue quality tests. Bergamot models are directional; do not assume one model handles both directions. See https://www.mozilla.org/en-US/firefox/features/translate/ and https://github.com/mozilla/translations.
+
 ## Initial implementation decision
 
 1. Introduce a strict model-package integrity gate before any native loader is called.
