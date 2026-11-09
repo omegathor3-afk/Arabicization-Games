@@ -66,6 +66,17 @@ class UnitySerializedMetadataPrefixParserTest {
         assertEquals(1, parsed.typeCount)
     }
 
+    @Test fun parsesPreambleFromBoundedPrefixWithoutLoadingAllMetadata() {
+        val full = metadata(13, ByteOrder.LITTLE_ENDIAN)
+        val prefix = full.copyOf(20)
+        val parsed = UnitySerializedMetadataPrefixParser.parse(
+            header(full, 13, "little"), prefix, allowPartialMetadataPrefix = true
+        )
+        assertNotNull(parsed)
+        assertEquals(1, parsed!!.typeCount)
+        assertEquals(prefix.size, parsed.bytesConsumed)
+    }
+
     @Test fun permitsEmptyTypeListAndRejectsMalformedMetadata() {
         val empty = metadata(13, ByteOrder.LITTLE_ENDIAN, typeCount = 0)
         assertEquals(
