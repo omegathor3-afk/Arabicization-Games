@@ -331,12 +331,12 @@ class UnityAssetInventoryTest {
 
 
     @Test fun mapsUnityFsStorageBlockCompressionFlagsAndCopiesUncompressedBlocksSafely() {
-        assertEquals(UnityCompressionCodec.NONE, unityCompressionCodecFromFlags(0))
-        assertEquals(UnityCompressionCodec.LZMA_ALONE, unityCompressionCodecFromFlags(1))
-        assertEquals(UnityCompressionCodec.LZ4_BLOCK, unityCompressionCodecFromFlags(2))
-        assertEquals(UnityCompressionCodec.LZ4_BLOCK, unityCompressionCodecFromFlags(3))
-        assertNull(unityCompressionCodecFromFlags(4))
-        assertNull(unityCompressionCodecFromFlags(-1))
+        assertEquals(UnityCompressionCodec.NONE, unityCompressionCodecFromFlags(0L))
+        assertEquals(UnityCompressionCodec.LZMA_ALONE, unityCompressionCodecFromFlags(1L))
+        assertEquals(UnityCompressionCodec.LZ4_BLOCK, unityCompressionCodecFromFlags(2L))
+        assertEquals(UnityCompressionCodec.LZ4_BLOCK, unityCompressionCodecFromFlags(3L))
+        assertNull(unityCompressionCodecFromFlags(4L))
+        assertNull(unityCompressionCodecFromFlags(-1L))
 
         val original = byteArrayOf(3, 1, 4, 1, 5)
         assertArrayEquals(
