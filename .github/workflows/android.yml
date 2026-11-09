@@ -39,7 +39,8 @@ jobs:
       test -x "$APKSIGNER"
       test -x "$AAPT"
       "$APKSIGNER" verify --verbose "$APK"
-      "$AAPT" dump badging "$APK" | head -n 5
+      "$AAPT" dump badging "$APK" > badging.txt
+      head -n 5 badging.txt
       sha256sum "$APK"
    - uses: actions/upload-artifact@v4
      with:
