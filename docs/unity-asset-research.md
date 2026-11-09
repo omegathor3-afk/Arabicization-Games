@@ -38,9 +38,11 @@ License statements are based on upstream repository license files/readmes at the
 
 - The APK inventory now uses a bounded metadata-prefix read to report the Unity version, target platform, TypeTree-enabled flag, and declared type count when available; it does not load the entire metadata region just to show this summary.
 - A bounded metadata-preamble reader extracts those fields for supported endian-aware format versions and stops before interpreting type records.
-- A bounded standalone parser now reads the flat TypeTree node/string-buffer representation for SerializedFile format versions 12–100.
+- A bounded standalone parser now reads the raw flat TypeTree node/string-buffer representation for TypeTree format versions 12–100 (the TypeTree format version is not always identical to the enclosing SerializedFile version).
+- It uses Unity's 24-byte node layout, expanding to 32 bytes when the TypeTree format version is 19+, and reads the node's 16-bit version field correctly.
 - It validates node counts, record-buffer arithmetic, hierarchy levels, local string offsets, NUL termination, UTF-8 validity, and trailing bytes before accepting a tree.
-- For format version 19+, it preserves each node's 64-bit reference-type hash. Common-string-table offsets are retained as unresolved references rather than guessed or silently mapped to the wrong field name.
+- Common-string-table offsets are retained as unresolved references rather than guessed or silently mapped to the wrong field name.
+- The newer `mhtt` TypeTreeNodeInfoHandler wrapper used by SerializedFile versions 23+ is not parsed yet; the current reader accepts the inner raw node/string-buffer blob only.
 - This parser is **not yet wired into the SerializedFile metadata/type-record reader**. It does not parse object tables, object payloads, script IDs, external references, or write assets. No automatic translation or asset mutation is enabled.
 - Synthetic tests cover versions 18/19, local strings, unresolved common-string references, malformed counts, hierarchy, offsets, and trailing data. Real Unity fixtures and differential comparison against UnityPy/UnityDataTools remain required.
 
