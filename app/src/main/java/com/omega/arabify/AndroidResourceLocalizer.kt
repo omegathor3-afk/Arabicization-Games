@@ -27,6 +27,7 @@ internal object AndroidResourceLocalizer {
   require(inputApk.isFile) { "ملف اللعبة الأصلي غير موجود." }
   val module = ApkModule.loadApkFile(inputApk)
   try {
+   module.setLoadDefaultFramework(false)
    val manifest = module.getAndroidManifest() ?: error("تعذر قراءة AndroidManifest.xml.")
    val packageName = manifest.getPackageName() ?: error("معرّف الحزمة غير موجود.")
    val table = module.getTableBlock() ?: error("لا يحتوي APK على جدول موارد Android.")
@@ -64,9 +65,16 @@ internal object AndroidResourceLocalizer {
     val protected = PlaceholderProtector.protect(source)
     try {
      val translatedText = translator.translateEnglishToArabic(protected.text)
-     val restored = PlaceholderProtector.restore(translatedText, protected.tokens)
-     packageBlock.getOrCreate(arabicConfig, "string", name).setDataAsString(restored)
-     translated++
+     val tokenWasLost = protected.tokens.indices.any { tokenIndex ->
+      !translatedText.contains("__ARABIFY_TOKEN_${tokenIndex}__")
+     }
+     if (tokenWasLost) {
+      skipped++
+     } else {
+      val restored = PlaceholderProtector.restore(translatedText, protected.tokens)
+      packageBlock.getOrCreate(arabicConfig, "string", name).setDataAsString(restored)
+      translated++
+     }
     } catch (e: Exception) {
      skipped++
     }
