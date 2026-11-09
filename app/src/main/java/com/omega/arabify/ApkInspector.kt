@@ -57,7 +57,8 @@ internal object ApkInspector {
    if(engine==GameEngine.UNITY)notes+="تم اكتشاف Unity؛ النصوص قد تكون في Assets أو Bundles أو ملفات IL2CPP/Mono."
    if(engine==GameEngine.UNREAL)notes+="تم اكتشاف Unreal؛ ملفات PAK/IoStore قد تكون مضغوطة أو مشفرة."
    if(candidates.isEmpty())notes += "لم يتم العثور على ملفات نصية واضحة في المسارات المدعومة."
-   if(fonts.isEmpty())notes+="لم يتم العثور على ملفات TTF/OTF واضحة يمكن فحص تغطيتها العربية."\n   else if(fonts.none{it.suitableForArabic})notes+="الخطوط المفحوصة لا تحتوي تغطية عربية كافية؛ يلزم خط عربي بديل مدمج واختبار ربطه بمحرك اللعبة."
+   if(fonts.isEmpty())notes+="لم يتم العثور على ملفات TTF/OTF واضحة يمكن فحص تغطيتها العربية."
+   else if(fonts.none{it.suitableForArabic})notes+="الخطوط المفحوصة لا تحتوي تغطية عربية كافية؛ يلزم خط عربي بديل مدمج واختبار ربطه بمحرك اللعبة."
    notes+="فحص أولي للقراءة فقط؛ ليس تعريبًا ولا يثبت اكتمال النصوص."
    return ApkScanResult(name,copied,info?.packageName,info?.versionName,engine,count,dex,candidates.take(100),samples,notes.distinct(),ArabicFontAnalyzer.rank(fonts))
   }finally{temp.delete()}
