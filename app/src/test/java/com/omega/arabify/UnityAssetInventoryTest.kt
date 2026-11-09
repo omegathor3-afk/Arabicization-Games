@@ -75,6 +75,53 @@ class UnityAssetInventoryTest {
         assertNull(UnityArchiveHeaderParser.detect("not-a-bundle".toByteArray()))
     }
 
+    @Test fun parsesUnityFsVersion8HeaderWithoutDecompressingPayload() {
+        val output = java.io.ByteArrayOutputStream()
+        java.io.DataOutputStream(output).use { data ->
+            data.write("UnityFS".toByteArray(Charsets.US_ASCII))
+            data.writeByte(0)
+            data.writeInt(8)
+            data.write("2022.3.1f1".toByteArray(Charsets.UTF_8))
+            data.writeByte(0)
+            data.write("6000.0.58f2".toByteArray(Charsets.UTF_8))
+            data.writeByte(0)
+            data.writeLong(128L)
+            data.writeInt(24)
+            data.writeInt(48)
+            data.writeInt(0x80)
+        }
+        val prefix = output.toByteArray()
+        val header = UnityArchiveHeaderParser.parse(prefix, 128L)
+        assertNotNull(header)
+        assertEquals("UnityFS", header!!.signature)
+        assertEquals(8, header.formatVersion)
+        assertEquals("2022.3.1f1", header.playerVersion)
+        assertEquals("6000.0.58f2", header.engineVersion)
+        assertEquals(128L, header.declaredSize)
+        assertTrue(header.blocksInfoAtEnd)
+        assertEquals(prefix.size, header.headerSize)
+    }
+
+    @Test fun rejectsTruncatedAndOutOfBoundsUnityFsHeaders() {
+        val output = java.io.ByteArrayOutputStream()
+        java.io.DataOutputStream(output).use { data ->
+            data.write("UnityFS".toByteArray(Charsets.US_ASCII))
+            data.writeByte(0)
+            data.writeInt(8)
+            data.write("player".toByteArray())
+            data.writeByte(0)
+            data.write("engine".toByteArray())
+            data.writeByte(0)
+            data.writeLong(4096L)
+            data.writeInt(24)
+            data.writeInt(48)
+            data.writeInt(0)
+        }
+        val prefix = output.toByteArray()
+        assertNull(UnityArchiveHeaderParser.parse(prefix.copyOf(prefix.size - 5), 4096L))
+        assertNull(UnityArchiveHeaderParser.parse(prefix, 128L))
+    }
+
     @Test fun integrityVerifierAcceptsByteIdenticalUnityResourcesAfterRepack() {
         val directory = createTempDir(prefix = "arabify-unity-integrity-")
         try {
