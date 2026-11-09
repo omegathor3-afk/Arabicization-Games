@@ -95,14 +95,78 @@ internal object UnitySerializedFileHeaderParser {
     fun preserveUnmodified(original: ByteArray): ByteArray = original.copyOf()
 }
 
+internal data class UnityArchiveHeader(
+    val signature: String,
+    val formatVersion: Int,
+    val playerVersion: String,
+    val engineVersion: String,
+    val declaredSize: Long,
+    val compressedBlocksInfoSize: Long,
+    val uncompressedBlocksInfoSize: Long,
+    val flags: Long,
+    val headerSize: Int
+) {
+    val blocksInfoAtEnd: Boolean get() = (flags and 0x80L) != 0L
+}
+
+/**
+ * Bounded UnityFS header parser. It deliberately does not decompress block info or
+ * extract payloads; those operations require independent limits and validation.
+ */
 internal object UnityArchiveHeaderParser {
     private val signatures = listOf("UnityFS", "UnityRaw", "UnityWeb")
+    private const val MAX_VERSION_STRING_BYTES = 256
+    private const val MAX_BLOCK_INFO_BYTES = 64L * 1024L * 1024L
 
     fun detect(prefix: ByteArray): String? {
         if (prefix.isEmpty()) return null
         val text = prefix.take(16).takeWhile { it.toInt() != 0 }
             .map { (it.toInt() and 0xff).toChar() }.joinToString("")
         return signatures.firstOrNull { text.startsWith(it) }
+    }
+
+    fun parse(prefix: ByteArray, actualLength: Long): UnityArchiveHeader? {
+        if (prefix.isEmpty() || actualLength <= 0L) return null
+        return runCatching {
+            val data = ByteBuffer.wrap(prefix).order(ByteOrder.BIG_ENDIAN)
+            fun readCString(): String? {
+                val start = data.position()
+                var terminated = false
+                while (data.hasRemaining() && data.position() - start <= MAX_VERSION_STRING_BYTES) {
+                    if (data.get().toInt() == 0) {
+                        terminated = true
+                        break
+                    }
+                }
+                if (!terminated) return null
+                val end = data.position() - 1
+                return String(prefix, start, end - start, Charsets.UTF_8)
+            }
+
+            val signature = readCString() ?: return null
+            if (signature !in signatures || data.remaining() < 4) return null
+            val version = data.int
+            if (version !in 6..8) return null
+            val playerVersion = readCString() ?: return null
+            val engineVersion = readCString() ?: return null
+            if (data.remaining() < 20) return null
+
+            val declaredSize = data.long
+            val compressedInfo = data.int.toLong() and 0xffffffffL
+            val uncompressedInfo = data.int.toLong() and 0xffffffffL
+            val flags = data.int.toLong() and 0xffffffffL
+            val headerSize = data.position()
+
+            if (declaredSize < headerSize || declaredSize > actualLength) return null
+            if (compressedInfo == 0L || uncompressedInfo == 0L) return null
+            if (compressedInfo > MAX_BLOCK_INFO_BYTES || uncompressedInfo > MAX_BLOCK_INFO_BYTES) return null
+            if (compressedInfo > declaredSize || uncompressedInfo > declaredSize) return null
+
+            UnityArchiveHeader(
+                signature, version, playerVersion, engineVersion, declaredSize,
+                compressedInfo, uncompressedInfo, flags, headerSize
+            )
+        }.getOrNull()
     }
 }
 
@@ -133,7 +197,7 @@ internal data class UnityAssetInventory(
  * is rewritten. Only a bounded prefix is read for format identification.
  */
 internal object UnityAssetInventoryScanner {
-    private const val MAX_PREFIX_BYTES = 64
+    private const val MAX_PREFIX_BYTES = 512
 
     fun inspect(apk: File): UnityAssetInventory {
         val items = mutableListOf<UnityAssetInventoryItem>()
@@ -202,12 +266,18 @@ internal object UnityAssetInventoryScanner {
                             "اسم ملف SerializedFile محتمل لكن الترويسة غير مؤكدة؛ محفوظ دون تعديل"
                         )
                     }
-                    UnityArchiveHeaderParser.detect(prefix) != null ->
+                    UnityArchiveHeaderParser.detect(prefix) != null -> {
+                        val archiveHeader = UnityArchiveHeaderParser.parse(prefix, size)
                         UnityAssetInventoryItem(
                             path, size, UnityAssetKind.UNITY_ARCHIVE,
                             UnityAssetSupport.BUNDLE_HEADER_ONLY_READ_ONLY,
-                            "توقيع ${UnityArchiveHeaderParser.detect(prefix)}؛ محتويات Bundle لم تُفك"
+                            if (archiveHeader != null) {
+                                "${archiveHeader.signature} v${archiveHeader.formatVersion}; Unity ${archiveHeader.engineVersion}; player ${archiveHeader.playerVersion}; blockInfo=${archiveHeader.compressedBlocksInfoSize}/${archiveHeader.uncompressedBlocksInfoSize} bytes; header parsed only, payload untouched"
+                            } else {
+                                "توقيع ${UnityArchiveHeaderParser.detect(prefix)}؛ ترويسة Unity Archive غير مكتملة أو خارج النطاق؛ المحتويات محفوظة دون فك"
+                            }
                         )
+                    }
                     else -> UnityAssetInventoryItem(
                         path, size, UnityAssetKind.UNKNOWN_BINARY,
                         UnityAssetSupport.PRESERVE_UNSUPPORTED,
