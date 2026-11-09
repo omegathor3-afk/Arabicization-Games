@@ -366,3 +366,123 @@ internal object UnityAssetIntegrityVerifier {
         return digest.digest()
     }
 }
+
+
+internal data class UnityStorageBlock(
+    val uncompressedSize: Long,
+    val compressedSize: Long,
+    val flags: Int
+)
+
+internal data class UnityBundleNode(
+    val offset: Long,
+    val size: Long,
+    val flags: Long,
+    val path: String
+)
+
+internal data class UnityBlockInfo(
+    val hashHex: String,
+    val blocks: List<UnityStorageBlock>,
+    val nodes: List<UnityBundleNode>,
+    val totalUncompressedBytes: Long
+)
+
+/**
+ * Parses the DECOMPRESSED UnityFS block-info buffer only.
+ *
+ * The caller must decompress the block-info region using a separately bounded
+ * decoder. This parser never opens/extracts node payloads and never writes files.
+ */
+internal object UnityBlockInfoParser {
+    private const val HASH_BYTES = 16
+    private const val MAX_BLOCKS = 100_000
+    private const val MAX_NODES = 100_000
+    private const val MAX_PATH_BYTES = 4_096
+    private const val MAX_INFO_BYTES = 64 * 1024 * 1024
+
+    fun parse(
+        decompressedInfo: ByteArray,
+        expectedUncompressedDataBytes: Long? = null
+    ): UnityBlockInfo? {
+        if (decompressedInfo.size < HASH_BYTES + 8 ||
+            decompressedInfo.size > MAX_INFO_BYTES
+        ) return null
+
+        return runCatching {
+            val input = ByteBuffer.wrap(decompressedInfo).order(ByteOrder.BIG_ENDIAN)
+            val hash = ByteArray(HASH_BYTES)
+            input.get(hash)
+
+            fun readU32(): Long = input.int.toLong() and 0xffffffffL
+
+            val blockCount = readU32()
+            require(blockCount in 1..MAX_BLOCKS.toLong())
+            require(blockCount <= input.remaining().toLong() / 10L)
+
+            val blocks = ArrayList<UnityStorageBlock>(blockCount.toInt())
+            var totalUncompressed = 0L
+            repeat(blockCount.toInt()) {
+                val uncompressed = readU32()
+                val compressed = readU32()
+                val flags = input.short.toInt() and 0xffff
+                require(uncompressed > 0L && compressed > 0L)
+                totalUncompressed = Math.addExact(totalUncompressed, uncompressed)
+                blocks += UnityStorageBlock(uncompressed, compressed, flags)
+            }
+
+            if (expectedUncompressedDataBytes != null) {
+                require(expectedUncompressedDataBytes >= 0L)
+                require(totalUncompressed == expectedUncompressedDataBytes)
+            }
+
+            require(input.remaining() >= 4)
+            val nodeCount = readU32()
+            require(nodeCount in 1..MAX_NODES.toLong())
+            // Every node needs 20 fixed bytes and at least a one-byte NUL path.
+            require(nodeCount <= input.remaining().toLong() / 21L)
+
+            val decoder = Charsets.UTF_8.newDecoder()
+                .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+            val nodes = ArrayList<UnityBundleNode>(nodeCount.toInt())
+            repeat(nodeCount.toInt()) {
+                val offset = input.long
+                val size = input.long
+                val flags = readU32()
+                require(offset >= 0L && size > 0L)
+                require(offset <= totalUncompressed && size <= totalUncompressed - offset)
+
+                val pathStart = input.position()
+                var terminator = -1
+                while (input.hasRemaining() &&
+                    input.position() - pathStart <= MAX_PATH_BYTES
+                ) {
+                    if (input.get().toInt() == 0) {
+                        terminator = input.position() - 1
+                        break
+                    }
+                }
+                require(terminator >= pathStart)
+                val pathLength = terminator - pathStart
+                require(pathLength in 1..MAX_PATH_BYTES)
+                val pathBytes = ByteArray(pathLength)
+                val oldPosition = input.position()
+                input.position(pathStart)
+                input.get(pathBytes)
+                input.position(oldPosition)
+                val path = decoder.reset().decode(ByteBuffer.wrap(pathBytes)).toString()
+                require(path.isNotBlank())
+                nodes += UnityBundleNode(offset, size, flags, path)
+            }
+            require(!input.hasRemaining())
+
+            UnityBlockInfo(
+                hash.joinToString("") { "%02x".format(it.toInt() and 0xff) },
+                blocks,
+                nodes,
+                totalUncompressed
+            )
+        }.getOrNull()
+    }
+}
