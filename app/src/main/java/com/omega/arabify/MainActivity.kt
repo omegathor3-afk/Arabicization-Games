@@ -1,6 +1,7 @@
 package com.omega.arabify
 
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -50,6 +51,9 @@ class MainActivity : ComponentActivity() {
 private fun ArabifyApp(context: Context) {
  val scope=rememberCoroutineScope()
  var result by remember { mutableStateOf<ApkScanResult?>(null) }
+ var installedApps by remember { mutableStateOf<List<InstalledApp>>(emptyList()) }
+ var appSearch by remember { mutableStateOf("") }
+ var selectedInstalledApp by remember { mutableStateOf<InstalledApp?>(null) }
  var error by remember { mutableStateOf<String?>(null) }
  var busy by remember { mutableStateOf(false) }
  var modelReady by remember { mutableStateOf(false) }
@@ -68,6 +72,7 @@ private fun ArabifyApp(context: Context) {
  var assetProgress by remember { mutableStateOf(0 to 0) }
  var assetReport by remember { mutableStateOf<AssetLocalizationReport?>(null) }
  var assetError by remember { mutableStateOf<String?>(null) }
+ LaunchedEffect(context) { installedApps = withContext(Dispatchers.IO) { loadInstalledApps(context) } }
  val offlineTranslator = remember(context) { OfflineArabicTranslator(context) }
  DisposableEffect(offlineTranslator) { onDispose { offlineTranslator.close() } }
  val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri:Uri? ->
@@ -95,19 +100,50 @@ private fun ArabifyApp(context: Context) {
    }
   }
  }
- MaterialTheme(colorScheme=darkColorScheme(primary=Color(0xFFD7B77A),secondary=Color(0xFF8FA69A),background=Color(0xFF111318),surface=Color(0xFF1B1F26))) {
-  Surface(Modifier.fillMaxSize(),color=Color(0xFF111318)) {
+ MaterialTheme(colorScheme=darkColorScheme(primary=Color(0xFF12D9FF),secondary=Color(0xFF9B72FF),tertiary=Color(0xFF36F0C2),background=Color(0xFF050A18),surface=Color(0xFF101A32))) {
+  Surface(Modifier.fillMaxSize(),color=Color(0xFF050A18)) {
    LazyColumn(Modifier.fillMaxSize().padding(20.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
     item {
-     Text("ARABIFY",color=Color(0xFFD7B77A),fontSize=30.sp,fontWeight=FontWeight.Black)
+     Text("ARABIFY",color=Color(0xFF36DFFF),fontSize=30.sp,fontWeight=FontWeight.Black)
      Text("محرك تعريب الألعاب والتطبيقات",color=Color(0xFFE8E1D5),fontSize=18.sp,fontWeight=FontWeight.SemiBold)
-     Text("تحليل محلي • خصوصية • دعم محركات متعددة",color=Color(0xFF9CA5B1),fontSize=12.sp)
+     Text("NEON EDITION  •  تعريب محلي  •  خصوصية",color=Color(0xFF8CA7D9),fontSize=12.sp)
     }
     item {
-     Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF202630)),shape=RoundedCornerShape(20.dp)) {
+     Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF101A32)),shape=RoundedCornerShape(22.dp)) {
+      Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+       Text("اختر من تطبيقات وألعاب هاتفك",color=Color.White,fontSize=19.sp,fontWeight=FontWeight.Bold)
+       Text("تظهر هنا التطبيقات المثبتة التي لها أيقونة تشغيل. اختر تطبيقًا لقراءة ملف التثبيت الأساسي محليًا.",color=Color(0xFFB9C1CB),fontSize=12.sp)
+       OutlinedTextField(value=appSearch,onValueChange={appSearch=it},label={Text("ابحث عن لعبة أو تطبيق")},modifier=Modifier.fillMaxWidth(),singleLine=true)
+       val visibleApps=installedApps.filter { it.label.contains(appSearch,true) || it.packageName.contains(appSearch,true) }.take(30)
+       if(visibleApps.isEmpty()) Text("لا توجد نتائج. تأكد من تثبيت التطبيق أو استخدم اختيار APK اليدوي.",color=Color(0xFF9BB1D8),fontSize=12.sp)
+       visibleApps.forEach { app ->
+        Row(Modifier.fillMaxWidth().padding(vertical=3.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(9.dp)) {
+         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)) {
+          Text(app.label,color=Color.White,fontWeight=FontWeight.SemiBold,fontSize=14.sp)
+          Text(app.packageName,color=Color(0xFF91A7D4),fontSize=10.sp)
+          if(app.splitCount>0) Text("حزمة أساسية + ${app.splitCount} ملفات إضافية؛ دعم الحزم المنقسمة قيد التطوير",color=Color(0xFFFFC46B),fontSize=10.sp)
+         }
+         Button(onClick={
+          selectedInstalledApp=app
+          selectedUri=Uri.fromFile(File(app.apkPath))
+          busy=true;error=null;result=null;localizationReport=null;generatedApk=null
+          scope.launch {
+           try { result=withContext(Dispatchers.IO){ApkInspector.inspect(context,Uri.fromFile(File(app.apkPath)))} }
+           catch(e:Exception){error=e.message ?: "تعذر فحص التطبيق المثبت."}
+           finally{busy=false}
+          }
+         },enabled=!busy) { Text(if(selectedInstalledApp?.packageName==app.packageName) "محدد" else "اختيار") }
+        }
+       }
+       Text("مهم: أندرويد قد يثبت اللعبة كعدة ملفات Split APK. هذه النسخة تقرأ APK الأساسي فقط؛ لن أصف هذا بأنه تعريب كامل قبل دعم كل الأجزاء وملفات المحرك.",color=Color(0xFFFFC46B),fontSize=11.sp)
+      }
+     }
+    }
+    item {
+     Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF101A32)),shape=RoundedCornerShape(20.dp)) {
       Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
-       Text("مترجم محلي إلى العربية",color=Color.White,fontSize=18.sp,fontWeight=FontWeight.Bold)
-       Text("حمّل نموذج اللغة مرة واحدة عبر Wi-Fi؛ بعد اكتمال تنزيله تتم الترجمة على الجهاز دون إرسال النصوص إلى خادم.",color=Color(0xFFB9C1CB),fontSize=12.sp)
+       Text("محرك الترجمة المحلي",color=Color.White,fontSize=18.sp,fontWeight=FontWeight.Bold)
+       Text("تنبيه بوضوح: النسخة الحالية تستخدم نموذج ML Kit يتم تنزيله عند الطلب، وليس حزمة عربية/إنجليزية مضمّنة بالكامل. بعد التنزيل تعمل الترجمة النصية دون اتصال، لكن ذلك لا يعني تعريب كل ملفات اللعبة تلقائيًا.",color=Color(0xFFB9C1CB),fontSize=12.sp)
        Button(onClick={
         translationBusy=true;translationError=null
         scope.launch {
@@ -115,8 +151,8 @@ private fun ArabifyApp(context: Context) {
          catch(e:Exception){translationError=e.message ?: "تعذر تجهيز نموذج الترجمة."}
          finally{translationBusy=false}
         }
-       },enabled=!translationBusy,modifier=Modifier.fillMaxWidth()){Text(if(modelReady) "نموذج العربية جاهز على الجهاز" else "تنزيل نموذج الترجمة")}
-       OutlinedTextField(value=translationInput,onValueChange={translationInput=it},label={Text("نص إنجليزي للتجربة")},modifier=Modifier.fillMaxWidth())
+       },enabled=!translationBusy,modifier=Modifier.fillMaxWidth()){Text(if(modelReady) "النموذج الحالي جاهز" else "تنزيل نموذج الترجمة (مرة واحدة)")}
+       OutlinedTextField(value=translationInput,onValueChange={translationInput=it},label={Text("اختبر المحرك بجملة قصيرة")},modifier=Modifier.fillMaxWidth())
        Button(onClick={
         translationBusy=true;translationError=null;translatedText=null
         scope.launch {
@@ -124,7 +160,7 @@ private fun ArabifyApp(context: Context) {
          catch(e:Exception){translationError=e.message ?: "فشلت الترجمة."}
          finally{translationBusy=false}
         }
-       },enabled=modelReady&&!translationBusy&&translationInput.isNotBlank(),modifier=Modifier.fillMaxWidth()){Text("ترجمة إلى العربية")}
+       },enabled=modelReady&&!translationBusy&&translationInput.isNotBlank(),modifier=Modifier.fillMaxWidth()){Text("اختبار الترجمة المحلية")}
        if(translationBusy) CircularProgressIndicator()
        translatedText?.let{Text(it,color=Color(0xFFE7D5AF),fontSize=17.sp)}
        translationError?.let{Text(it,color=Color(0xFFFF9B91),fontSize=12.sp)}
@@ -134,8 +170,8 @@ private fun ArabifyApp(context: Context) {
     item {
      Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF202630)),shape=RoundedCornerShape(20.dp)) {
       Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
-       Text("ابدأ بملف اللعبة",color=Color.White,fontSize=18.sp,fontWeight=FontWeight.Bold)
-       Text("اختر APK لفحص بنيته واكتشاف المحرك والملفات النصية المحتملة. الملف لا يُرفع إلى أي خادم.",color=Color(0xFFB9C1CB),fontSize=13.sp)
+       Text("أو اختر ملف APK يدويًا",color=Color.White,fontSize=18.sp,fontWeight=FontWeight.Bold)
+       Text("هذا الخيار احتياطي للتطبيقات التي لا تظهر في القائمة أو لملف APK خارجي.",color=Color(0xFFB9C1CB),fontSize=13.sp)
        Button(onClick={picker.launch(arrayOf("application/vnd.android.package-archive","application/octet-stream"))},enabled=!busy,modifier=Modifier.fillMaxWidth()){Text("اختيار ملف APK")}
        if(busy) Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)){CircularProgressIndicator();Text("جارٍ فحص بنية الملف...")}
        error?.let{Text(it,color=Color(0xFFFF9B91))}
@@ -336,4 +372,16 @@ private fun copyUriToCache(context:Context,uri:Uri):File {
   file.outputStream().use { output -> input.copyTo(output) }
  } ?: error("تعذر قراءة ملف اللعبة.")
  return file
+}
+
+
+internal data class InstalledApp(val label:String,val packageName:String,val apkPath:String,val splitCount:Int)
+
+@Suppress("DEPRECATION")
+private fun loadInstalledApps(context:Context):List<InstalledApp> {
+ val pm=context.packageManager
+ return pm.getInstalledApplications(PackageManager.GET_META_DATA)
+  .filter { pm.getLaunchIntentForPackage(it.packageName)!=null && it.sourceDir!=null }
+  .map { info -> InstalledApp(pm.getApplicationLabel(info).toString(),info.packageName,info.sourceDir,info.splitSourceDirs?.size ?: 0) }
+  .sortedBy { it.label.lowercase() }
 }
