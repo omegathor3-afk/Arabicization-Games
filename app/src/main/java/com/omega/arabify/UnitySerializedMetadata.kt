@@ -21,7 +21,6 @@ internal object UnitySerializedMetadataPrefixParser {
     private const val MAX_METADATA_BYTES = 64 * 1024 * 1024
     private const val MAX_UNITY_VERSION_BYTES = 1024
     private const val MAX_TYPES = 100_000
-    private const val MIN_TYPE_RECORD_BYTES = 20
 
     fun parse(
         header: UnitySerializedHeader,
@@ -78,7 +77,13 @@ internal object UnitySerializedMetadataPrefixParser {
             require(input.remaining() >= 4)
             val typeCount = input.int
             require(typeCount in 0..MAX_TYPES)
-            val minimumTypeBytes = Math.multiplyExact(typeCount.toLong(), MIN_TYPE_RECORD_BYTES.toLong())
+            val minimumBytesPerType = when {
+                header.formatVersion >= 17 -> 23
+                header.formatVersion >= 16 -> 21
+                header.formatVersion >= 13 -> 20
+                else -> 4
+            }
+            val minimumTypeBytes = Math.multiplyExact(typeCount.toLong(), minimumBytesPerType.toLong())
             val declaredBytesAfterPrefix = header.metadataSize - input.position().toLong()
             require(declaredBytesAfterPrefix >= 0L && minimumTypeBytes <= declaredBytesAfterPrefix) {
                 "SerializedFile type records exceed declared metadata size"
