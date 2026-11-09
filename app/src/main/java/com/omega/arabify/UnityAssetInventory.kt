@@ -489,8 +489,20 @@ internal object UnityBlockInfoParser {
 
 
 internal enum class UnityCompressionCodec {
+    NONE,
     LZ4_BLOCK,
     LZMA_ALONE
+}
+
+/** UnityFS StorageBlock compression type is stored in the low six flag bits. */
+internal fun unityCompressionCodecFromFlags(flags: Int): UnityCompressionCodec? {
+    if (flags !in 0..0xffff) return null
+    return when (flags and 0x3f) {
+        0 -> UnityCompressionCodec.NONE
+        1 -> UnityCompressionCodec.LZMA_ALONE
+        2, 3 -> UnityCompressionCodec.LZ4_BLOCK // LZ4 and LZ4HC share the block decoder.
+        else -> null
+    }
 }
 
 /**
@@ -523,6 +535,10 @@ internal object UnityFsBlockDecompressor {
         val expected = expectedOutputBytes.toInt()
 
         return when (codec) {
+            UnityCompressionCodec.NONE -> {
+                require(compressed.size == expected) { "Uncompressed UnityFS block size mismatch" }
+                compressed.copyOf()
+            }
             UnityCompressionCodec.LZ4_BLOCK -> {
                 val output = ByteArray(expected)
                 val written = net.jpountz.lz4.LZ4Factory.fastestInstance()
