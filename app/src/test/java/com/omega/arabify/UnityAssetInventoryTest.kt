@@ -178,6 +178,62 @@ class UnityAssetInventoryTest {
         }
     }
 
+    @Test fun inventoryUsesBoundedSerializedFileInspectorToReportObjectCount() {
+        val directory = createTempDir(prefix = "arabify-unity-object-index-")
+        try {
+            val apk = File(directory, "unity-object-index.apk")
+            val metadata = ByteBuffer.allocate(128).order(ByteOrder.LITTLE_ENDIAN).apply {
+                put("2022.3.0f1".toByteArray(Charsets.UTF_8))
+                put(0)
+                putInt(13)
+                put(0)
+                putInt(1)
+                putInt(1)
+                put(0)
+                putShort(0)
+                put(ByteArray(16) { 0x44 })
+                putInt(2)
+                while ((48L + position()) % 4L != 0L) put(0x7f)
+                putLong(11)
+                putLong(0)
+                putInt(16)
+                putInt(0)
+                putLong(22)
+                putLong(16)
+                putInt(32)
+                putInt(0)
+            }.array()
+            val metadataSize = 96
+            val fileHeader = ByteBuffer.allocate(48).order(ByteOrder.BIG_ENDIAN).apply {
+                putInt(metadataSize)
+                putInt(4096)
+                putInt(22)
+                putInt(2048)
+                put(0)
+                put(ByteArray(3))
+                putInt(metadataSize)
+                putLong(4096)
+                putLong(2048)
+                putLong(0)
+            }.array()
+            val serialized = fileHeader + metadata.copyOf(metadataSize) +
+                ByteArray(4096 - fileHeader.size - metadataSize)
+            ZipOutputStream(apk.outputStream()).use { zip ->
+                zip.putNextEntry(ZipEntry("assets/bin/Data/globalgamemanagers"))
+                zip.write(serialized)
+                zip.closeEntry()
+            }
+
+            val item = UnityAssetInventoryScanner.inspect(apk).items.single()
+            assertTrue(item.detail.contains("types=1"))
+            assertTrue(item.detail.contains("objects=2"))
+            assertTrue(item.detail.contains("stage=OBJECT_TABLE_PARSED"))
+            assertTrue(item.detail.contains("لم تُقرأ أو تُعدّل"))
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
     @Test fun inventorySeparatesTextCandidatesSerializedFilesBundlesAndExternalStreams() {
         val directory = createTempDir(prefix = "arabify-unity-inventory-")
         try {
