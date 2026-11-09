@@ -139,7 +139,7 @@ internal object AndroidAssetLocalizer {
    context.packageManager.getPackageArchiveInfo(inputApk.absolutePath,0)
   }catch(_:Exception){null}
   val packageName=archiveInfo?.packageName
-  val extractNativeLibs=archiveInfo?.applicationInfo?.flags?.and(ApplicationInfo.FLAG_EXTRACT_NATIVE_LIBS)!=0
+  val extractNativeLibs=archiveInfo?.applicationInfo?.let { it.flags and ApplicationInfo.FLAG_EXTRACT_NATIVE_LIBS != 0 } ?: false
   var discovered=0
   var translatedFiles=0
   var translatedStrings=0
