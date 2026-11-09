@@ -262,8 +262,12 @@ class UnityAssetInventoryTest {
 
     @Test fun decompressesUnityLz4RawBlockAndChecksExactOutputLength() {
         val original = "UnityFS bounded LZ4 fixture — مرحباً".toByteArray(Charsets.UTF_8)
-        val compressed = net.jpountz.lz4.LZ4Factory.fastestInstance()
-            .fastCompressor().compress(original)
+        val compressor = net.jpountz.lz4.LZ4Factory.fastestInstance().fastCompressor()
+        val buffer = ByteArray(compressor.maxCompressedLength(original.size))
+        val compressedLength = compressor.compress(
+            original, 0, original.size, buffer, 0, buffer.size
+        )
+        val compressed = buffer.copyOf(compressedLength)
         val decoded = UnityFsBlockDecompressor.decompress(
             UnityCompressionCodec.LZ4_BLOCK, compressed, original.size.toLong()
         )
