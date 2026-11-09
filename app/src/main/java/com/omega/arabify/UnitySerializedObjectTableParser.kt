@@ -64,9 +64,7 @@ internal object UnitySerializedObjectTableParser {
                 if (remainder != 0) {
                     val skip = alignment - remainder
                     require(skip <= input.remaining())
-                    repeat(skip) {
-                        require(input.get().toInt() == 0) { "Non-zero SerializedFile alignment padding" }
-                    }
+                    input.position(Math.addExact(input.position(), skip))
                 }
             }
 
@@ -78,6 +76,15 @@ internal object UnitySerializedObjectTableParser {
             require(input.remaining() >= 4)
             val objectCount = input.int
             require(objectCount in 0..MAX_OBJECTS)
+            val minimumObjectBytes = when {
+                header.formatVersion >= 22 -> 24L
+                header.formatVersion >= 14 -> 19L
+                header.formatVersion >= 11 -> 18L
+                else -> 20L
+            }
+            require(objectCount.toLong() <= input.remaining().toLong() / minimumObjectBytes) {
+                "SerializedFile object count exceeds remaining metadata"
+            }
 
             val objects = ArrayList<UnitySerializedObjectInfo>(objectCount)
             val seenPathIds = HashSet<Long>(objectCount.coerceAtMost(1_000_000))
