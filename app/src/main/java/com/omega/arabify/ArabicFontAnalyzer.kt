@@ -23,7 +23,7 @@ internal object ArabicFontAnalyzer {
     }
 
     fun isFontPath(path: String): Boolean =
-        path.substringAfterLast('.', "").lowercase() in setOf("ttf", "otf", "ttc")
+        path.substringAfterLast('.', "").lowercase() in setOf("ttf", "otf")
 
     fun inspect(path: String, bytes: ByteArray): ArabicFontAssessment {
         val mapped = runCatching { mappedCodePoints(bytes) }.getOrDefault(emptySet())
