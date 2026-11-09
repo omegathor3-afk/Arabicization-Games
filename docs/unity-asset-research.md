@@ -36,7 +36,8 @@ License statements are based on upstream repository license files/readmes at the
 
 ## SerializedFile / TypeTree progress (read-only)
 
-- A bounded metadata-preamble reader now extracts the Unity version, target platform, TypeTree-enabled flag, and declared type count for supported endian-aware format versions; it stops before interpreting type records.
+- The APK inventory now uses a bounded metadata-prefix read to report the Unity version, target platform, TypeTree-enabled flag, and declared type count when available; it does not load the entire metadata region just to show this summary.
+- A bounded metadata-preamble reader extracts those fields for supported endian-aware format versions and stops before interpreting type records.
 - A bounded standalone parser now reads the flat TypeTree node/string-buffer representation for SerializedFile format versions 12–100.
 - It validates node counts, record-buffer arithmetic, hierarchy levels, local string offsets, NUL termination, UTF-8 validity, and trailing bytes before accepting a tree.
 - For format version 19+, it preserves each node's 64-bit reference-type hash. Common-string-table offsets are retained as unresolved references rather than guessed or silently mapped to the wrong field name.
