@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 class MainActivity : ComponentActivity() {
  override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,15 +57,37 @@ private fun ArabifyApp(context: Context) {
  var translatedText by remember { mutableStateOf<String?>(null) }
  var translationBusy by remember { mutableStateOf(false) }
  var translationError by remember { mutableStateOf<String?>(null) }
+ var selectedUri by remember { mutableStateOf<Uri?>(null) }
+ var localizeBusy by remember { mutableStateOf(false) }
+ var localizationProgress by remember { mutableStateOf(0 to 0) }
+ var localizationReport by remember { mutableStateOf<AndroidLocalizationReport?>(null) }
+ var generatedApk by remember { mutableStateOf<File?>(null) }
+ var localizationError by remember { mutableStateOf<String?>(null) }
+ var exportError by remember { mutableStateOf<String?>(null) }
  val offlineTranslator = remember(context) { OfflineArabicTranslator(context) }
  DisposableEffect(offlineTranslator) { onDispose { offlineTranslator.close() } }
  val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri:Uri? ->
   if(uri!=null) {
-   busy=true;error=null;result=null
+   selectedUri=uri;busy=true;error=null;result=null;localizationReport=null;generatedApk=null
    scope.launch {
     try { result=withContext(Dispatchers.IO){ApkInspector.inspect(context,uri)} }
     catch(e:Exception){error=e.message ?: "حدث خطأ أثناء فحص الملف."}
     finally{busy=false}
+   }
+  }
+ }
+ val saveLauncher=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.android.package-archive")) { targetUri:Uri? ->
+  val source=generatedApk
+  if(targetUri!=null && source!=null) {
+   scope.launch {
+    try {
+     withContext(Dispatchers.IO) {
+      context.contentResolver.openOutputStream(targetUri,"wt")?.use { output ->
+       source.inputStream().use { input -> input.copyTo(output) }
+      } ?: error("تعذر إنشاء ملف APK في المكان المحدد.")
+     }
+     exportError=null
+    } catch(e:Exception) { exportError=e.message ?: "تعذر حفظ APK." }
    }
   }
  }
@@ -128,6 +151,50 @@ private fun ArabifyApp(context: Context) {
        }
       }
      }
+     if(scan.engine==GameEngine.ANDROID) {
+      item {
+       Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF26312D)),shape=RoundedCornerShape(18.dp)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
+         Text("تعريب موارد Android",color=Color(0xFFE7D5AF),fontWeight=FontWeight.Bold,fontSize=17.sp)
+         Text("هذا المسار التجريبي يضيف موارد string عربية إلى resources.arsc. لا يشمل النصوص المخبأة داخل DEX أو محركات الألعاب.",color=Color(0xFFD0D7D2),fontSize=12.sp)
+         Text("يجب تنزيل نموذج الترجمة أولًا. التوقيع الجديد يعني أن تثبيت النسخة المعربة بدل الأصلية قد يتطلب إزالة النسخة الأصلية، وقد يؤدي ذلك لفقد بياناتها.",color=Color(0xFFE5C58C),fontSize=12.sp)
+         Button(onClick={
+          val uri=selectedUri
+          if(uri!=null) {
+           localizeBusy=true;localizationError=null;localizationProgress=0 to 0;localizationReport=null
+           scope.launch {
+            try {
+             val report=withContext(Dispatchers.IO) {
+              val input=copyUriToCache(context,uri)
+              val unsigned=File(context.cacheDir,"arabify-unsigned-${System.currentTimeMillis()}.apk")
+              val signed=File(context.cacheDir,"arabify-arabic-${System.currentTimeMillis()}.apk")
+              AndroidResourceLocalizer.localizeEnglishStrings(input,unsigned,signed,offlineTranslator,context) { done,total ->
+               scope.launch { localizationProgress=done to total }
+              }
+             }
+             localizationReport=report
+             generatedApk=report.signedApk
+            } catch(e:Exception) { localizationError=e.message ?: "تعذر تعريب موارد اللعبة." }
+            finally { localizeBusy=false }
+           }
+          }
+         },enabled=modelReady&&!localizeBusy&&selectedUri!=null,modifier=Modifier.fillMaxWidth()) {
+          Text(if(localizeBusy) "جارٍ التعريب..." else "ابدأ تعريب موارد اللعبة")
+         }
+         if(localizeBusy) {
+          CircularProgressIndicator()
+          Text("تمت معالجة ${localizationProgress.first} من ${localizationProgress.second}",color=Color.White,fontSize=12.sp)
+         }
+         localizationReport?.let { report ->
+          Text("اكتمل إنشاء الموارد العربية: ${report.translatedStrings} نصًا من ${report.discoveredStrings}.",color=Color(0xFFB8E4C8),fontSize=13.sp)
+          Button(onClick={saveLauncher.launch("arabify_arabic.apk")},modifier=Modifier.fillMaxWidth()){Text("حفظ APK المعرب")}
+         }
+         localizationError?.let{Text(it,color=Color(0xFFFF9B91),fontSize=12.sp)}
+         exportError?.let{Text(it,color=Color(0xFFFF9B91),fontSize=12.sp)}
+        }
+       }
+      }
+     }
      item{SectionTitle("ملفات نصية محتملة (${scan.candidateFiles.size})")}
      if(scan.candidateFiles.isEmpty()) item{Text("لم يتم العثور على ملفات نصية واضحة في المسارات المدعومة.",color=Color(0xFFB9C1CB))}
      items(scan.candidateFiles){path->Text("• $path",color=Color(0xFFD4D9DF),fontSize=12.sp)}
@@ -148,3 +215,11 @@ private fun ArabifyApp(context: Context) {
 
 @Composable
 private fun SectionTitle(value:String){Text(value,color=Color(0xFFD7B77A),fontWeight=FontWeight.Bold,fontSize=16.sp)}
+
+private fun copyUriToCache(context:Context,uri:Uri):File {
+ val file=File(context.cacheDir,"arabify-import-${System.currentTimeMillis()}.apk")
+ context.contentResolver.openInputStream(uri)?.use { input ->
+  file.outputStream().use { output -> input.copyTo(output) }
+ } ?: error("تعذر قراءة ملف اللعبة.")
+ return file
+}
