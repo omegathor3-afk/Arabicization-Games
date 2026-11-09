@@ -84,7 +84,7 @@ private fun ArabifyApp(context: Context) {
      withContext(Dispatchers.IO) {
       context.contentResolver.openOutputStream(targetUri,"wt")?.use { output ->
        source.inputStream().use { input -> input.copyTo(output) }
-      } ?: error("تعذر إنشاء ملف APK في المكان المحدد.")
+      } ?: kotlin.error("تعذر إنشاء ملف APK في المكان المحدد.")
      }
      exportError=null
     } catch(e:Exception) { exportError=e.message ?: "تعذر حفظ APK." }
