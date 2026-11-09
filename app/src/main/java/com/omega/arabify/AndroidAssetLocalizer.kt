@@ -29,8 +29,9 @@ internal object AssetTextTransformer {
    val protected=PlaceholderProtector.protect(value)
    return try {
     val result=translate(protected.text)
-    val lost=protected.tokens.indices.any{!result.contains("__ARABIFY_TOKEN_${it}__")}
-    if(lost){skipped++;value}
+    val expectedTokens=protected.tokens.indices.map { "__ARABIFY_TOKEN_${it}__" }
+    val quality=TranslationQualityGate.review(value,result,expectedTokens)
+    if(!quality.accepted){skipped++;value}
     else {
      val restored=PlaceholderProtector.restore(result,protected.tokens)
      if(restored.isBlank()){skipped++;value}else{translated++;restored}
