@@ -274,7 +274,7 @@ internal object UnityAssetIntegrityVerifier {
     }
 
     private fun isProtected(path: String): Boolean {
-        val normalized = path.replace('\\\\', '/').lowercase()
+        val normalized = path.replace('\\', '/').lowercase()
         val inUnityData = normalized.startsWith("assets/bin/data/")
         val extension = normalized.substringAfterLast('.', "")
         return (inUnityData && (
