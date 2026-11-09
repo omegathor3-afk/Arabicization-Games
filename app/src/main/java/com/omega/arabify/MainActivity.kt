@@ -159,18 +159,24 @@ private fun ArabifyApp(context: Context) {
       Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF242B35)),shape=RoundedCornerShape(18.dp)) {
        Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
         Text("فحص الخطوط ودعم العربية",color=Color(0xFFE7D5AF),fontWeight=FontWeight.Bold,fontSize=17.sp)
-        Text("يفحص التطبيق ملفات TTF/OTF المضمنة ويقيس وجود حروف عربية فعلية داخل كل خط، ثم يرتب الخطوط الأنسب. امتداد الخط أو اسمه وحده لا يثبت دعمه للعربية.",color=Color(0xFFD0D7D2),fontSize=12.sp)
+        Text("يفحص ملفات TTF/OTF المضمنة، ويقيس تغطية الحروف العربية، ويتحقق من وجود سجلات arab في جدولي OpenType GSUB وGPOS قبل ترشيح الخط. الاسم والامتداد وحدهما لا يكفيان.",color=Color(0xFFD0D7D2),fontSize=12.sp)
         if(scan.fontAssessments.isEmpty()) {
          Text("لم يُعثر على خطوط TTF/OTF قابلة للفحص داخل APK.",color=Color(0xFFE5C58C),fontSize=12.sp)
         } else {
          val best=scan.fontAssessments.first()
          Text("أفضل خط موجود: ${best.path}",color=Color.White,fontSize=12.sp,fontWeight=FontWeight.SemiBold)
          Text("تغطية الحروف العربية: ${best.mappedArabicLetters}/${best.totalArabicLetters} (${best.coveragePercent}%)",color=if(best.suitableForArabic) Color(0xFFB8E4C8) else Color(0xFFE5C58C),fontSize=12.sp)
+         Text("جداول تشكيل OpenType: ${if(best.hasArabicShapingTables) "تم العثور على arab في GSUB وGPOS" else "غير مكتملة أو غير موجودة"}",color=if(best.hasArabicShapingTables) Color(0xFFB8E4C8) else Color(0xFFE5C58C),fontSize=12.sp)
          scan.fontAssessments.take(8).forEach { font ->
-          Text("• ${font.path} — ${font.coveragePercent}% ${if(font.suitableForArabic) "مناسب مبدئيًا" else "تغطيته غير كافية"}",color=Color(0xFFD4D9DF),fontSize=11.sp)
+          val status = when {
+           font.suitableForArabic -> "تغطية وتشكيل مرشحان"
+           font.hasArabicShapingTables -> "تشكيل موجود لكن التغطية ناقصة"
+           else -> "تشكيل عربي غير مؤكد"
+          }
+          Text("• ${font.path} — ${font.coveragePercent}% · $status",color=Color(0xFFD4D9DF),fontSize=11.sp)
          }
         }
-        Text("تنبيه: هذه المرحلة تفحص الخطوط وتختار المرشح الأفضل فقط؛ لم نربط بعد الخط البديل بمحركات Unity/Unreal أو نغيّر إعدادات خطوط اللعبة تلقائيًا. الخط الذي يحتوي glyphs عربية لا يضمن وحده تشكيل الحروف واتجاه RTL الصحيح.",color=Color(0xFFE5C58C),fontSize=12.sp)
+        Text("تنبيه: هذه المرحلة ترشح الخطوط فقط؛ لا تضيف الخط إلى اللعبة ولا تبدل مراجعها تلقائيًا. وجود GSUB/GPOS لا يغني عن اختبار تشكيل العربية وRTL داخل محرك اللعبة الفعلي.",color=Color(0xFFE5C58C),fontSize=12.sp)
        }
       }
      }
