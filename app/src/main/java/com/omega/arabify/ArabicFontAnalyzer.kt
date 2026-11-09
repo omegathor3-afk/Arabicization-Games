@@ -108,8 +108,8 @@ internal object ArabicFontAnalyzer {
             italic = (selection and 0x0001) != 0
         }
         return FontMetadata(
-            familyName = name[16] ?: name[1],
-            subfamilyName = name[17] ?: name[2],
+            familyName = nameTable[16] ?: nameTable[1],
+            subfamilyName = nameTable[17] ?: nameTable[2],
             weightClass = weight,
             italic = italic
         )
