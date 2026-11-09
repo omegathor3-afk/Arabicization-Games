@@ -498,9 +498,9 @@ internal enum class UnityCompressionCodec {
 internal fun unityCompressionCodecFromFlags(flags: Long): UnityCompressionCodec? {
     if (flags !in 0L..0xffffffffL) return null
     return when (flags and 0x3fL) {
-        0 -> UnityCompressionCodec.NONE
-        1 -> UnityCompressionCodec.LZMA_ALONE
-        2, 3 -> UnityCompressionCodec.LZ4_BLOCK // LZ4 and LZ4HC share the block decoder.
+        0L -> UnityCompressionCodec.NONE
+        1L -> UnityCompressionCodec.LZMA_ALONE
+        2L, 3L -> UnityCompressionCodec.LZ4_BLOCK // LZ4 and LZ4HC share the block decoder.
         else -> null
     }
 }
