@@ -31,12 +31,11 @@ internal object UnityTypeTreeInfoHandlerParser {
             val contentHash = ByteArray(HASH_BYTES).also(input::get)
             val serializedSize = input.int.toLong() and 0xffffffffL
             require(serializedSize <= MAX_INFO_BYTES)
-            require(serializedSize == input.remaining().toLong())
-
             if (serializedSize < 8L) {
                 require(!input.hasRemaining())
                 return@runCatching UnityTypeTreeInfoHandler(contentHash, serializedSize, null)
             }
+            require(serializedSize == input.remaining().toLong())
 
             val infoBytes = ByteArray(serializedSize.toInt()).also(input::get)
             val infoInput = ByteBuffer.wrap(infoBytes).order(byteOrder)
