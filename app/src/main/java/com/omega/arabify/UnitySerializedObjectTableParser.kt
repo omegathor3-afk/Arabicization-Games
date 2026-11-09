@@ -30,7 +30,7 @@ internal data class UnitySerializedObjectTable(
  */
 internal object UnitySerializedObjectTableParser {
     private const val MAX_METADATA_BYTES = 64 * 1024 * 1024
-    private const val MAX_OBJECTS = 2_000_000
+    private const val MAX_OBJECTS = 500_000
 
     fun parse(
         header: UnitySerializedHeader,
@@ -128,15 +128,12 @@ internal object UnitySerializedObjectTableParser {
                     input.get().toInt() and 0xff
                 } else null
 
-                require(pathId != 0L) { "SerializedFile object has a zero PathID" }
                 require(seenPathIds.add(pathId)) { "Duplicate SerializedFile PathID" }
                 require(byteStart >= 0L)
-                require(byteSize <= Int.MAX_VALUE.toLong())
                 require(byteStart <= header.fileSize - header.dataOffset)
                 require(byteSize <= header.fileSize - header.dataOffset - byteStart)
-                require(typeId >= 0)
                 if (header.formatVersion >= 16) {
-                    require(typeId < typeTable.records.size) { "Object type index is out of range" }
+                    require(typeId in typeTable.records.indices) { "Object type index is out of range" }
                 }
 
                 val absoluteDataOffset = Math.addExact(header.dataOffset, byteStart)
