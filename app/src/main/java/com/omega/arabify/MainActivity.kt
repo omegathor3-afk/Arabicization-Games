@@ -287,6 +287,28 @@ private fun ArabifyApp(context: Context) {
        }
       }
      }
+     scan.unityAssetInventory?.let { inventory ->
+      item {
+       Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF202A32)),shape=RoundedCornerShape(18.dp)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+         Text("جرد موارد Unity — قراءة فقط",color=Color(0xFFE7D5AF),fontWeight=FontWeight.Bold,fontSize=17.sp)
+         Text(inventory.report,color=Color(0xFFD4D9DF),fontSize=12.sp)
+         Text("لم يتم تعديل resources.assets أو AssetBundles أو DLL. تحليل SerializedFile الحالي يقتصر على الترويسة، وليس جدول الكائنات أو TypeTree.",color=Color(0xFFE5C58C),fontSize=12.sp)
+         inventory.items.take(12).forEach { asset ->
+          val status = when(asset.support) {
+           UnityAssetSupport.TEXT_CANDIDATE_READ_ONLY -> "مرشح نصي — غير معدل"
+           UnityAssetSupport.HEADER_PARSED_READ_ONLY -> "ترويسة مقروءة — غير معدل"
+           UnityAssetSupport.BUNDLE_HEADER_ONLY_READ_ONLY -> "توقيع Bundle فقط — غير معدل"
+           UnityAssetSupport.PRESERVE_AS_EXTERNAL_DATA -> "بيانات جانبية — محفوظة"
+           UnityAssetSupport.PRESERVE_UNSUPPORTED -> "غير مدعوم — محفوظ كما هو"
+          }
+          Text("• ${asset.path} (${asset.sizeBytes} bytes)\n$status\n${asset.detail}",color=Color(0xFFD4D9DF),fontSize=10.sp)
+         }
+         if(inventory.items.size > 12) Text("يتم عرض أول 12 عنصرًا من أصل ${inventory.items.size}.",color=Color(0xFF9CA5B1),fontSize=10.sp)
+        }
+       }
+      }
+     }
      item{SectionTitle("ملفات نصية محتملة (${scan.candidateFiles.size})")}
      if(scan.candidateFiles.isEmpty()) item{Text("لم يتم العثور على ملفات نصية واضحة في المسارات المدعومة.",color=Color(0xFFB9C1CB))}
      items(scan.candidateFiles){path->Text("• $path",color=Color(0xFFD4D9DF),fontSize=12.sp)}
