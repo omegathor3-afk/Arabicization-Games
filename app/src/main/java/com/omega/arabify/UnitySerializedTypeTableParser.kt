@@ -39,14 +39,16 @@ internal object UnitySerializedTypeTableParser {
         header: UnitySerializedHeader,
         metadataPrefix: UnitySerializedMetadataPrefix,
         metadata: ByteArray,
-        isReferenceType: Boolean = false
+        isReferenceType: Boolean = false,
+        startOffset: Int = metadataPrefix.bytesConsumed,
+        typeCount: Int = metadataPrefix.typeCount
     ): UnitySerializedTypeTable? {
         if (header.formatVersion !in 9..100 ||
             metadataPrefix.formatVersion != header.formatVersion ||
             metadata.size.toLong() != header.metadataSize ||
             metadata.size > MAX_METADATA_BYTES ||
-            metadataPrefix.bytesConsumed !in 0..metadata.size ||
-            metadataPrefix.typeCount !in 0..MAX_TYPES
+            startOffset !in 0..metadata.size ||
+            typeCount !in 0..MAX_TYPES
         ) return null
 
         val order = when (header.endian) {
@@ -56,7 +58,7 @@ internal object UnitySerializedTypeTableParser {
         }
         return runCatching {
             val input = ByteBuffer.wrap(metadata).order(order)
-            input.position(metadataPrefix.bytesConsumed)
+            input.position(startOffset)
 
             fun readBoolean(): Boolean = when (input.get().toInt() and 0xff) {
                 0 -> false
@@ -119,9 +121,9 @@ internal object UnitySerializedTypeTableParser {
                 return handler
             }
 
-            val records = ArrayList<UnitySerializedTypeRecord>(metadataPrefix.typeCount)
+            val records = ArrayList<UnitySerializedTypeRecord>(typeCount)
             val typeTreeEnabled = metadataPrefix.typeTreeEnabled ?: true
-            repeat(metadataPrefix.typeCount) {
+            repeat(typeCount) {
                 require(input.remaining() >= 4)
                 val classId = input.int
                 val isStripped = if (header.formatVersion >= 16) readBoolean() else null
