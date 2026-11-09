@@ -52,7 +52,10 @@ class UnityFsBundleDecoderTest {
         payload: ByteArray,
         blockCodec: UnityCompressionCodec = UnityCompressionCodec.LZ4_BLOCK,
         infoCodec: UnityCompressionCodec = UnityCompressionCodec.LZ4_BLOCK,
-        infoAtEnd: Boolean = false
+        infoAtEnd: Boolean = false,
+        formatVersion: Int = 6,
+        engineVersion: String = "2021.3.0f1",
+        needsPadding: Boolean = false
     ): ByteArray {
         val compressedPayload = when (blockCodec) {
             UnityCompressionCodec.NONE -> payload
@@ -74,17 +77,17 @@ class UnityFsBundleDecoderTest {
             UnityCompressionCodec.NONE -> 0
             UnityCompressionCodec.LZ4_BLOCK -> 2
             UnityCompressionCodec.LZMA_ALONE -> 1
-        } or if (infoAtEnd) 0x80 else 0
+        } or if (infoAtEnd) 0x80 else 0 or if (needsPadding) 0x200 else 0
 
         fun header(declaredSize: Long): ByteArray {
             val bytes = ByteArrayOutputStream()
             DataOutputStream(bytes).use { data ->
                 data.write("UnityFS".toByteArray(Charsets.US_ASCII))
                 data.writeByte(0)
-                data.writeInt(6)
+                data.writeInt(formatVersion)
                 data.write("5.x".toByteArray(Charsets.US_ASCII))
                 data.writeByte(0)
-                data.write("2021.3".toByteArray(Charsets.US_ASCII))
+                data.write(engineVersion.toByteArray(Charsets.US_ASCII))
                 data.writeByte(0)
                 data.writeLong(declaredSize)
                 data.writeInt(compressedInfo.size)
@@ -95,14 +98,25 @@ class UnityFsBundleDecoderTest {
         }
 
         val headerSize = header(0L).size
-        val totalSize = headerSize.toLong() + compressedInfo.size + compressedPayload.size
+        fun align16(value: Int): Int = (value + 15) and -16
+        val alignedHeaderSize = if (formatVersion >= 7 ||
+            (engineVersion.startsWith("2019.4.") &&
+                (engineVersion.substringAfter("2019.4.").takeWhile { it.isDigit() }.toIntOrNull() ?: 0) >= 15)
+        ) align16(headerSize) else headerSize
+        val afterInfo = if (infoAtEnd) alignedHeaderSize else alignedHeaderSize + compressedInfo.size
+        val dataStart = if (needsPadding) align16(afterInfo) else afterInfo
+        val totalSize = dataStart.toLong() + compressedPayload.size +
+            if (infoAtEnd) compressedInfo.size else 0
         val output = ByteArrayOutputStream()
         output.write(header(totalSize))
+        if (alignedHeaderSize > headerSize) output.write(ByteArray(alignedHeaderSize - headerSize))
         if (infoAtEnd) {
+            if (dataStart > alignedHeaderSize) output.write(ByteArray(dataStart - alignedHeaderSize))
             output.write(compressedPayload)
             output.write(compressedInfo)
         } else {
             output.write(compressedInfo)
+            if (dataStart > afterInfo) output.write(ByteArray(dataStart - afterInfo))
             output.write(compressedPayload)
         }
         return output.toByteArray()
@@ -183,9 +197,12 @@ class UnityFsBundleDecoderTest {
         val payload = "flags".toByteArray()
         val bundle = makeBundle(payload, infoAtEnd = true)
         // The final four bytes in the header are at offset 39 for this fixture.
-        ByteBuffer.wrap(bundle).order(ByteOrder.BIG_ENDIAN).putInt(39, 0x00010282)
+        ByteBuffer.wrap(bundle).order(ByteOrder.BIG_ENDIAN).putInt(39, 0x000001c2)
         val result = decode(bundle).first
         assertNotNull(result)
-        assertEquals(0x00010282L, result!!.header.flags)
+        assertEquals(0x1c2L, result!!.header.flags)
+        val unknownFlagBundle = bundle.copyOf()
+        ByteBuffer.wrap(unknownFlagBundle).order(ByteOrder.BIG_ENDIAN).putInt(39, 0x000101c2)
+        assertNull(decode(unknownFlagBundle).first)
     }
 }
