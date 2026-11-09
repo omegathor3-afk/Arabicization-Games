@@ -64,6 +64,10 @@ private fun ArabifyApp(context: Context) {
  var generatedApk by remember { mutableStateOf<File?>(null) }
  var localizationError by remember { mutableStateOf<String?>(null) }
  var exportError by remember { mutableStateOf<String?>(null) }
+ var assetBusy by remember { mutableStateOf(false) }
+ var assetProgress by remember { mutableStateOf(0 to 0) }
+ var assetReport by remember { mutableStateOf<AssetLocalizationReport?>(null) }
+ var assetError by remember { mutableStateOf<String?>(null) }
  val offlineTranslator = remember(context) { OfflineArabicTranslator(context) }
  DisposableEffect(offlineTranslator) { onDispose { offlineTranslator.close() } }
  val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri:Uri? ->
@@ -191,6 +195,48 @@ private fun ArabifyApp(context: Context) {
          }
          localizationError?.let{Text(it,color=Color(0xFFFF9B91),fontSize=12.sp)}
          exportError?.let{Text(it,color=Color(0xFFFF9B91),fontSize=12.sp)}
+        }
+       }
+      }
+     }
+     if(scan.candidateFiles.isNotEmpty()) {
+      item {
+       Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF27302A)),shape=RoundedCornerShape(18.dp)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
+         Text("تعريب ملفات النصوص داخل اللعبة",color=Color(0xFFE7D5AF),fontWeight=FontWeight.Bold,fontSize=17.sp)
+         Text("يعالج هذا المسار ملفات JSON وTXT وProperties وStrings الموجودة داخل assets أو res/raw أو مجلدات localization/strings. يحافظ على مفاتيح JSON وخصائص الإعدادات والمتغيرات المعروفة.",color=Color(0xFFD0D7D2),fontSize=12.sp)
+         Text("لن يترجم ملفات ثنائية أو XML أو ملفات Unity/Unreal المشفرة. لا تعتبر النتيجة تعريبًا كاملًا للعبة.",color=Color(0xFFE5C58C),fontSize=12.sp)
+         Button(onClick={
+          val uri=selectedUri
+          if(uri!=null) {
+           assetBusy=true;assetError=null;assetReport=null;assetProgress=0 to 0
+           scope.launch {
+            try {
+             val report=withContext(Dispatchers.IO) {
+              val input=copyUriToCache(context,uri)
+              val stamp=System.currentTimeMillis()
+              AndroidAssetLocalizer.localize(context,input,File(context.cacheDir,"arabify-assets-$stamp-unsigned.apk"),File(context.cacheDir,"arabify-assets-$stamp-signed.apk"),offlineTranslator) { done,total ->
+               scope.launch { assetProgress=done to total }
+              }
+             }
+             assetReport=report
+             generatedApk=report.outputApk
+            } catch(e:Exception) { assetError=e.message ?: "تعذر تعريب ملفات النصوص." }
+            finally { assetBusy=false }
+           }
+          }
+         },enabled=modelReady&&!assetBusy&&selectedUri!=null,modifier=Modifier.fillMaxWidth()) {
+          Text(if(assetBusy) "جارٍ تعريب ملفات النصوص..." else "تعريب ملفات النصوص وإنشاء APK")
+         }
+         if(assetBusy) {
+          CircularProgressIndicator()
+          Text("تمت معالجة ${assetProgress.first} من ${assetProgress.second} ملف",color=Color.White,fontSize=12.sp)
+         }
+         assetReport?.let { report ->
+          Text("الملفات: ${report.filesTranslated} / ${report.filesDiscovered} • النصوص المترجمة: ${report.stringsTranslated} • المتروكة: ${report.stringsSkipped}",color=Color(0xFFB8E4C8),fontSize=13.sp)
+          Button(onClick={saveLauncher.launch("arabify_assets_arabic.apk")},modifier=Modifier.fillMaxWidth()){Text("حفظ APK بعد تعريب الملفات")}
+         }
+         assetError?.let{Text(it,color=Color(0xFFFF9B91),fontSize=12.sp)}
         }
        }
       }
