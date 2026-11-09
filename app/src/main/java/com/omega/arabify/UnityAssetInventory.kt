@@ -486,3 +486,68 @@ internal object UnityBlockInfoParser {
         }.getOrNull()
     }
 }
+
+
+internal enum class UnityCompressionCodec {
+    LZ4_BLOCK,
+    LZMA_ALONE
+}
+
+/**
+ * Bounded UnityFS block decoder.
+ *
+ * LZ4 uses the raw block format used by UnityFS (not an LZ4 frame).
+ * LZMA expects an LZMA-alone stream. Output is allocated only after the caller's
+ * hard cap and the expected output size have been validated. This class decodes
+ * one block at a time; callers must not accumulate decoded blocks without a
+ * separate aggregate budget.
+ */
+internal object UnityFsBlockDecompressor {
+    private const val DEFAULT_MAX_COMPRESSED_BYTES = 64L * 1024L * 1024L
+    private const val DEFAULT_MAX_OUTPUT_BYTES = 64L * 1024L * 1024L
+    private const val DEFAULT_MAX_LZMA_MEMORY_BYTES = 64L * 1024L * 1024L
+
+    fun decompress(
+        codec: UnityCompressionCodec,
+        compressed: ByteArray,
+        expectedOutputBytes: Long,
+        maxOutputBytes: Long = DEFAULT_MAX_OUTPUT_BYTES,
+        maxCompressedBytes: Long = DEFAULT_MAX_COMPRESSED_BYTES,
+        maxLzmaMemoryBytes: Long = DEFAULT_MAX_LZMA_MEMORY_BYTES
+    ): ByteArray {
+        require(compressed.isNotEmpty()) { "Compressed UnityFS block is empty" }
+        require(maxOutputBytes in 1..Int.MAX_VALUE.toLong()) { "Invalid output budget" }
+        require(maxCompressedBytes > 0L && maxLzmaMemoryBytes > 0L) { "Invalid decoder budget" }
+        require(compressed.size.toLong() <= maxCompressedBytes) { "Compressed block exceeds budget" }
+        require(expectedOutputBytes in 1..maxOutputBytes) { "Uncompressed block exceeds budget" }
+        val expected = expectedOutputBytes.toInt()
+
+        return when (codec) {
+            UnityCompressionCodec.LZ4_BLOCK -> {
+                val output = ByteArray(expected)
+                val written = net.jpountz.lz4.LZ4Factory.fastestInstance()
+                    .safeDecompressor()
+                    .decompress(compressed, 0, compressed.size, output, 0, output.size)
+                require(written == expected) { "LZ4 output size does not match UnityFS block metadata" }
+                output
+            }
+            UnityCompressionCodec.LZMA_ALONE -> {
+                val memoryLimitKiB = (maxLzmaMemoryBytes / 1024L)
+                    .coerceAtLeast(1L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                val output = ByteArray(expected)
+                val input = java.io.ByteArrayInputStream(compressed)
+                org.tukaani.xz.LZMAInputStream(input, memoryLimitKiB).use { decoder ->
+                    var offset = 0
+                    while (offset < expected) {
+                        val count = decoder.read(output, offset, expected - offset)
+                        require(count >= 0) { "LZMA stream ended before expected block size" }
+                        require(count > 0) { "LZMA decoder made no progress" }
+                        offset += count
+                    }
+                    require(decoder.read() == -1) { "LZMA stream expands beyond declared block size" }
+                }
+                output
+            }
+        }
+    }
+}
