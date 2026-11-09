@@ -63,7 +63,7 @@ internal object UnityMonoLocalizer {
             UnityRuntimeKind.UNKNOWN ->
                 error("لم نعثر على Assembly-CSharp.dll داخل assets/bin/Data/Managed؛ لا يمكن تأكيد أن هذه نسخة Unity Mono.")
         }
-        return AndroidAssetLocalizer.localize(
+        val report = AndroidAssetLocalizer.localize(
             context = context,
             inputApk = inputApk,
             unsignedApk = unsignedApk,
@@ -72,6 +72,8 @@ internal object UnityMonoLocalizer {
             onProgress = onProgress,
             allowedPathPrefixes = listOf("assets/bin/Data/StreamingAssets/")
         )
+        UnityAssetIntegrityVerifier.verifyUnchanged(inputApk, report.outputApk)
+        return report
     }
 
     internal data class FixtureReport(val stringsTranslated: Int)
