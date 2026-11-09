@@ -134,10 +134,36 @@ internal object AndroidAssetLocalizer {
   size:Long,
   allowedPathPrefixes:List<String> = allowedRoots
  ):Boolean {
-  val extension=path.substringAfterLast('.', "").lowercase()
+  val safePath = normalizeArchivePath(path) ?: return false
+  val safeRoots = allowedPathPrefixes.mapNotNull(::normalizeAllowedRoot)
+  val extension=safePath.substringAfterLast('.', "").lowercase()
   return supported.contains(extension) &&
-   allowedPathPrefixes.any { path.startsWith(it) } &&
+   safeRoots.any { safePath.startsWith(it) } &&
    size in 1..MAX_FILE_BYTES
+ }
+
+ /**
+  * ZIP entry names must remain relative and may not contain traversal or
+  * ambiguous empty path segments. Backslashes are normalized before checking
+  * because archives from third-party tooling are not always consistent.
+  */
+ private fun normalizeArchivePath(path:String):String? {
+  if(path.isBlank() || path.startsWith('/') || path.startsWith('\\')) return null
+  if(path.contains('\u0000')) return null
+  val normalized=path.replace('\\','/')
+  val segments=normalized.split('/')
+  if(segments.any { it.isEmpty() || it=="." || it==".." }) return null
+  if(segments.first().contains(':')) return null
+  return segments.joinToString("/")
+ }
+
+ private fun normalizeAllowedRoot(root:String):String? {
+  if(root.isBlank() || root.startsWith('/') || root.startsWith('\\')) return null
+  val normalized=root.replace('\\','/').trimEnd('/')
+  val segments=normalized.split('/')
+  if(segments.any { it.isEmpty() || it=="." || it==".." }) return null
+  if(segments.first().contains(':')) return null
+  return "$normalized/"
  }
 
  suspend fun localize(
