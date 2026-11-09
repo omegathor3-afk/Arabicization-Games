@@ -495,9 +495,9 @@ internal enum class UnityCompressionCodec {
 }
 
 /** UnityFS StorageBlock compression type is stored in the low six flag bits. */
-internal fun unityCompressionCodecFromFlags(flags: Int): UnityCompressionCodec? {
-    if (flags !in 0..0xffff) return null
-    return when (flags and 0x3f) {
+internal fun unityCompressionCodecFromFlags(flags: Long): UnityCompressionCodec? {
+    if (flags !in 0L..0xffffffffL) return null
+    return when (flags and 0x3fL) {
         0 -> UnityCompressionCodec.NONE
         1 -> UnityCompressionCodec.LZMA_ALONE
         2, 3 -> UnityCompressionCodec.LZ4_BLOCK // LZ4 and LZ4HC share the block decoder.
@@ -529,7 +529,7 @@ internal object UnityFsBlockDecompressor {
     ): ByteArray {
         require(compressed.isNotEmpty()) { "Compressed UnityFS block is empty" }
         require(maxOutputBytes in 1..Int.MAX_VALUE.toLong()) { "Invalid output budget" }
-        require(maxCompressedBytes > 0L && maxLzmaMemoryBytes > 0L) { "Invalid decoder budget" }
+        require(maxCompressedBytes > 0L && maxLzmaMemoryBytes >= 1024L) { "Invalid decoder budget; LZMA memory budget must be at least 1 KiB" }
         require(compressed.size.toLong() <= maxCompressedBytes) { "Compressed block exceeds budget" }
         require(expectedOutputBytes in 1..maxOutputBytes) { "Uncompressed block exceeds budget" }
         val expected = expectedOutputBytes.toInt()
@@ -549,7 +549,7 @@ internal object UnityFsBlockDecompressor {
             }
             UnityCompressionCodec.LZMA_ALONE -> {
                 val memoryLimitKiB = (maxLzmaMemoryBytes / 1024L)
-                    .coerceAtLeast(1L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                    .coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
                 val output = ByteArray(expected)
                 val input = java.io.ByteArrayInputStream(compressed)
                 org.tukaani.xz.LZMAInputStream(input, memoryLimitKiB).use { decoder ->
