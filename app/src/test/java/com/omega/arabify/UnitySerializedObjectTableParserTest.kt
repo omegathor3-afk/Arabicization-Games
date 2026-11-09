@@ -142,10 +142,13 @@ class UnitySerializedObjectTableParserTest {
     @Test fun rejectsInvalidTypeIndicesAndExcessiveObjectCounts() {
         val valid = fixture()
         val badType = valid.metadata.copyOf()
-        // The first object type ID follows its aligned PathID, byte start and size.
-        val firstObjectPath = 48 + valid.typeTable.bytesConsumed + 4 + 1
+        // The first object type ID follows the count, absolute-position padding,
+        // PathID, data offset and size within the metadata byte array.
+        val firstRecordStart = valid.typeTable.bytesConsumed + 4
+        val padding = ((4 - ((valid.header.headerSize + firstRecordStart) % 4)) % 4)
+        val firstTypeIdOffset = firstRecordStart + padding + 8 + 8 + 4
         ByteBuffer.wrap(badType).order(ByteOrder.LITTLE_ENDIAN)
-            .putInt(firstObjectPath + 8 + 8 + 4, 99)
+            .putInt(firstTypeIdOffset, 99)
         assertNull(UnitySerializedObjectTableParser.parse(
             valid.header, valid.typeTable, badType
         ))
