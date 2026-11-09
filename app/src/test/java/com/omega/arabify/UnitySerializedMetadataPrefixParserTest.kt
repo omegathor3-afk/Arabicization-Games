@@ -26,9 +26,15 @@ class UnitySerializedMetadataPrefixParserTest {
         if (version >= 13) output.put(typeTreeEnabled.toByte())
         output.putInt(typeCount)
         if (includeTypeRecord && typeCount > 0) {
+            val minimumRecordBytes = when {
+                version >= 17 -> 23
+                version >= 16 -> 21
+                version >= 13 -> 20
+                else -> 4
+            }
             repeat(typeCount) {
                 output.putInt(1)
-                output.put(ByteArray(16))
+                output.put(ByteArray(minimumRecordBytes - 4))
             }
         }
         return output.array().copyOf(output.position())
