@@ -209,4 +209,54 @@ class UnityAssetInventoryTest {
             directory.deleteRecursively()
         }
     }
+
+    @Test fun parsesDecompressedUnityBlockInfoWithBoundedMetadata() {
+        val output = java.io.ByteArrayOutputStream()
+        java.io.DataOutputStream(output).use { data ->
+            data.write(ByteArray(16) { (it + 1).toByte() })
+            data.writeInt(1)
+            data.writeInt(100)
+            data.writeInt(60)
+            data.writeShort(2)
+            data.writeInt(1)
+            data.writeLong(0L)
+            data.writeLong(100L)
+            data.writeInt(0)
+            data.write("CAB-123/resource.assets".toByteArray(Charsets.UTF_8))
+            data.writeByte(0)
+        }
+        val parsed = UnityBlockInfoParser.parse(output.toByteArray(), 100L)
+        assertNotNull(parsed)
+        assertEquals(1, parsed!!.blocks.size)
+        assertEquals(60L, parsed.blocks.single().compressedSize)
+        assertEquals(100L, parsed.totalUncompressedBytes)
+        assertEquals("CAB-123/resource.assets", parsed.nodes.single().path)
+        assertEquals(100L, parsed.nodes.single().size)
+    }
+
+    @Test fun rejectsMalformedUnityBlockInfoCountsRangesPathsAndTrailingBytes() {
+        val output = java.io.ByteArrayOutputStream()
+        java.io.DataOutputStream(output).use { data ->
+            data.write(ByteArray(16))
+            data.writeInt(1)
+            data.writeInt(10)
+            data.writeInt(5)
+            data.writeShort(0)
+            data.writeInt(1)
+            data.writeLong(9L)
+            data.writeLong(2L)
+            data.writeInt(0)
+            data.write("bad.bin".toByteArray())
+            data.writeByte(0)
+        }
+        val malformed = output.toByteArray()
+        assertNull(UnityBlockInfoParser.parse(malformed))
+        assertNull(UnityBlockInfoParser.parse(malformed + byteArrayOf(1)))
+        assertNull(UnityBlockInfoParser.parse(ByteArray(20)))
+        val badCount = malformed.copyOf().also {
+            ByteBuffer.wrap(it).order(ByteOrder.BIG_ENDIAN).putInt(16, -1)
+        }
+        assertNull(UnityBlockInfoParser.parse(badCount))
+    }
+
 }
