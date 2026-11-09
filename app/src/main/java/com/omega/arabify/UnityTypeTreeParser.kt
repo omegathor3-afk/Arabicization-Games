@@ -84,11 +84,11 @@ internal object UnityTypeTreeParser {
 
             fun resolve(offset: Long): String? {
                 if ((offset and COMMON_STRING_FLAG) != 0L) return null
-                if (offset >= strings.size.toLong()) return null
+                require(offset < strings.size.toLong()) { "TypeTree local string offset is out of range" }
                 val start = offset.toInt()
                 var end = start
                 while (end < strings.size && strings[end].toInt() != 0) end++
-                if (end == strings.size) return null
+                require(end < strings.size) { "TypeTree local string is not NUL-terminated" }
                 val decoder = Charsets.UTF_8.newDecoder()
                     .onMalformedInput(CodingErrorAction.REPORT)
                     .onUnmappableCharacter(CodingErrorAction.REPORT)
