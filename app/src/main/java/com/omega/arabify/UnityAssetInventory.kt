@@ -1,6 +1,7 @@
 package com.omega.arabify
 
 import java.io.File
+import java.security.MessageDigest
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.zip.ZipFile
@@ -152,7 +153,7 @@ internal object UnityAssetInventoryScanner {
                     Regex("(^|/)level[0-9]+$").containsMatchIn(lower)
                 val isExternal = extension in setOf("ress", "resource")
                 val isManaged = lower.endsWith(".dll") &&
-                    lower.contains("/assets/bin/data/managed/")
+                    lower.startsWith("assets/bin/data/managed/")
                 if (!inUnityData && !isExternal && !isSerializedName) continue
 
                 val prefix = try {
@@ -233,5 +234,65 @@ internal object UnityAssetInventoryScanner {
             items = items.take(100),
             notes = notes.toList()
         )
+    }
+}
+
+
+internal data class UnityAssetIntegrityReport(
+    val filesVerified: Int,
+    val totalBytesVerified: Long
+)
+
+/**
+ * Verifies that Unity binary assets and managed assemblies remain byte-identical
+ * after APK repackaging. The original APK is the source backup; no resource payload
+ * is modified by the current Mono pipeline.
+ */
+internal object UnityAssetIntegrityVerifier {
+    fun verifyUnchanged(inputApk: File, outputApk: File): UnityAssetIntegrityReport {
+        var checked = 0
+        var bytes = 0L
+        ZipFile(inputApk).use { source ->
+            ZipFile(outputApk).use { output ->
+                val entries = source.entries()
+                while (entries.hasMoreElements()) {
+                    val entry = entries.nextElement()
+                    if (entry.isDirectory || !isProtected(entry.name)) continue
+                    val outputEntry = output.getEntry(entry.name)
+                        ?: error("Unity resource disappeared during APK rebuild: ${entry.name}")
+                    val sourceDigest = source.getInputStream(entry).use(::sha256)
+                    val outputDigest = output.getInputStream(outputEntry).use(::sha256)
+                    require(sourceDigest.contentEquals(outputDigest)) {
+                        "Unity resource bytes changed during APK rebuild: ${entry.name}"
+                    }
+                    checked++
+                    bytes += entry.size.coerceAtLeast(0)
+                }
+            }
+        }
+        return UnityAssetIntegrityReport(checked, bytes)
+    }
+
+    private fun isProtected(path: String): Boolean {
+        val normalized = path.replace('\\\\', '/').lowercase()
+        val inUnityData = normalized.startsWith("assets/bin/data/")
+        val extension = normalized.substringAfterLast('.', "")
+        return (inUnityData && (
+            extension in setOf("assets", "sharedassets", "ress", "resource", "bundle", "unity3d") ||
+                normalized.startsWith("assets/bin/data/managed/") && extension == "dll" ||
+                normalized.endsWith("/globalgamemanagers") ||
+                Regex("(^|/)level[0-9]+$").containsMatchIn(normalized)
+            )) || extension in setOf("ress", "resource")
+    }
+
+    private fun sha256(input: java.io.InputStream): ByteArray {
+        val digest = MessageDigest.getInstance("SHA-256")
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            digest.update(buffer, 0, count)
+        }
+        return digest.digest()
     }
 }
