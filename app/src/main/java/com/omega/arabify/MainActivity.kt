@@ -242,13 +242,27 @@ private fun ArabifyApp(context: Context) {
               val input=copyUriToCache(context,uri)
               val stamp=System.currentTimeMillis()
               if (result?.engine == GameEngine.UNITY) {
-               UnityMonoLocalizer.localize(context,input,File(context.cacheDir,"arabify-assets-$stamp-unsigned.apk"),File(context.cacheDir,"arabify-assets-$stamp-signed.apk"),offlineTranslator) { done,total ->
-                scope.launch { assetProgress=done to total }
-               }
+               UnityMonoLocalizer.localize(
+                context = context,
+                inputApk = input,
+                unsignedApk = File(context.cacheDir,"arabify-assets-$stamp-unsigned.apk"),
+                signedApk = File(context.cacheDir,"arabify-assets-$stamp-signed.apk"),
+                translator = offlineTranslator,
+                onProgress = { done: Int, total: Int ->
+                 scope.launch { assetProgress=done to total }
+                }
+               )
               } else {
-               AndroidAssetLocalizer.localize(context,input,File(context.cacheDir,"arabify-assets-$stamp-unsigned.apk"),File(context.cacheDir,"arabify-assets-$stamp-signed.apk"),offlineTranslator,onProgress = { done,total ->
-               scope.launch { assetProgress=done to total }
-              })
+               AndroidAssetLocalizer.localize(
+                context = context,
+                inputApk = input,
+                unsignedApk = File(context.cacheDir,"arabify-assets-$stamp-unsigned.apk"),
+                signedApk = File(context.cacheDir,"arabify-assets-$stamp-signed.apk"),
+                translator = offlineTranslator,
+                onProgress = { done: Int, total: Int ->
+                 scope.launch { assetProgress=done to total }
+                }
+               )
               }
              }
              assetReport=report
