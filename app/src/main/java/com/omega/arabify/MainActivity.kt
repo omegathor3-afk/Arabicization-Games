@@ -206,7 +206,7 @@ private fun ArabifyApp(context: Context) {
     }
     item {
      Spacer(Modifier.height(8.dp))
-     Text("الإصدار التجريبي 0.1.0 — لا يدّعي التعريب أو إنشاء APK عربي بعد.",color=Color(0xFF78818D),fontSize=11.sp)
+     Text("الإصدار 0.2.0 — تعريب تجريبي لموارد string في تطبيقات Android الأصلية.",color=Color(0xFF78818D),fontSize=11.sp)
     }
    }
   }
