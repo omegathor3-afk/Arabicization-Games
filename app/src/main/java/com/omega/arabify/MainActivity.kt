@@ -234,8 +234,14 @@ private fun ArabifyApp(context: Context) {
              val report=withContext(Dispatchers.IO) {
               val input=copyUriToCache(context,uri)
               val stamp=System.currentTimeMillis()
-              AndroidAssetLocalizer.localize(context,input,File(context.cacheDir,"arabify-assets-$stamp-unsigned.apk"),File(context.cacheDir,"arabify-assets-$stamp-signed.apk"),offlineTranslator) { done,total ->
+              if (result?.engine == GameEngine.UNITY) {
+               UnityMonoLocalizer.localize(context,input,File(context.cacheDir,"arabify-assets-$stamp-unsigned.apk"),File(context.cacheDir,"arabify-assets-$stamp-signed.apk"),offlineTranslator) { done,total ->
+                scope.launch { assetProgress=done to total }
+               }
+              } else {
+               AndroidAssetLocalizer.localize(context,input,File(context.cacheDir,"arabify-assets-$stamp-unsigned.apk"),File(context.cacheDir,"arabify-assets-$stamp-signed.apk"),offlineTranslator) { done,total ->
                scope.launch { assetProgress=done to total }
+              }
               }
              }
              assetReport=report
