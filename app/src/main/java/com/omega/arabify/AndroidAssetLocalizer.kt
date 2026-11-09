@@ -1,6 +1,7 @@
 package com.omega.arabify
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -133,10 +134,12 @@ internal object AndroidAssetLocalizer {
   translator:OfflineArabicTranslator,onProgress:(Int,Int)->Unit={_,_->}
  ):AssetLocalizationReport {
   require(inputApk.isFile){"ملف APK الأصلي غير موجود."}
-  val packageName=try{
+  val archiveInfo=try{
    @Suppress("DEPRECATION")
-   context.packageManager.getPackageArchiveInfo(inputApk.absolutePath,0)?.packageName
+   context.packageManager.getPackageArchiveInfo(inputApk.absolutePath,0)
   }catch(_:Exception){null}
+  val packageName=archiveInfo?.packageName
+  val extractNativeLibs=archiveInfo?.applicationInfo?.flags?.and(ApplicationInfo.FLAG_EXTRACT_NATIVE_LIBS)!=0
   var discovered=0
   var translatedFiles=0
   var translatedStrings=0
@@ -153,6 +156,9 @@ internal object AndroidAssetLocalizer {
     if(!entry.isDirectory&&supported.contains(ext)&&allowedRoots.any{entry.name.startsWith(it)}&&entry.size in 1..MAX_FILE_BYTES){
      candidates+=entry
     }
+   }
+   if(hasNativeLibraries&&!extractNativeLibs){
+    error("تحتوي اللعبة على مكتبات native غير مستخرجة. إعادة بناء APK تحتاج محاذاة ZIP خاصة قبل التثبيت؛ أوقفنا العملية لحماية الملف بدل إنشاء APK قد يفشل تثبيته.")
    }
    discovered=candidates.size
    candidates.forEachIndexed { index,entry ->
