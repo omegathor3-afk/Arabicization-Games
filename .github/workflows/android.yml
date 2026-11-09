@@ -25,6 +25,14 @@ jobs:
       gradle-version: "8.13"
    - name: Unit tests
      run: gradle testDebugUnitTest
+   - name: Upload unit test reports
+     if: always()
+     uses: actions/upload-artifact@v4
+     with:
+      name: arabify-unit-test-results
+      path: app/build/test-results/testDebugUnitTest/
+      if-no-files-found: ignore
+      retention-days: 7
    - name: Build debug APK
      run: gradle assembleDebug
    - name: Verify APK structure and signature
