@@ -8,7 +8,7 @@ package com.omega.arabify
 internal object UnityBundleNodeSafety {
     fun safeRelativePath(rawPath: String): String? {
         if (rawPath.isBlank() || rawPath.length > 4096 || '\u0000' in rawPath) return null
-        val normalized = rawPath.replace('\\\\', '/')
+        val normalized = rawPath.replace('\\', '/')
         if (normalized.startsWith('/') || normalized.startsWith("//")) return null
         if (Regex("^[A-Za-z]:").containsMatchIn(normalized)) return null
         if (normalized.startsWith("\\\\") || normalized.contains("://")) return null
@@ -24,10 +24,6 @@ internal object UnityBundleNodeSafety {
         return segments.joinToString("/")
     }
 
-    /**
-     * Rejects duplicate normalized paths and overlapping node payload ranges.
-     * Zero-length ranges are allowed and do not overlap adjacent content.
-     */
     fun validateNodeLayout(nodes: List<UnityBundleNode>, totalUncompressedBytes: Long): Boolean {
         if (totalUncompressedBytes < 0L) return false
         val seenPaths = HashSet<String>()
