@@ -450,7 +450,7 @@ internal object UnityBlockInfoParser {
                 val offset = input.long
                 val size = input.long
                 val flags = readU32()
-                require(offset >= 0L && size > 0L)
+                require(offset >= 0L && size >= 0L)
                 require(offset <= totalUncompressed && size <= totalUncompressed - offset)
 
                 val pathStart = input.position()
@@ -476,6 +476,7 @@ internal object UnityBlockInfoParser {
                 nodes += UnityBundleNode(offset, size, flags, path)
             }
             require(!input.hasRemaining())
+            require(UnityBundleNodeSafety.validateNodeLayout(nodes, totalUncompressed))
 
             UnityBlockInfo(
                 hash.joinToString("") { "%02x".format(it.toInt() and 0xff) },
