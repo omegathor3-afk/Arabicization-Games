@@ -150,8 +150,10 @@ internal object AndroidAssetLocalizer {
   ZipFile(inputApk).use { zip ->
    val entries=zip.entries()
    val candidates=mutableListOf<ZipEntry>()
+   var hasNativeLibraries=false
    while(entries.hasMoreElements()){
     val entry=entries.nextElement()
+    if(entry.name.startsWith("lib/")&&entry.name.endsWith(".so",true))hasNativeLibraries=true
     val ext=entry.name.substringAfterLast('.',"").lowercase()
     if(!entry.isDirectory&&supported.contains(ext)&&allowedRoots.any{entry.name.startsWith(it)}&&entry.size in 1..MAX_FILE_BYTES){
      candidates+=entry
