@@ -9,7 +9,7 @@ internal enum class UnityRuntimeKind { MONO, IL2CPP, UNKNOWN }
 
 internal object UnityMonoPackageDetector {
     fun detect(paths: Collection<String>): UnityRuntimeKind {
-        val normalized = paths.map { it.replace('\\', '/').lowercase() }
+        val normalized = paths.map { "/" + it.replace('\\', '/').trimStart('/').lowercase() }
         val hasIl2Cpp = normalized.any {
             it.endsWith("/libil2cpp.so") ||
                 it.endsWith("/global-metadata.dat") ||
