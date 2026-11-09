@@ -48,35 +48,38 @@ internal object AssetTextTransformer {
     Result(output,translated,skipped)
    }catch(_:Exception){Result(source,0,1)}
    "properties" -> {
-    val output=source.lineSequence().map { line ->
+    val output=mutableListOf<String>()
+    for(line in source.split("\n")) {
      val trimmed=line.trimStart()
-     if(trimmed.isEmpty()||trimmed.startsWith("#")||trimmed.startsWith("!")) line
+     if(trimmed.isEmpty()||trimmed.startsWith("#")||trimmed.startsWith("!")) output+=line
      else {
       val index=line.indexOfFirst{it=='='||it==':'}
-      if(index<0){skipped++;line}
+      if(index<0){skipped++;output+=line}
       else {
        val prefix=line.substring(0,index+1)
        val value=line.substring(index+1)
-       prefix+tx(value)
+       output+=prefix+tx(value)
       }
      }
-    }.joinToString("\n")
-    Result(output,translated,skipped)
+    }
+    Result(output.joinToString("\n"),translated,skipped)
    }
    "strings" -> {
     val pattern=Regex("^(\\s*\"(?:\\\\.|[^\"])*\"\\s*=\\s*\")(.*?)(\"\\s*;\\s*)$")
-    val output=source.lineSequence().map { line ->
+    val output=mutableListOf<String>()
+    for(line in source.split("\n")) {
      val match=pattern.matchEntire(line)
-     if(match==null){if(line.trim().isNotEmpty()&&!line.trim().startsWith("//"))skipped++;line}
-     else match.groupValues[1]+tx(match.groupValues[2])+match.groupValues[3]
-    }.joinToString("\n")
-    Result(output,translated,skipped)
+     if(match==null){if(line.trim().isNotEmpty()&&!line.trim().startsWith("//"))skipped++;output+=line}
+     else output+=match.groupValues[1]+tx(match.groupValues[2])+match.groupValues[3]
+    }
+    Result(output.joinToString("\n"),translated,skipped)
    }
    "txt" -> {
-    val output=source.lineSequence().map { line ->
-     if(line.isBlank()||line.trimStart().startsWith("#"))line else tx(line)
-    }.joinToString("\n")
-    Result(output,translated,skipped)
+    val output=mutableListOf<String>()
+    for(line in source.split("\n")) {
+     output+=if(line.isBlank()||line.trimStart().startsWith("#"))line else tx(line)
+    }
+    Result(output.joinToString("\n"),translated,skipped)
    }
    else -> Result(source,0,1)
   }
