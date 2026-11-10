@@ -56,6 +56,7 @@ class RealGameLocalizationInstrumentedTest {
             assertTrue("The translated APK was not created", output.isFile && output.length() > 0L)
 
             val module = ApkModule.loadApkFile(output)
+            var newGameArabic: String? = null
             val arabicResourceCount = try {
                 val table = module.getTableBlock() ?: error("Translated APK has no resources.arsc")
                 val packageBlock = table.firstOrNull { it.getName() == report.packageName }
@@ -63,7 +64,7 @@ class RealGameLocalizationInstrumentedTest {
                 val stringType = packageBlock.getSpecTypePair("string")
                     ?: error("Translated APK has no string resources")
                 val arabicConfig = ResConfig.parse("-ar")
-                val newGameArabic = packageBlock.getEntry(arabicConfig, "string", "new_game")?.getValueAsString()
+                newGameArabic = packageBlock.getEntry(arabicConfig, "string", "new_game")?.getValueAsString()
                 assertTrue(
                     "The known 'new_game' string was not translated into Arabic: $newGameArabic",
                     !newGameArabic.isNullOrBlank() && newGameArabic.any { it.code in 0x0600..0x06FF }
