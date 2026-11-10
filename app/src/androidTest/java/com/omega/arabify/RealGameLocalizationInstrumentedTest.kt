@@ -3,6 +3,9 @@ package com.omega.arabify
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import android.util.Log
 import android.content.ContentValues
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import androidx.test.platform.app.InstrumentationRegistry
 import com.android.apksig.ApkVerifier
@@ -21,6 +24,18 @@ import java.io.File
  */
 @RunWith(AndroidJUnit4::class)
 class RealGameLocalizationInstrumentedTest {
+    private fun runShell(instrumentation: android.app.Instrumentation, command: String) {
+        val descriptor = instrumentation.uiAutomation.executeShellCommand(command)
+        ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { it.readBytes() }
+    }
+
+    private fun hasValidatedInternet(context: android.content.Context): Boolean {
+        val connectivity = context.getSystemService(ConnectivityManager::class.java)
+        val network = connectivity.activeNetwork ?: return false
+        val capabilities = connectivity.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }
+
     @Test
     fun localizesInstalledMinesweeperIntoArabicResourcesAndSignsOutput() {
         runBlocking {
@@ -43,14 +58,28 @@ class RealGameLocalizationInstrumentedTest {
             Log.i("RealGameLocalization", "Downloading English-Arabic ML Kit model")
             val report = withTimeout(12 * 60 * 1000L) {
                 translator.prepareForOfflineUse(requireWifi = false)
-                Log.i("RealGameLocalization", "Model ready; translating installed Minesweeper APK")
-                AndroidResourceLocalizer.localizeEnglishStrings(
-                    inputApk = installedGameApk,
-                    outputApk = output,
-                    unsignedApk = unsigned,
-                    translator = translator,
-                    context = context
-                )
+                Log.i("RealGameLocalization", "Model ready; disabling network before translation")
+                try {
+                    runShell(instrumentation, "svc wifi disable")
+                    runShell(instrumentation, "svc data disable")
+                    Thread.sleep(2000)
+                    assertTrue(
+                        "Validated internet is still available; offline translation was not isolated",
+                        !hasValidatedInternet(context)
+                    )
+                    Log.i("RealGameLocalization", "Network is offline; translating installed Minesweeper APK")
+                    AndroidResourceLocalizer.localizeEnglishStrings(
+                        inputApk = installedGameApk,
+                        outputApk = output,
+                        unsignedApk = unsigned,
+                        translator = translator,
+                        context = context
+                    )
+                } finally {
+                    // Restore emulator connectivity even when localization or an assertion fails.
+                    runShell(instrumentation, "svc data enable")
+                    runShell(instrumentation, "svc wifi enable")
+                }
             }
             Log.i("RealGameLocalization", "Localized ${report.translatedStrings}/${report.discoveredStrings} strings")
 
