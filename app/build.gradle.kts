@@ -11,6 +11,7 @@ android {
   minSdk = 31
   targetSdk = 35
   ndk { abiFilters += listOf("arm64-v8a") }
+  testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   versionCode = 2
   versionName = "0.2.0"
  }
@@ -39,4 +40,6 @@ dependencies {
  debugImplementation("androidx.compose.ui:ui-tooling")
  testImplementation("junit:junit:4.13.2")
  testImplementation("org.json:json:20250517")
+ androidTestImplementation("androidx.test:runner:1.6.2")
+ androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }
