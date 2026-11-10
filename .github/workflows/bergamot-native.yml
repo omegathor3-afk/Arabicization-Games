@@ -10,6 +10,7 @@ on:
       - "app/build.gradle.kts"
       - "app/src/main/AndroidManifest.xml"
       - ".github/workflows/bergamot-native.yml"
+      - ".github/scripts/run-offline-bergamot-instrumentation.sh"
   workflow_dispatch:
 
 concurrency:
