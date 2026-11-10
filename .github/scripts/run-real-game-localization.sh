@@ -3,7 +3,7 @@ set -uo pipefail
 cd "$GITHUB_WORKSPACE"
 
 mkdir -p build/test-game/localized
-adb install build/test-game/minesweeper.apk
+adb install build/test-game/minesweeper.apk || exit $?
 
 test_status=0
 gradle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.omega.arabify.RealGameLocalizationInstrumentedTest --stacktrace || test_status=$?
@@ -26,6 +26,18 @@ if [[ -s "$GENERATED_APK" ]]; then
     adb shell pidof com.joeld.minesweeper > build/test-game/localized/game-process.txt || launch_status=$?
     adb exec-out screencap -p > build/test-game/localized/minesweeper-arabic-screen.png || launch_status=$?
     adb logcat -d -v time > build/test-game/localized/game-launch-logcat.txt || true
+    maestro_status=0
+    if command -v maestro >/dev/null 2>&1; then
+      mkdir -p build/maestro
+      maestro --version | tee build/maestro/version.txt
+      maestro test --format junit --output build/maestro/report.xml --test-output-dir build/maestro/results .maestro/flows || maestro_status=$?
+    else
+      echo "Maestro CLI is not available on PATH." >&2
+      maestro_status=127
+    fi
+    if [[ "$test_status" -eq 0 && "$maestro_status" -ne 0 ]]; then
+      test_status="$maestro_status"
+    fi
   fi
   if [[ "$test_status" -eq 0 && "$launch_status" -ne 0 ]]; then
     test_status="$launch_status"

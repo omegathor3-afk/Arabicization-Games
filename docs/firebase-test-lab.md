@@ -16,7 +16,7 @@ The workflow:
 
 ## One-time Google Cloud setup
 
-A Firebase project and Google Cloud project must already exist and be linked. Enable the Android Device Streaming / Firebase Test Lab API used by your project; the workflow checks for the Pixel 5 API 31 target before running.
+A Firebase project and Google Cloud project must already exist and be linked. Enable `testing.googleapis.com` and `iamcredentials.googleapis.com`; the workflow verifies that the Test Lab API is enabled and lists the available virtual-device catalog before running. The current matrix uses `MediumPhone.arm`, Android API 35, in Arabic and English locales.
 
 Create a dedicated Google Cloud service account for this repository. Grant it:
 - `roles/cloudtestservice.testRunner`
@@ -53,4 +53,9 @@ Firebase Test Lab's current gcloud workflow is scheduled for shutdown on **2027-
 
 ## Device cost and limitations
 
-The workflow starts with the `MediumPhone.arm` virtual device rather than a physical handset. Google documents Firebase Test Lab virtual devices at USD $1 per device-hour; two locales create two device executions, so actual cost depends on each execution's duration and any applicable free quota. The workflow uses a 30-minute test timeout and does not run a physical-device matrix. A physical-device pass can be added later if needed and approved.
+The workflow uses two virtual-device executions (`MediumPhone.arm`, API 35), one per locale. On Spark, Test Lab includes up to 10 virtual-device test runs per day. On Blaze, the first 60 virtual-device minutes per day are no-cost, then usage is billed at USD $1 per device-hour, rounded up per minute. The two locale runs count separately. The workflow uses a 30-minute per-test timeout and does not run physical devices. It remains gated by `FIREBASE_TEST_LAB_ENABLED=true` and the three GitHub Actions secrets; no Test Lab run has been launched because those settings are not yet enabled. See [Google's current quotas and pricing](https://firebase.google.com/docs/test-lab/usage-quotas-pricing).
+
+
+## Migration to Developer Device Platform
+
+Firebase Test Lab is deprecated and scheduled to shut down on 2027-09-30. Google recommends migrating to Developer Device Platform (DDP). DDP is currently in Preview, requires Google Cloud billing, and offers Device Run on physical and virtual Android devices. Published Preview rates are USD $0.083 per physical-device minute and USD $0.017 per emulator minute; standard rates are scheduled to change in April 2027. ARABIFY will not launch DDP sessions until billing and project access are explicitly approved. See [Firebase migration FAQ](https://firebase.google.com/docs/test-lab/migrate-faq), [DDP overview](https://docs.cloud.google.com/developer-device-platform/overview), and [DDP pricing](https://cloud.google.com/products/developer-device-platform).

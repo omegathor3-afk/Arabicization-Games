@@ -1,0 +1,31 @@
+appId: com.omega.arabify
+name: ARABIFY game discovery, scan, and APK picker
+---
+- launchApp:
+    clearState: true
+- assertVisible: "ARABIFY"
+- assertVisible: "OMEGA DEVELOPMENT LAB"
+- assertVisible: "خلّي ألعابك تتكلم عربي"
+- assertVisible: "اختر من تطبيقات وألعاب هاتفك"
+- takeScreenshot: "01-home"
+- tapOn: "ابحث عن لعبة أو تطبيق"
+- inputText: "Minesweeper"
+- assertVisible: "Minesweeper"
+- tapOn: "اختيار"
+- assertVisible: "نتيجة الفحص"
+- assertVisible: "المحرك:"
+- scrollUntilVisible:
+    element: "فحص الخطوط ودعم العربية"
+    direction: DOWN
+    timeout: 15000
+- assertVisible: "فحص الخطوط ودعم العربية"
+- takeScreenshot: "02-font-audit"
+- scrollUntilVisible:
+    element: "أو اختر ملف APK يدويًا"
+    direction: UP
+    timeout: 15000
+- tapOn: "اختيار ملف APK"
+- assertVisible: "Recent"
+- takeScreenshot: "03-apk-picker"
+- back
+- assertVisible: "ARABIFY"

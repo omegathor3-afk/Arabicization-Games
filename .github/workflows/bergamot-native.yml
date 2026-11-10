@@ -157,6 +157,37 @@ jobs:
           test -s build/moz-models/en-ar/config.yml
           mkdir -p app/src/androidTest/assets
           cp -a build/moz-models app/src/androidTest/assets/bergamot
+          # Only the decompressed model files referenced by config.yml belong in
+          # Android test assets. Keeping .gz alongside the uncompressed payload
+          # makes AAPT2 treat the pair as duplicate assets.
+          find app/src/androidTest/assets/bergamot -type f -name '*.gz' -delete
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path("app/src/androidTest/assets/bergamot")
+          for direction in ("ar-en", "en-ar"):
+              config = root / direction / "config.yml"
+              if not config.is_file():
+                  raise SystemExit(f"Missing model config: {config}")
+              active_section = False
+              referenced = []
+              for line in config.read_text(encoding="utf-8").splitlines():
+                  if line.strip() in {"models:", "vocabs:", "shortlist:"}:
+                      active_section = True
+                      continue
+                  if line and not line[0].isspace():
+                      active_section = False
+                  if active_section and line.lstrip().startswith("- "):
+                      value = line.split("-", 1)[1].strip()
+                      if value != "false":
+                          referenced.append(value)
+              for name in referenced:
+                  asset = root / direction / name
+                  if not asset.is_file() or asset.stat().st_size == 0:
+                      raise SystemExit(f"Missing/empty model asset: {asset}")
+          if any(root.rglob("*.gz")):
+              raise SystemExit("Compressed source copies must not be packaged into Android test assets")
+          print("Verified both directions: all config-referenced decompressed model assets are present.")
+          PY
       - name: Enable KVM access
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -173,6 +204,11 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_5
+          disable-linux-hw-accel: false
+          pre-emulator-launch-script: |
+            adb kill-server || true
+            adb start-server
+            adb devices
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
           script: |
