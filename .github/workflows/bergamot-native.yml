@@ -75,7 +75,7 @@ jobs:
               "compileDatabases": records,
               "missingAbis": missing
           }
-          (root / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\\n")
+          (root / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
           print(json.dumps(manifest, indent=2))
           if missing:
               raise SystemExit("Missing compile database(s): " + ", ".join(missing))
