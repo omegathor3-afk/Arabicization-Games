@@ -2,6 +2,8 @@ package com.omega.arabify
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import android.util.Log
+import android.content.ContentValues
+import android.provider.MediaStore
 import androidx.test.platform.app.InstrumentationRegistry
 import com.android.apksig.ApkVerifier
 import com.reandroid.apk.ApkModule
@@ -103,7 +105,8 @@ class RealGameLocalizationInstrumentedTest {
             check(evidenceDir.mkdirs() || evidenceDir.isDirectory)
             val preservedApk = File(evidenceDir, "minesweeper-arabic.apk")
             output.copyTo(preservedApk, overwrite = true)
-            File(evidenceDir, "report.txt").writeText(
+            val reportFile = File(evidenceDir, "report.txt")
+            reportFile.writeText(
                 "gamePackage=${report.packageName}\n" +
                     "discoveredStrings=${report.discoveredStrings}\n" +
                     "translatedStrings=${report.translatedStrings}\n" +
@@ -111,7 +114,33 @@ class RealGameLocalizationInstrumentedTest {
                     "new_gameArabic=$newGameArabic\n" +
                     "signatureVerified=${signature.isVerified}\n"
             )
-            Log.i("RealGameLocalization", "Preserved translated APK at ${preservedApk.absolutePath}")
+
+            // Export evidence through MediaStore Downloads. The connected-test
+            // runner may uninstall the target APK after instrumentation ends,
+            // making run-as unavailable to the subsequent CI shell script.
+            fun publishToDownloads(source: File, displayName: String, mimeType: String) {
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+                    put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, "Download/ARABIFY")
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+                val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                    ?: error("Could not create Downloads evidence entry: $displayName")
+                try {
+                    context.contentResolver.openOutputStream(uri)?.use { stream ->
+                        source.inputStream().use { input -> input.copyTo(stream) }
+                    } ?: error("Could not open Downloads evidence output: $displayName")
+                    val ready = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
+                    context.contentResolver.update(uri, ready, null, null)
+                } catch (error: Throwable) {
+                    context.contentResolver.delete(uri, null, null)
+                    throw error
+                }
+            }
+            publishToDownloads(preservedApk, "minesweeper-arabic.apk", "application/vnd.android.package-archive")
+            publishToDownloads(reportFile, "report.txt", "text/plain")
+            Log.i("RealGameLocalization", "Published signed translated APK and report to Downloads/ARABIFY")
         } finally {
             translator.close()
             output.delete()
