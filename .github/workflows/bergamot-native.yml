@@ -219,6 +219,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: arabify-bergamot-offline-metrics
-          path: build/bergamot-instrumented/
+          path: |
+            build/bergamot-instrumented/
+            app/build/outputs/androidTest-results/connected/
+            app/build/reports/androidTests/connected/
           if-no-files-found: error
           retention-days: 30
