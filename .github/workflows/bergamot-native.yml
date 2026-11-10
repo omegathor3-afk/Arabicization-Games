@@ -34,7 +34,10 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
           echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
       - name: Install Ninja
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
+        run: |
+          NINJA="$(find "$ANDROID_HOME/cmake" -type f -name ninja -perm -111 -print -quit)"
+          if [[ -z "$NINJA" ]]; then sudo apt-get update && sudo apt-get install -y ninja-build; else echo "$(dirname "$NINJA")" >> "$GITHUB_PATH"; fi
+          ninja --version
       - name: Build pinned Bergamot JNI library
         run: native/bergamot/build-android.sh
       - name: Verify native library ABI and dependencies
