@@ -4,14 +4,15 @@ This workflow tests the ARABIFY APK and runs an instrumentation test against a r
 
 ## Workflow
 
-The workflow watches pushes to `feat/unity-mono-streamingassets`. To enable its Firebase job, first add the three secrets below and set the repository Actions variable `FIREBASE_TEST_LAB_ENABLED` to `true` under GitHub → Settings → Secrets and variables → Actions → Variables. Then push a commit to the branch. Until that explicit opt-in is set, the Firebase job is skipped and no Test Lab device minutes are consumed.
+The workflow watches pushes to `feat/unity-mono-streamingassets` that touch `app/**` or the Firebase workflow file. To enable its Firebase job, first add the three secrets below and set the repository Actions variable `FIREBASE_TEST_LAB_ENABLED` to `true` under GitHub → Settings → Secrets and variables → Actions → Variables. Then push a commit touching one of those paths. Until that explicit opt-in is set, the Firebase job is skipped and no Test Lab device minutes are consumed.
 
 The workflow:
 1. Builds the app and its Android instrumentation APK.
-2. Downloads the pinned F-Droid Minesweeper 1.6 APK and records its SHA-256.
+2. Downloads the F-Droid Minesweeper 1.6 APK and records its SHA-256. Its upstream source is [JoelDankert/Minesweeper-for-Android](https://github.com/JoelDankert/Minesweeper-for-Android).
 3. Authenticates to Google Cloud with GitHub OIDC (no service-account JSON key).
-4. Runs the real-game localization instrumentation on Firebase Test Lab in Arabic and English device locales.
-5. Verifies that translated Arabic resources were written into the output package and that the output APK is signed.
+4. Runs only `RealGameLocalizationInstrumentedTest` on the `MediumPhone.arm` virtual device in Arabic and English locales.
+5. Verifies that the known `new_game` string is Arabic, counts Arabic-qualified resources, and verifies the generated APK signature.
+6. Pulls the generated APK and report from the test device. The GitHub emulator smoke test then installs the generated APK and launches the game, recording a screenshot and launch log.
 
 ## One-time Google Cloud setup
 
@@ -48,3 +49,8 @@ Do not put private keys, JSON credentials, or tokens in the repository or in cha
 A passing instrumentation test proves that the tested game APK's Android string resources can be translated into Arabic resources and that the rebuilt APK passes signature verification. It does **not** prove every screen renders correctly, that all game text is stored in Android resources, or that Unity/Unreal/IL2CPP assets are supported. A separate launch/visual review is still needed for the rebuilt APK.
 
 Firebase Test Lab's current gcloud workflow is scheduled for shutdown on **2027-09-30**. This integration is for the requested near-term test; plan migration to Google's successor device-testing service before that date.
+
+
+## Device cost and limitations
+
+The workflow starts with the `MediumPhone.arm` virtual device rather than a physical handset. Google documents Firebase Test Lab virtual devices at USD $1 per device-hour; two locales create two device executions, so actual cost depends on each execution's duration and any applicable free quota. The workflow uses a 30-minute test timeout and does not run a physical-device matrix. A physical-device pass can be added later if needed and approved.
