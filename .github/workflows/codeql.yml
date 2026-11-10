@@ -19,16 +19,32 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Scan repository history for secrets
-        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: java-kotlin, actions
           queries: security-extended
-      - name: Autobuild Kotlin and Java
-        uses: github/codeql-action/autobuild@v3
+
+      # This repository intentionally uses the installed Gradle CLI rather than
+      # a root gradlew wrapper. CodeQL autobuild assumes a wrapper/build tool
+      # layout that this repository does not provide, so build explicitly.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+
+      - name: Build Kotlin and Android sources for CodeQL extraction
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
+
       - name: Analyze
         uses: github/codeql-action/analyze@v3
