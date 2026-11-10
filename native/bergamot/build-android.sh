@@ -39,6 +39,7 @@ cmake -S "$ROOT/native/bergamot" -B "$BUILD" -G Ninja \
   -DANDROID_STL=c++_shared \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_HAVE_LIBC_PTHREAD=ON \
+  -DBUILD_ARCH=armv8-a \
   -DBERGAMOT_SOURCE_DIR="$SOURCE"
 cmake --build "$BUILD" --target arabify_bergamot --parallel 2
 
