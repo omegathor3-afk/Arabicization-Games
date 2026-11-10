@@ -1,33 +1,36 @@
 name: Bergamot Android native CI
+
 on:
   push:
     branches: ["feat/unity-mono-streamingassets"]
-    paths: ["native/bergamot/**", "app/src/main/java/com/omega/arabify/BergamotNative.kt", ".github/workflows/bergamot-native.yml"]
+    paths:
+      - "native/bergamot/**"
+      - "app/src/main/java/com/omega/arabify/BergamotNative.kt"
+      - ".github/workflows/bergamot-native.yml"
   workflow_dispatch:
+
 concurrency:
   group: arabify-bergamot-native-${{ github.ref }}
   cancel-in-progress: false
+
 permissions:
   contents: read
+
 jobs:
   build-arm64:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-      - name: Install Android command line tools
+      - name: Install pinned Android NDK and CMake
         run: |
-          echo "y" | sdkmanager --licenses
-          sdkmanager --install "platform-tools" "platforms;android-35" "ndk;27.2.12479018" "cmake;3.31.6"
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager --install "ndk;27.2.12479018" "cmake;3.31.6"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
       - name: Install Ninja
         run: sudo apt-get update && sudo apt-get install -y ninja-build
       - name: Build pinned Bergamot JNI library
-        run: bash native/bergamot/build-android.sh
+        run: native/bergamot/build-android.sh
       - name: Verify native library ABI and dependencies
         run: |
           file app/src/main/jniLibs/arm64-v8a/*.so
