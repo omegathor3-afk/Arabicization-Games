@@ -22,6 +22,15 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 add_subdirectory("${BERGAMOT_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/bergamot-upstream" EXCLUDE_FROM_ALL)
 
+# The pinned Marian/FAISS VectorTransform.cpp uses SSE intrinsics behind
+# __SSE__ but does not include the corresponding intrinsic header on Android.
+# Clang's x86_64-v2 target defines __SSE__; force-include the SSE3 header for
+# this object library only. This preserves the optimized x86_64 path and does
+# not affect ARM64 or other upstream translation units.
+if(ANDROID AND ANDROID_ABI STREQUAL "x86_64" AND TARGET faiss)
+    target_compile_options(faiss PRIVATE -include pmmintrin.h)
+endif()
+
 if(NOT TARGET bergamot-translator)
     message(FATAL_ERROR "Pinned Bergamot source did not define bergamot-translator")
 endif()
