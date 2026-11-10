@@ -1,5 +1,6 @@
 #include <jni.h>
 
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
