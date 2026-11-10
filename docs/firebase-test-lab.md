@@ -1,6 +1,6 @@
 # Firebase Test Lab: real-game localization test
 
-This workflow tests the ARABIFY APK and runs an instrumentation test against a real, separately installed Android game package. The test game is Minesweeper 1.6 from F-Droid (`com.joeld.minesweeper`), distributed under Apache-2.0. The test copies its installed APK, downloads the English-to-Arabic ML Kit model, adds Arabic-qualified Android string resources, rebuilds the APK, checks that Arabic resources exist, and verifies the generated APK signature.
+This workflow tests the ARABIFY APK and runs an instrumentation test against a real, separately installed Android game package. The test game is the open-source native Android Minesweeper project (`com.joeld.minesweeper`), built from pinned GitHub source commit `115ee86a0d5d998c6c882de63953aef54100a1fd` and licensed under Apache-2.0. The test copies its installed APK, downloads the English-to-Arabic ML Kit model, adds Arabic-qualified Android string resources, rebuilds the APK, checks a known Arabic translation, and verifies the generated APK signature.
 
 ## Workflow
 
@@ -8,11 +8,11 @@ The workflow watches pushes to `feat/unity-mono-streamingassets` that touch `app
 
 The workflow:
 1. Builds the app and its Android instrumentation APK.
-2. Downloads the F-Droid Minesweeper 1.6 APK and records its SHA-256. Its upstream source is [JoelDankert/Minesweeper-for-Android](https://github.com/JoelDankert/Minesweeper-for-Android).
+2. Builds [JoelDankert/Minesweeper-for-Android](https://github.com/JoelDankert/Minesweeper-for-Android) from the pinned GitHub commit in a separate job with no Firebase credentials, then records the APK SHA-256.
 3. Authenticates to Google Cloud with GitHub OIDC (no service-account JSON key).
 4. Runs only `RealGameLocalizationInstrumentedTest` on the `MediumPhone.arm` virtual device in Arabic and English locales.
 5. Verifies that the known `new_game` string is Arabic, counts Arabic-qualified resources, and verifies the generated APK signature.
-6. Pulls the generated APK and report from the test device. The GitHub emulator smoke test then installs the generated APK and launches the game, recording a screenshot and launch log.
+6. Pulls the generated APK and report from the Firebase test device. The GitHub Android emulator smoke test independently installs the generated APK, launches the game, and records a screenshot and launch log.
 
 ## One-time Google Cloud setup
 
