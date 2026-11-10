@@ -52,13 +52,20 @@ jobs:
       sha256sum "$APK"
    - name: Build instrumentation test APK
      run: gradle assembleDebugAndroidTest
-   - name: Download open-source Android game test fixture
+   - name: Checkout pinned open-source Android game source
+     uses: actions/checkout@v4
+     with:
+      repository: JoelDankert/Minesweeper-for-Android
+      ref: 115ee86a0d5d998c6c882de63953aef54100a1fd
+      path: build/test-game/source
+   - name: Build real game APK from GitHub source
      run: |
-      mkdir -p build/test-game
-      curl --fail --location --retry 3 \
-        https://f-droid.org/repo/com.joeld.minesweeper_7.apk \
-        --output build/test-game/minesweeper.apk
-      test -s build/test-game/minesweeper.apk
+      set -euo pipefail
+      cd build/test-game/source
+      ./gradlew :app:assembleDebug --no-daemon
+      cp app/build/outputs/apk/debug/app-debug.apk ../minesweeper.apk
+      test -s ../minesweeper.apk
+      cd ../../..
       sha256sum build/test-game/minesweeper.apk | tee build/test-game/SHA256SUMS
    - name: Run real-game localization on Android emulator
      uses: reactivecircus/android-emulator-runner@v2
