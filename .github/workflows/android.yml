@@ -70,11 +70,7 @@ jobs:
       emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
       disable-animations: true
       script: |
-       set -euo pipefail
-       adb install build/test-game/minesweeper.apk
-       gradle connectedDebugAndroidTest \
-         -Pandroid.testInstrumentationRunnerArguments.class=com.omega.arabify.RealGameLocalizationInstrumentedTest \
-         --stacktrace
+       bash .github/scripts/run-real-game-localization.sh
    - name: Upload real-game localization test reports
      if: always()
      uses: actions/upload-artifact@v4
@@ -84,6 +80,7 @@ jobs:
        app/build/outputs/androidTest-results/connected/
        app/build/reports/androidTests/connected/
        build/test-game/SHA256SUMS
+       build/test-game/localized/
       if-no-files-found: ignore
       retention-days: 14
    - uses: actions/upload-artifact@v4
