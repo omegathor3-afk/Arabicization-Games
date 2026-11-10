@@ -132,4 +132,21 @@ jobs:
             adb shell svc data disable
             adb shell cmd connectivity airplane-mode enable || true
             adb shell dumpsys connectivity
+            set +e
             ./gradlew connectedDebugAndroidTest --stacktrace
+            test_status=$?
+            mkdir -p build/bergamot-instrumented
+            adb logcat -d -v threadtime -s BergamotOfflineTest:I > build/bergamot-instrumented/instrumentation.log
+            adb shell settings get global airplane_mode_on > build/bergamot-instrumented/airplane-mode.txt || true
+            adb shell dumpsys connectivity > build/bergamot-instrumented/connectivity.txt || true
+            adb shell dumpsys wifi > build/bergamot-instrumented/wifi.txt || true
+            printf '%s\n' "$test_status" > build/bergamot-instrumented/test-exit-code.txt
+            exit "$test_status"
+      - name: Upload offline translation metrics and emulator state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arabify-bergamot-offline-metrics
+          path: build/bergamot-instrumented/
+          if-no-files-found: warn
+          retention-days: 30
