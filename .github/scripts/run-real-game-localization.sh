@@ -25,11 +25,22 @@ if [[ -s "$GENERATED_APK" ]]; then
     adb uninstall com.joeld.minesweeper || true
     adb install "$GENERATED_APK" || launch_status=$?
     if [[ "$launch_status" -eq 0 ]]; then
-      adb shell monkey -p com.joeld.minesweeper 1 || launch_status=$?
-      sleep 8
-      adb shell pidof com.joeld.minesweeper > build/test-game/localized/game-process.txt || launch_status=$?
-      adb exec-out screencap -p > build/test-game/localized/minesweeper-arabic-screen.png || launch_status=$?
-      adb logcat -d -v time > build/test-game/localized/game-launch-logcat.txt || true
+      # Select Arabic explicitly; merely adding ar resources does not make
+      # Android display them while the device/app locale remains English.
+      adb shell cmd locale set-app-locales com.joeld.minesweeper --user 0 --locales ar-EG || launch_status=$?
+      if [[ "$launch_status" -eq 0 ]]; then
+        adb shell monkey -p com.joeld.minesweeper 1 || launch_status=$?
+        sleep 8
+        adb shell pidof com.joeld.minesweeper > build/test-game/localized/game-process.txt || launch_status=$?
+        adb shell uiautomator dump /sdcard/minesweeper-window.xml >/dev/null 2>&1 || launch_status=$?
+        adb shell cat /sdcard/minesweeper-window.xml > build/test-game/localized/minesweeper-window.xml || launch_status=$?
+        if ! grep -q "لعبة جديدة" build/test-game/localized/minesweeper-window.xml; then
+          echo "Arabic UI text 'لعبة جديدة' was not visible after selecting ar-EG." >&2
+          launch_status=1
+        fi
+        adb exec-out screencap -p > build/test-game/localized/minesweeper-arabic-screen.png || launch_status=$?
+        adb logcat -d -v time > build/test-game/localized/game-launch-logcat.txt || true
+      fi
     fi
   fi
 else
