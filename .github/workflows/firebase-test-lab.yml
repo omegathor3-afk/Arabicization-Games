@@ -10,21 +10,72 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
   group: arabify-firebase-test-lab
   cancel-in-progress: false
 
 jobs:
-  real-game-localization:
+  build-game-fixture:
     if: ${{ vars.FIREBASE_TEST_LAB_ENABLED == 'true' }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: JoelDankert/Minesweeper-for-Android
+          ref: 115ee86a0d5d998c6c882de63953aef54100a1fd
+          path: game-source
+          persist-credentials: false
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.2.1"
+
+      - name: Build pinned GitHub game source without Firebase credentials
+        run: |
+          set -euo pipefail
+          cd game-source
+          bash ./gradlew :app:assembleDebug --no-daemon
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n1)"
+          "$APKSIGNER" verify --verbose "$APK"
+          mkdir -p ../game-artifact
+          cp "$APK" ../game-artifact/minesweeper.apk
+          cd ..
+          sha256sum game-artifact/minesweeper.apk | tee game-artifact/SHA256SUMS
+
+      - name: Upload pinned game APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: arabify-minesweeper-game-fixture
+          path: game-artifact/
+          if-no-files-found: error
+          retention-days: 14
+
+  real-game-localization:
+    if: ${{ vars.FIREBASE_TEST_LAB_ENABLED == 'true' }}
+    needs: build-game-fixture
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
           ref: feat/unity-mono-streamingassets
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: arabify-minesweeper-game-fixture
+          path: build/test-game
 
       - name: Check Firebase Test Lab connection settings
         env:
@@ -50,17 +101,8 @@ jobs:
         with:
           gradle-version: "8.13"
 
-      - name: Build app and instrumentation APKs
+      - name: Build ARABIFY app and instrumentation APKs
         run: gradle assembleDebug assembleDebugAndroidTest --stacktrace
-
-      - name: Download the open-source Minesweeper game used for the real-package test
-        run: |
-          mkdir -p build/test-game
-          curl --fail --location --retry 3 \
-            https://f-droid.org/repo/com.joeld.minesweeper_7.apk \
-            --output build/test-game/minesweeper.apk
-          test -s build/test-game/minesweeper.apk
-          sha256sum build/test-game/minesweeper.apk | tee build/test-game/SHA256SUMS
 
       - name: Authenticate to Google Cloud using GitHub OIDC
         uses: google-github-actions/auth@v2
@@ -71,15 +113,16 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Verify Firebase Test Lab access and available Android targets
+      - name: Verify Firebase Test Lab API and virtual-device catalog
         env:
           FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
         run: |
+          set -euo pipefail
           gcloud config set project "$FIREBASE_PROJECT_ID"
-          gcloud services list --enabled --filter="config.name:testing.googleapis.com" --format="value(config.name)"
+          gcloud services list --enabled --filter="config.name:testing.googleapis.com" --format="value(config.name)" | grep -q testing.googleapis.com
           gcloud firebase test android models list --filter=virtual
-      
-      - name: Test ARABIFY and translate a real third-party game package on Firebase Test Lab
+
+      - name: Translate and launch the real GitHub game on Firebase Test Lab
         env:
           FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
         run: |
@@ -97,14 +140,15 @@ jobs:
             --use-orchestrator \
             --record-video \
             --performance-metrics \
-            --client-details matrixLabel=ARABIFY-real-game-localization,gitBranch=feat/unity-mono-streamingassets,game=com.joeld.minesweeper
+            --client-details matrixLabel=ARABIFY-real-game-localization,gitBranch=feat/unity-mono-streamingassets,game=JoelDankert-Minesweeper,sourceSha=115ee86a0d5d998c6c882de63953aef54100a1fd
 
-      - name: Upload test input identity and build outputs
+      - name: Upload test APKs and input identity
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: arabify-firebase-test-inputs
           path: |
+            build/test-game/minesweeper.apk
             build/test-game/SHA256SUMS
             app/build/outputs/apk/debug/app-debug.apk
             app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
