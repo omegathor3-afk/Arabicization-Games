@@ -6,6 +6,9 @@ on:
     paths:
       - "native/bergamot/**"
       - "app/src/main/java/com/omega/arabify/BergamotNative.kt"
+      - "app/src/androidTest/**"
+      - "app/build.gradle.kts"
+      - "app/src/main/AndroidManifest.xml"
       - ".github/workflows/bergamot-native.yml"
   workflow_dispatch:
 
