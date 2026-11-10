@@ -127,6 +127,7 @@ internal object AssetTextTransformer {
 internal object AndroidAssetLocalizer {
  private const val MAX_FILE_BYTES=512L*1024L
  private const val MAX_TOTAL_TRANSLATION_BYTES=4L*1024L*1024L
+ private const val MAX_CANDIDATE_FILES=2048
  private val supported=setOf("json","txt","properties","strings")
  private val allowedRoots=listOf("assets/","res/raw/","localization/","strings/")
 
@@ -195,6 +196,7 @@ internal object AndroidAssetLocalizer {
     if(entry.name.startsWith("lib/")&&entry.name.endsWith(".so",true))hasNativeLibraries=true
     if(!entry.isDirectory&&isSupportedTextAsset(entry.name,entry.size,allowedPathPrefixes)){
      candidates+=entry
+     require(candidates.size<=MAX_CANDIDATE_FILES){"عدد ملفات النصوص المرشحة يتجاوز حد المعالجة الآمن (2,048)."}
     }
    }
    if(hasNativeLibraries&&!extractNativeLibs){
@@ -202,18 +204,27 @@ internal object AndroidAssetLocalizer {
    }
    discovered=candidates.size
    candidates.forEachIndexed { index,entry ->
-    val bytes=zip.getInputStream(entry).use{it.readBytes()}
+    val remaining=MAX_TOTAL_TRANSLATION_BYTES-totalBytes
+    if(remaining<=0L || entry.size>minOf(MAX_FILE_BYTES,remaining)){
+     skippedStrings++
+     onProgress(index+1,candidates.size)
+     return@forEachIndexed
+    }
+    val bytes=zip.getInputStream(entry).use{
+     BoundedArchiveInput.readAll(it,minOf(MAX_FILE_BYTES,remaining))
+    }
+    require(entry.size==bytes.size.toLong()){
+     "حجم الملف الفعلي لا يطابق بيانات ZIP: ${entry.name}"
+    }
     totalBytes+=bytes.size
-    if(totalBytes<=MAX_TOTAL_TRANSLATION_BYTES){
-     val original=bytes.toString(Charsets.UTF_8)
-     val result=AssetTextTransformer.transform(entry.name,original){value->translator.translateEnglishToArabic(value)}
-     if(result.translated>0){
-      transformed[entry.name]=result.text.toByteArray(Charsets.UTF_8)
-      translatedFiles++
-     }
-     translatedStrings+=result.translated
-     skippedStrings+=result.skipped
-    }else skippedStrings++
+    val original=bytes.toString(Charsets.UTF_8)
+    val result=AssetTextTransformer.transform(entry.name,original){value->translator.translateEnglishToArabic(value)}
+    if(result.translated>0){
+     transformed[entry.name]=result.text.toByteArray(Charsets.UTF_8)
+     translatedFiles++
+    }
+    translatedStrings+=result.translated
+    skippedStrings+=result.skipped
     onProgress(index+1,candidates.size)
    }
 
