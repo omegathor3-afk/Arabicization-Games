@@ -62,7 +62,7 @@ jobs:
      run: |
       set -euo pipefail
       cd build/test-game/source
-      ./gradlew :app:assembleDebug --no-daemon
+      bash ./gradlew :app:assembleDebug --no-daemon
       cp app/build/outputs/apk/debug/app-debug.apk ../minesweeper.apk
       test -s ../minesweeper.apk
       cd ../../..
