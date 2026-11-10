@@ -223,6 +223,35 @@ class UnityFsBundleDecoderTest {
         )
     }
 
+    @Test fun includesRetainedBlockMetadataInStorageWorkingSetBudget() {
+        val bundle = makeBundle(ByteArray(128) { (it % 251).toByte() })
+        val header = UnityArchiveHeaderParser.parse(bundle.copyOf(minOf(bundle.size, 1024)), bundle.size.toLong())!!
+        val infoOffset = header.headerSize
+        val compressedInfo = bundle.copyOfRange(
+            infoOffset,
+            infoOffset + header.compressedBlocksInfoSize.toInt()
+        )
+        val codec = unityCompressionCodecFromFlags(header.flags)!!
+        val decodedInfo = UnityFsBlockDecompressor.decompress(
+            codec,
+            compressedInfo,
+            header.uncompressedBlocksInfoSize
+        )
+        val blockInfo = UnityBlockInfoParser.parse(decodedInfo)!!
+        val block = blockInfo.blocks.single()
+        val retainedAndBlockBytes = header.compressedBlocksInfoSize +
+            header.uncompressedBlocksInfoSize + block.compressedSize + block.uncompressedSize
+
+        // The metadata alone fits, and the storage block alone fits, but their
+        // simultaneously retained buffers exceed this aggregate working-set cap.
+        assertNull(
+            decode(
+                bundle,
+                UnityFsDecodeLimits(maxWorkingSetBytes = retainedAndBlockBytes - 1L)
+            ).first
+        )
+    }
+
     @Test fun rejectsUnknownCompressionFlagsAndNonUnityFsSignatures() {
         assertNull(unityCompressionCodecFromFlags(0x100000000L))
         val payload = byteArrayOf(1, 2, 3)
