@@ -28,7 +28,7 @@ class BergamotOfflineInstrumentedTest {
         val root = File(context.filesDir, "bergamot-instrumented")
         root.deleteRecursively()
         root.mkdirs()
-        copyAssetTree(context, "bergamot", root)
+        copyAssetTree(instrumentation.context, "bergamot", root)
 
         val directions = listOf(
             Direction("ar-en", "مرحبا بالعالم"),
