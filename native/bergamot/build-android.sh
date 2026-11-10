@@ -47,7 +47,31 @@ cmake -S "$ROOT/native/bergamot" -B "$BUILD" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_HAVE_LIBC_PTHREAD=ON \
   -DBUILD_ARCH="$CPU_ARCH" \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
   -DBERGAMOT_SOURCE_DIR="$SOURCE"
+
+# Verify the exact FAISS translation unit receives the x86_64 SSE header.
+if [[ "$ABI" == "x86_64" ]]; then
+  python3 - "$BUILD/compile_commands.json" <<'PY'
+import json
+import pathlib
+import sys
+
+database = pathlib.Path(sys.argv[1])
+if not database.is_file():
+    raise SystemExit(f"Missing CMake compile database: {database}")
+commands = json.loads(database.read_text())
+matches = [entry for entry in commands if pathlib.Path(entry.get("file", "")).name == "VectorTransform.cpp"]
+if not matches:
+    raise SystemExit("VectorTransform.cpp is absent from the x86_64 compile database")
+for entry in matches:
+    command = entry.get("command", " ".join(entry.get("arguments", [])))
+    if "-include pmmintrin.h" not in command:
+        raise SystemExit("FAISS VectorTransform.cpp is missing '-include pmmintrin.h': " + command)
+    print("Verified FAISS SSE header flag:", command)
+PY
+fi
+
 cmake --build "$BUILD" --target arabify_bergamot --parallel 2
 
 OUT="$ROOT/app/src/main/jniLibs/$ABI"
