@@ -33,11 +33,11 @@ if [[ -s "$GENERATED_APK" ]]; then
         adb reboot || launch_status=$?
         adb wait-for-device
         for attempt in $(seq 1 90); do
-          BOOTED="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\\r')"
+          BOOTED="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')"
           [[ "$BOOTED" == "1" ]] && break
           sleep 2
         done
-        BOOTED="$(adb shell getprop sys.boot_completed | tr -d '\\r')"
+        BOOTED="$(adb shell getprop sys.boot_completed | tr -d '\r')"
         if [[ "$BOOTED" != "1" ]]; then
           echo "Emulator did not finish booting after switching to Arabic." >&2
           launch_status=1
