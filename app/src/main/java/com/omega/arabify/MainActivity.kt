@@ -39,6 +39,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -160,7 +162,7 @@ private fun ArabifyApp(context: Context) {
            catch(e:Exception){error=e.message ?: "تعذر فحص التطبيق المثبت."}
            finally{busy=false}
           }
-         },enabled=!busy) { Text(if(selectedInstalledApp?.packageName==app.packageName) "محدد" else "اختيار") }
+         },enabled=!busy,modifier=Modifier.semantics { contentDescription = "اختيار ${app.label} ${app.packageName}" }) { Text(if(selectedInstalledApp?.packageName==app.packageName) "محدد" else "اختيار") }
         }
        }
        if(busy && selectedInstalledApp!=null) {
