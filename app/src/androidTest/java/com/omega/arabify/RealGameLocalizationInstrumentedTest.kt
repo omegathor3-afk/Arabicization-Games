@@ -77,13 +77,9 @@ class RealGameLocalizationInstrumentedTest {
                 Log.i("RealGameLocalization", "new_game Arabic value: $newGameArabic")
                 var count = 0
                 val arabicValues = mutableListOf<String>()
-                val blocks = stringType.getTypeBlocks()
-                while (blocks.hasNext()) {
-                    val block = blocks.next()
+                for (block in stringType.getTypeBlocks()) {
                     if (block.getResConfig().getQualifiers().contains("ar")) {
-                        val entries = block.listEntries(true)
-                        while (entries.hasNext()) {
-                            val entry = entries.next()
+                        for (entry in block.listEntries(true)) {
                             entry.getValueAsString()?.let(arabicValues::add)
                             count++
                         }
