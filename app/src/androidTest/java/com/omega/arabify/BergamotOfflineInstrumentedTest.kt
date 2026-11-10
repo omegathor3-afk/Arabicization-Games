@@ -28,17 +28,22 @@ class BergamotOfflineInstrumentedTest {
     fun bothArabicDirectionsLoadAndTranslateWithNetworkDisabled() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
+        Log.i(tag, "phase=network-check:start")
         val network = assertNoInternet(context)
+        Log.i(tag, "phase=network-check:passed")
         val root = File(context.filesDir, "bergamot-instrumented")
         root.deleteRecursively()
         root.mkdirs()
+        Log.i(tag, "phase=model-copy:start destination=${root.absolutePath}")
         copyAssetTree(instrumentation.context, "bergamot", root)
+        Log.i(tag, "phase=model-copy:complete bytes=${root.walkTopDown().filter { it.isFile }.sumOf { it.length() }}")
 
         val directions = listOf(
             Direction("ar-en", "مرحبا بالعالم", "صباح الخير"),
             Direction("en-ar", "The ocean is deep.", "The sea is dark.")
         )
         for (direction in directions) {
+            Log.i(tag, "phase=direction:start name=${direction.name}")
             val modelDir = File(root, direction.name)
             val config = File(modelDir, "config.yml")
             assertTrue("Missing ${direction.name} config", config.isFile)
@@ -55,21 +60,25 @@ class BergamotOfflineInstrumentedTest {
             val pssBeforeLoadKb = currentPssKb()
             var session = 0L
             try {
+                Log.i(tag, "phase=native-create:start direction=${direction.name} config=${config.absolutePath} packageBytes=$packageBytes")
                 val loadStartNs = SystemClock.elapsedRealtimeNanos()
                 session = BergamotNative.nativeCreate(config.absolutePath)
                 val loadMs = (SystemClock.elapsedRealtimeNanos() - loadStartNs) / 1_000_000.0
                 val pssAfterLoadKb = currentPssKb()
+                Log.i(tag, "phase=native-create:complete direction=${direction.name} session=$session loadMs=$loadMs pssKb=$pssAfterLoadKb")
                 assertTrue("${direction.name} native session was not created", session != 0L)
 
                 val firstStartNs = SystemClock.elapsedRealtimeNanos()
                 val firstOutput = BergamotNative.nativeTranslate(session, direction.input)
                 val firstTranslateMs = (SystemClock.elapsedRealtimeNanos() - firstStartNs) / 1_000_000.0
                 val pssAfterFirstTranslateKb = currentPssKb()
+                Log.i(tag, "phase=first-translate:complete direction=${direction.name} durationMs=$firstTranslateMs outputLength=${firstOutput.length}")
 
                 val subsequentStartNs = SystemClock.elapsedRealtimeNanos()
                 val subsequentOutput = BergamotNative.nativeTranslate(session, direction.subsequentInput)
                 val subsequentTranslateMs = (SystemClock.elapsedRealtimeNanos() - subsequentStartNs) / 1_000_000.0
                 val pssAfterSubsequentTranslateKb = currentPssKb()
+                Log.i(tag, "phase=subsequent-translate:complete direction=${direction.name} durationMs=$subsequentTranslateMs outputLength=${subsequentOutput.length}")
 
                 val record = JSONObject()
                     .put("direction", direction.name)
