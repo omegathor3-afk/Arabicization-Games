@@ -1,6 +1,7 @@
 package com.omega.arabify
 
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -70,6 +71,26 @@ class AndroidAssetLocalizerPathTest {
             fail("Expected an archive-entry byte-limit failure")
         } catch (expected: IllegalArgumentException) {
             assertTrue(expected.message.orEmpty().contains("byte limit"))
+        }
+    }
+
+    @Test fun boundedArchiveCopyStreamsWithinLimit() {
+        val bytes = ByteArray(128 * 1024) { (it % 251).toByte() }
+        val output = ByteArrayOutputStream()
+        val copied = BoundedArchiveInput.copy(ByteArrayInputStream(bytes), output, bytes.size.toLong())
+        assertTrue(copied == bytes.size.toLong())
+        assertArrayEquals(bytes, output.toByteArray())
+    }
+
+    @Test fun boundedArchiveCopyStopsBeforeExpandingPastBudget() {
+        val bytes = ByteArray(4097) { (it % 251).toByte() }
+        val output = ByteArrayOutputStream()
+        try {
+            BoundedArchiveInput.copy(ByteArrayInputStream(bytes), output, 4096)
+            fail("Expected an archive-copy byte-limit failure")
+        } catch (expected: IllegalArgumentException) {
+            assertTrue(expected.message.orEmpty().contains("copy limit"))
+            assertTrue(output.size() <= 4096)
         }
     }
 
