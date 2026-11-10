@@ -1,7 +1,10 @@
 package com.omega.arabify
 
+import java.io.ByteArrayInputStream
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class AndroidAssetLocalizerPathTest {
@@ -52,6 +55,22 @@ class AndroidAssetLocalizerPathTest {
         assertTrue(AndroidAssetLocalizer.isSupportedTextAsset(
             "assets\\bin\\Data\\StreamingAssets\\dialogue.txt", 80, root
         ))
+    }
+
+    @Test fun boundedArchiveReadAcceptsExactLimit() {
+        val bytes = "safe archive text".toByteArray(Charsets.UTF_8)
+        val result = BoundedArchiveInput.readAll(ByteArrayInputStream(bytes), bytes.size.toLong())
+        assertArrayEquals(bytes, result)
+    }
+
+    @Test fun boundedArchiveReadRejectsActualBytesBeyondDeclaredBudget() {
+        val bytes = ByteArray(4097) { (it % 251).toByte() }
+        try {
+            BoundedArchiveInput.readAll(ByteArrayInputStream(bytes), 4096)
+            fail("Expected an archive-entry byte-limit failure")
+        } catch (expected: IllegalArgumentException) {
+            assertTrue(expected.message.orEmpty().contains("byte limit"))
+        }
     }
 
     @Test fun defaultAndroidRootsRemainSupported() {
