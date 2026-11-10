@@ -20,7 +20,8 @@ import java.io.File
 @RunWith(AndroidJUnit4::class)
 class RealGameLocalizationInstrumentedTest {
     @Test
-    fun localizesInstalledMinesweeperIntoArabicResourcesAndSignsOutput() = runBlocking {
+    fun localizesInstalledMinesweeperIntoArabicResourcesAndSignsOutput() {
+        runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val gamePackage = "com.joeld.minesweeper"
@@ -114,6 +115,7 @@ class RealGameLocalizationInstrumentedTest {
             translator.close()
             output.delete()
             unsigned.delete()
+        }
         }
     }
 }
