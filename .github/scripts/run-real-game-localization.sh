@@ -37,7 +37,8 @@ if [[ -s "$GENERATED_APK" ]]; then
           [[ "$BOOTED" == "1" ]] && break
           sleep 2
         done
-        if [[ "$(adb shell getprop sys.boot_completed | tr -d '\\r') " != "1 " ]]; then
+        BOOTED="$(adb shell getprop sys.boot_completed | tr -d '\\r')"
+        if [[ "$BOOTED" != "1" ]]; then
           echo "Emulator did not finish booting after switching to Arabic." >&2
           launch_status=1
         fi
