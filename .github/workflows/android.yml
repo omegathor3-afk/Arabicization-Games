@@ -58,6 +58,8 @@ jobs:
       repository: JoelDankert/Minesweeper-for-Android
       ref: 115ee86a0d5d998c6c882de63953aef54100a1fd
       path: build/test-game/source
+   - name: Prepare Minesweeper localization fixture
+     run: bash .github/scripts/prepare-minesweeper-fixture.sh
    - name: Build real game APK from GitHub source
      run: |
       set -euo pipefail
@@ -127,7 +129,9 @@ jobs:
        build/maestro/
       if-no-files-found: ignore
       retention-days: 14
-   - uses: actions/upload-artifact@v4
+   - name: Upload final debug APK
+     if: always()
+     uses: actions/upload-artifact@v4
      with:
       name: arabify-debug-apk
       path: app/build/outputs/apk/debug/app-debug.apk
