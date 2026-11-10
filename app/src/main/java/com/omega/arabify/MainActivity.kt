@@ -37,6 +37,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -107,29 +109,42 @@ private fun ArabifyApp(context: Context) {
    }
   }
  }
- MaterialTheme(colorScheme=darkColorScheme(primary=Color(0xFF12D9FF),secondary=Color(0xFF9B72FF),tertiary=Color(0xFF36F0C2),background=Color(0xFF050A18),surface=Color(0xFF101A32))) {
-  Surface(Modifier.fillMaxSize(),color=Color(0xFF050A18)) {
-   LazyColumn(Modifier.fillMaxSize().padding(20.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
+ MaterialTheme(colorScheme=darkColorScheme(primary=Color(0xFF9AD8BC),secondary=Color(0xFFD6A66D),tertiary=Color(0xFF78BFA7),background=Color(0xFF080D0C),surface=Color(0xFF141D1A))) {
+  CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+  Surface(Modifier.fillMaxSize(),color=Color(0xFF080D0C)) {
+   LazyColumn(Modifier.fillMaxSize().padding(horizontal=18.dp, vertical=16.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
     item {
-     Text("ARABIFY",color=Color(0xFF36DFFF),fontSize=30.sp,fontWeight=FontWeight.Black)
-     Text("محرك تعريب الألعاب والتطبيقات",color=Color(0xFFE8E1D5),fontSize=18.sp,fontWeight=FontWeight.SemiBold)
-     Text("NEON EDITION  •  تعريب محلي  •  خصوصية",color=Color(0xFF8CA7D9),fontSize=12.sp)
+     Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF17231E)),shape=RoundedCornerShape(28.dp)) {
+      Column(Modifier.fillMaxWidth().padding(22.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
+       Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
+        Text("ARABIFY",color=Color(0xFF9AD8BC),fontSize=28.sp,fontWeight=FontWeight.Black,letterSpacing=2.sp)
+        Text("LOCAL ENGINE  ·  0.2",color=Color(0xFFD6A66D),fontSize=10.sp,fontWeight=FontWeight.Bold)
+       }
+       Text("خلّي ألعابك تتكلم عربي",color=Color(0xFFF0F1E8),fontSize=21.sp,fontWeight=FontWeight.Bold)
+       Text("محرك لفحص الألعاب والتطبيقات، واكتشاف النصوص والخطوط، وتجربة التعريب بأمان على جهازك.",color=Color(0xFFB8C6BE),fontSize=13.sp,lineHeight=20.sp)
+       Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {
+        Text("خصوصية محلية",color=Color(0xFF9AD8BC),fontSize=10.sp,fontWeight=FontWeight.SemiBold)
+        Text("•",color=Color(0xFFD6A66D))
+        Text("فحص قبل التعديل",color=Color(0xFFB8C6BE),fontSize=10.sp)
+       }
+      }
+     }
     }
     item {
-     Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF101A32)),shape=RoundedCornerShape(22.dp)) {
+     Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF141D1A)),shape=RoundedCornerShape(22.dp)) {
       Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
        Text("اختر من تطبيقات وألعاب هاتفك",color=Color.White,fontSize=19.sp,fontWeight=FontWeight.Bold)
-       Text("تظهر هنا التطبيقات المثبتة التي لها أيقونة تشغيل. اختر تطبيقًا لقراءة ملف التثبيت الأساسي محليًا.",color=Color(0xFFB9C1CB),fontSize=12.sp)
+       Text("تظهر هنا التطبيقات المثبتة التي لها أيقونة تشغيل. اختر تطبيقًا لقراءة ملف التثبيت الأساسي محليًا.",color=Color(0xFFB8C6BE),fontSize=12.sp)
        OutlinedTextField(value=appSearch,onValueChange={appSearch=it},label={Text("ابحث عن لعبة أو تطبيق")},modifier=Modifier.fillMaxWidth(),singleLine=true)
        val visibleApps=installedApps.filter { it.label.contains(appSearch,true) || it.packageName.contains(appSearch,true) }
-       if(visibleApps.isEmpty()) Text("لا توجد نتائج. تأكد من تثبيت التطبيق أو استخدم اختيار APK اليدوي.",color=Color(0xFF9BB1D8),fontSize=12.sp)
+       if(visibleApps.isEmpty()) Text("لا توجد نتائج. تأكد من تثبيت التطبيق أو استخدم اختيار APK اليدوي.",color=Color(0xFF9BAEA5),fontSize=12.sp)
        visibleApps.forEach { app ->
         Row(Modifier.fillMaxWidth().padding(vertical=5.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(11.dp)) {
          val appIcon=remember(app.packageName) { drawableToBitmap(context.packageManager.getApplicationIcon(app.packageName)).asImageBitmap() }
          Image(bitmap=appIcon,contentDescription="أيقونة التطبيق",modifier=Modifier.height(44.dp).fillMaxWidth(0.13f))
          Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)) {
           Text(app.label,color=Color.White,fontWeight=FontWeight.SemiBold,fontSize=14.sp)
-          Text(app.packageName,color=Color(0xFF91A7D4),fontSize=10.sp)
+          Text(app.packageName,color=Color(0xFF9BAEA5),fontSize=10.sp)
           if(app.splitCount>0) Text("حزمة أساسية + ${app.splitCount} ملفات Split إضافية",color=Color(0xFFFFC46B),fontSize=10.sp)
          }
          Button(onClick={
@@ -154,10 +169,10 @@ private fun ArabifyApp(context: Context) {
      }
     }
     item {
-     Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF101A32)),shape=RoundedCornerShape(20.dp)) {
+     Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF141D1A)),shape=RoundedCornerShape(20.dp)) {
       Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
        Text("محرك الترجمة المحلي",color=Color.White,fontSize=18.sp,fontWeight=FontWeight.Bold)
-       Text("تنبيه بوضوح: النسخة الحالية تستخدم نموذج ML Kit يتم تنزيله عند الطلب، وليس حزمة عربية/إنجليزية مضمّنة بالكامل. بعد التنزيل تعمل الترجمة النصية دون اتصال، لكن ذلك لا يعني تعريب كل ملفات اللعبة تلقائيًا.",color=Color(0xFFB9C1CB),fontSize=12.sp)
+       Text("تنبيه بوضوح: النسخة الحالية تستخدم نموذج ML Kit يتم تنزيله عند الطلب، وليس حزمة عربية/إنجليزية مضمّنة بالكامل. بعد التنزيل تعمل الترجمة النصية دون اتصال، لكن ذلك لا يعني تعريب كل ملفات اللعبة تلقائيًا.",color=Color(0xFFB8C6BE),fontSize=12.sp)
        Button(onClick={
         translationBusy=true;translationError=null
         scope.launch {
@@ -176,16 +191,16 @@ private fun ArabifyApp(context: Context) {
         }
        },enabled=modelReady&&!translationBusy&&translationInput.isNotBlank(),modifier=Modifier.fillMaxWidth()){Text("اختبار الترجمة المحلية")}
        if(translationBusy) CircularProgressIndicator()
-       translatedText?.let{Text(it,color=Color(0xFFE7D5AF),fontSize=17.sp)}
+       translatedText?.let{Text(it,color=Color(0xFFD6A66D),fontSize=17.sp)}
        translationError?.let{Text(it,color=Color(0xFFFF9B91),fontSize=12.sp)}
       }
      }
     }
     item {
-     Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF101A32)),shape=RoundedCornerShape(20.dp)) {
+     Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF141D1A)),shape=RoundedCornerShape(20.dp)) {
       Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
        Text("أو اختر ملف APK يدويًا",color=Color.White,fontSize=18.sp,fontWeight=FontWeight.Bold)
-       Text("هذا الخيار احتياطي للتطبيقات التي لا تظهر في القائمة أو لملف APK خارجي.",color=Color(0xFFB9C1CB),fontSize=13.sp)
+       Text("هذا الخيار احتياطي للتطبيقات التي لا تظهر في القائمة أو لملف APK خارجي.",color=Color(0xFFB8C6BE),fontSize=13.sp)
        Button(onClick={picker.launch(arrayOf("application/vnd.android.package-archive","application/octet-stream"))},enabled=!busy,modifier=Modifier.fillMaxWidth()){Text("اختيار ملف APK")}
        if(busy) Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)){CircularProgressIndicator();Text("جارٍ فحص بنية الملف...")}
        error?.let{Text(it,color=Color(0xFFFF9B91))}
@@ -195,48 +210,48 @@ private fun ArabifyApp(context: Context) {
     result?.let { scan ->
      item{SectionTitle("نتيجة الفحص")}
      item {
-      Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF101A32))) {
+      Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF141D1A))) {
        Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
         Text(scan.fileName,color=Color.White,fontWeight=FontWeight.Bold)
-        Text("المحرك: ${scan.engine.displayName}",color=Color(0xFFD7B77A))
-        Text("الحزمة: ${scan.packageName ?: "غير مستخرجة"}",color=Color(0xFFD4D9DF),fontSize=12.sp)
-        Text("الإصدار: ${scan.versionName ?: "غير معروف"}",color=Color(0xFFD4D9DF),fontSize=12.sp)
-        Text("الحجم: ${scan.fileSize/(1024*1024)} MB • عناصر ZIP: ${scan.entryCount} • ملفات DEX: ${scan.dexCount}",color=Color(0xFFD4D9DF),fontSize=12.sp)
+        Text("المحرك: ${scan.engine.displayName}",color=Color(0xFFD6A66D))
+        Text("الحزمة: ${scan.packageName ?: "غير مستخرجة"}",color=Color(0xFFD4DDD6),fontSize=12.sp)
+        Text("الإصدار: ${scan.versionName ?: "غير معروف"}",color=Color(0xFFD4DDD6),fontSize=12.sp)
+        Text("الحجم: ${scan.fileSize/(1024*1024)} MB • عناصر ZIP: ${scan.entryCount} • ملفات DEX: ${scan.dexCount}",color=Color(0xFFD4DDD6),fontSize=12.sp)
        }
       }
      }
      item {
-      Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF242B35)),shape=RoundedCornerShape(18.dp)) {
+      Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF1B2823)),shape=RoundedCornerShape(18.dp)) {
        Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-        Text("فحص الخطوط ودعم العربية",color=Color(0xFFE7D5AF),fontWeight=FontWeight.Bold,fontSize=17.sp)
-        Text("يفحص ملفات TTF/OTF المضمنة، ويقيس تغطية الحروف العربية، ويتحقق من وجود سجلات arab في جدولي OpenType GSUB وGPOS قبل ترشيح الخط. الاسم والامتداد وحدهما لا يكفيان.",color=Color(0xFFD0D7D2),fontSize=12.sp)
+        Text("فحص الخطوط ودعم العربية",color=Color(0xFFD6A66D),fontWeight=FontWeight.Bold,fontSize=17.sp)
+        Text("يفحص ملفات TTF/OTF المضمنة، ويقيس تغطية الحروف العربية، ويتحقق من وجود سجلات arab في جدولي OpenType GSUB وGPOS قبل ترشيح الخط. الاسم والامتداد وحدهما لا يكفيان.",color=Color(0xFFB8C6BE),fontSize=12.sp)
         if(scan.fontAssessments.isEmpty()) {
-         Text("لم يُعثر على خطوط TTF/OTF قابلة للفحص داخل APK.",color=Color(0xFFE5C58C),fontSize=12.sp)
+         Text("لم يُعثر على خطوط TTF/OTF قابلة للفحص داخل APK.",color=Color(0xFFE2BB80),fontSize=12.sp)
         } else {
          val best=scan.fontAssessments.first()
          Text("أفضل خط موجود: ${best.path}",color=Color.White,fontSize=12.sp,fontWeight=FontWeight.SemiBold)
-         Text("تغطية الحروف العربية: ${best.mappedArabicLetters}/${best.totalArabicLetters} (${best.coveragePercent}%)",color=if(best.suitableForArabic) Color(0xFFB8E4C8) else Color(0xFFE5C58C),fontSize=12.sp)
-         Text("جداول تشكيل OpenType: ${if(best.hasArabicShapingTables) "تم العثور على arab في GSUB وGPOS" else "غير مكتملة أو غير موجودة"}",color=if(best.hasArabicShapingTables) Color(0xFFB8E4C8) else Color(0xFFE5C58C),fontSize=12.sp)
+         Text("تغطية الحروف العربية: ${best.mappedArabicLetters}/${best.totalArabicLetters} (${best.coveragePercent}%)",color=if(best.suitableForArabic) Color(0xFFA8D9C0) else Color(0xFFE2BB80),fontSize=12.sp)
+         Text("جداول تشكيل OpenType: ${if(best.hasArabicShapingTables) "تم العثور على arab في GSUB وGPOS" else "غير مكتملة أو غير موجودة"}",color=if(best.hasArabicShapingTables) Color(0xFFA8D9C0) else Color(0xFFE2BB80),fontSize=12.sp)
          scan.fontAssessments.take(8).forEach { font ->
           val status = when {
            font.suitableForArabic -> "تغطية وتشكيل مرشحان"
            font.hasArabicShapingTables -> "تشكيل موجود لكن التغطية ناقصة"
            else -> "تشكيل عربي غير مؤكد"
           }
-          Text("• ${font.path} — ${font.coveragePercent}% · $status",color=Color(0xFFD4D9DF),fontSize=11.sp)
+          Text("• ${font.path} — ${font.coveragePercent}% · $status",color=Color(0xFFD4DDD6),fontSize=11.sp)
          }
         }
-        Text("تنبيه: هذه المرحلة ترشح الخطوط فقط؛ لا تضيف الخط إلى اللعبة ولا تبدل مراجعها تلقائيًا. وجود GSUB/GPOS لا يغني عن اختبار تشكيل العربية وRTL داخل محرك اللعبة الفعلي.",color=Color(0xFFE5C58C),fontSize=12.sp)
+        Text("تنبيه: هذه المرحلة ترشح الخطوط فقط؛ لا تضيف الخط إلى اللعبة ولا تبدل مراجعها تلقائيًا. وجود GSUB/GPOS لا يغني عن اختبار تشكيل العربية وRTL داخل محرك اللعبة الفعلي.",color=Color(0xFFE2BB80),fontSize=12.sp)
        }
       }
      }
      if(scan.engine==GameEngine.ANDROID) {
       item {
-       Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF101A32)),shape=RoundedCornerShape(18.dp)) {
+       Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF141D1A)),shape=RoundedCornerShape(18.dp)) {
         Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
-         Text("تعريب موارد Android",color=Color(0xFFE7D5AF),fontWeight=FontWeight.Bold,fontSize=17.sp)
-         Text("هذا المسار التجريبي يضيف موارد string عربية إلى resources.arsc. لا يشمل النصوص المخبأة داخل DEX أو محركات الألعاب.",color=Color(0xFFD0D7D2),fontSize=12.sp)
-         Text("يجب تنزيل نموذج الترجمة أولًا. التوقيع الجديد يعني أن تثبيت النسخة المعربة بدل الأصلية قد يتطلب إزالة النسخة الأصلية، وقد يؤدي ذلك لفقد بياناتها.",color=Color(0xFFE5C58C),fontSize=12.sp)
+         Text("تعريب موارد Android",color=Color(0xFFD6A66D),fontWeight=FontWeight.Bold,fontSize=17.sp)
+         Text("هذا المسار التجريبي يضيف موارد string عربية إلى resources.arsc. لا يشمل النصوص المخبأة داخل DEX أو محركات الألعاب.",color=Color(0xFFB8C6BE),fontSize=12.sp)
+         Text("يجب تنزيل نموذج الترجمة أولًا. التوقيع الجديد يعني أن تثبيت النسخة المعربة بدل الأصلية قد يتطلب إزالة النسخة الأصلية، وقد يؤدي ذلك لفقد بياناتها.",color=Color(0xFFE2BB80),fontSize=12.sp)
          Button(onClick={
           val uri=selectedUri
           if(uri!=null) {
@@ -266,7 +281,7 @@ private fun ArabifyApp(context: Context) {
           Text(if(localizationProgress.second>0) "تعريب الموارد: ${localizationProgress.first} من ${localizationProgress.second} (${(fraction*100).toInt()}%)" else "تهيئة وفحص موارد التطبيق…",color=Color.White,fontSize=12.sp)
          }
          localizationReport?.let { report ->
-          Text("اكتمل إنشاء الموارد العربية: ${report.translatedStrings} نصًا من ${report.discoveredStrings}.",color=Color(0xFFB8E4C8),fontSize=13.sp)
+          Text("اكتمل إنشاء الموارد العربية: ${report.translatedStrings} نصًا من ${report.discoveredStrings}.",color=Color(0xFFA8D9C0),fontSize=13.sp)
           Button(onClick={saveLauncher.launch("arabify_arabic.apk")},modifier=Modifier.fillMaxWidth()){Text("حفظ APK المعرب")}
          }
          localizationError?.let{Text(it,color=Color(0xFFFF9B91),fontSize=12.sp)}
@@ -277,12 +292,12 @@ private fun ArabifyApp(context: Context) {
      }
      if(scan.candidateFiles.isNotEmpty()) {
       item {
-       Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF101A32)),shape=RoundedCornerShape(18.dp)) {
+       Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF141D1A)),shape=RoundedCornerShape(18.dp)) {
         Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
-         Text("تعريب ملفات النصوص داخل اللعبة",color=Color(0xFFE7D5AF),fontWeight=FontWeight.Bold,fontSize=17.sp)
-         Text("يعالج هذا المسار ملفات JSON وTXT وProperties وStrings الموجودة داخل assets أو res/raw أو مجلدات localization/strings. يحافظ على مفاتيح JSON وخصائص الإعدادات والمتغيرات المعروفة.",color=Color(0xFFD0D7D2),fontSize=12.sp)
-         Text("لن يترجم ملفات ثنائية أو XML أو ملفات Unity/Unreal المشفرة. لا تعتبر النتيجة تعريبًا كاملًا للعبة.",color=Color(0xFFE5C58C),fontSize=12.sp)
-         if(scan.engine==GameEngine.UNITY) Text(UnityMonoLocalizer.supportedScope,color=Color(0xFFE5C58C),fontSize=12.sp)
+         Text("تعريب ملفات النصوص داخل اللعبة",color=Color(0xFFD6A66D),fontWeight=FontWeight.Bold,fontSize=17.sp)
+         Text("يعالج هذا المسار ملفات JSON وTXT وProperties وStrings الموجودة داخل assets أو res/raw أو مجلدات localization/strings. يحافظ على مفاتيح JSON وخصائص الإعدادات والمتغيرات المعروفة.",color=Color(0xFFB8C6BE),fontSize=12.sp)
+         Text("لن يترجم ملفات ثنائية أو XML أو ملفات Unity/Unreal المشفرة. لا تعتبر النتيجة تعريبًا كاملًا للعبة.",color=Color(0xFFE2BB80),fontSize=12.sp)
+         if(scan.engine==GameEngine.UNITY) Text(UnityMonoLocalizer.supportedScope,color=Color(0xFFE2BB80),fontSize=12.sp)
          Button(onClick={
           val uri=selectedUri
           if(uri!=null) {
@@ -331,7 +346,7 @@ private fun ArabifyApp(context: Context) {
           Text(if(assetProgress.second>0) "تعريب الملفات: ${assetProgress.first} من ${assetProgress.second} (${(fraction*100).toInt()}%)" else "استخراج الملفات وتحليل النصوص…",color=Color.White,fontSize=12.sp)
          }
          assetReport?.let { report ->
-          Text("الملفات: ${report.filesTranslated} / ${report.filesDiscovered} • النصوص المترجمة: ${report.stringsTranslated} • المتروكة: ${report.stringsSkipped}",color=Color(0xFFB8E4C8),fontSize=13.sp)
+          Text("الملفات: ${report.filesTranslated} / ${report.filesDiscovered} • النصوص المترجمة: ${report.stringsTranslated} • المتروكة: ${report.stringsSkipped}",color=Color(0xFFA8D9C0),fontSize=13.sp)
           Button(onClick={saveLauncher.launch("arabify_assets_arabic.apk")},modifier=Modifier.fillMaxWidth()){Text("حفظ APK بعد تعريب الملفات")}
          }
          assetError?.let{Text(it,color=Color(0xFFFF9B91),fontSize=12.sp)}
@@ -341,11 +356,11 @@ private fun ArabifyApp(context: Context) {
      }
      scan.unityAssetInventory?.let { inventory ->
       item {
-       Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF101A32)),shape=RoundedCornerShape(18.dp)) {
+       Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF141D1A)),shape=RoundedCornerShape(18.dp)) {
         Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-         Text("جرد موارد Unity — قراءة فقط",color=Color(0xFFE7D5AF),fontWeight=FontWeight.Bold,fontSize=17.sp)
-         Text(inventory.report,color=Color(0xFFD4D9DF),fontSize=12.sp)
-         Text("الفحص الحالي يقرأ بيانات SerializedFile الوصفية وجداول الأنواع والكائنات ضمن حدود ذاكرة، ويظل للقراءة فقط. لم يتم تعديل object payloads أو AssetBundles أو DLL.",color=Color(0xFFE5C58C),fontSize=12.sp)
+         Text("جرد موارد Unity — قراءة فقط",color=Color(0xFFD6A66D),fontWeight=FontWeight.Bold,fontSize=17.sp)
+         Text(inventory.report,color=Color(0xFFD4DDD6),fontSize=12.sp)
+         Text("الفحص الحالي يقرأ بيانات SerializedFile الوصفية وجداول الأنواع والكائنات ضمن حدود ذاكرة، ويظل للقراءة فقط. لم يتم تعديل object payloads أو AssetBundles أو DLL.",color=Color(0xFFE2BB80),fontSize=12.sp)
          inventory.items.take(12).forEach { asset ->
           val status = when(asset.support) {
            UnityAssetSupport.TEXT_CANDIDATE_READ_ONLY -> "مرشح نصي — غير معدل"
@@ -354,7 +369,7 @@ private fun ArabifyApp(context: Context) {
            UnityAssetSupport.PRESERVE_AS_EXTERNAL_DATA -> "بيانات جانبية — محفوظة"
            UnityAssetSupport.PRESERVE_UNSUPPORTED -> "غير مدعوم — محفوظ كما هو"
           }
-          Text("• ${asset.path} (${asset.sizeBytes} bytes)\n$status\n${asset.detail}",color=Color(0xFFD4D9DF),fontSize=10.sp)
+          Text("• ${asset.path} (${asset.sizeBytes} bytes)\n$status\n${asset.detail}",color=Color(0xFFD4DDD6),fontSize=10.sp)
          }
          if(inventory.items.size > 12) Text("يتم عرض أول 12 عنصرًا من أصل ${inventory.items.size}.",color=Color(0xFF9CA5B1),fontSize=10.sp)
         }
@@ -362,25 +377,26 @@ private fun ArabifyApp(context: Context) {
       }
      }
      item{SectionTitle("ملفات نصية محتملة (${scan.candidateFiles.size})")}
-     if(scan.candidateFiles.isEmpty()) item{Text("لم يتم العثور على ملفات نصية واضحة في المسارات المدعومة.",color=Color(0xFFB9C1CB))}
-     items(scan.candidateFiles){path->Text("• $path",color=Color(0xFFD4D9DF),fontSize=12.sp)}
+     if(scan.candidateFiles.isEmpty()) item{Text("لم يتم العثور على ملفات نصية واضحة في المسارات المدعومة.",color=Color(0xFFB8C6BE))}
+     items(scan.candidateFiles){path->Text("• $path",color=Color(0xFFD4DDD6),fontSize=12.sp)}
      item{SectionTitle("عينات نصية")}
-     if(scan.extractedTextSamples.isEmpty()) item{Text("لا توجد عينات نصية قابلة للقراءة في هذه المرحلة.",color=Color(0xFFB9C1CB))}
-     items(scan.extractedTextSamples){sample->Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF202630))){Text(sample,Modifier.fillMaxWidth().padding(12.dp),color=Color(0xFFE1E5E9),fontSize=11.sp)}}
+     if(scan.extractedTextSamples.isEmpty()) item{Text("لا توجد عينات نصية قابلة للقراءة في هذه المرحلة.",color=Color(0xFFB8C6BE))}
+     items(scan.extractedTextSamples){sample->Card(colors=CardDefaults.cardColors(containerColor=Color(0xFF202B26))){Text(sample,Modifier.fillMaxWidth().padding(12.dp),color=Color(0xFFE8EEE9),fontSize=11.sp)}}
      item{SectionTitle("ملاحظات وحدود الفحص")}
-     items(scan.notes){note->Text("• $note",color=Color(0xFFE5C58C),fontSize=12.sp)}
+     items(scan.notes){note->Text("• $note",color=Color(0xFFE2BB80),fontSize=12.sp)}
     }
     item {
      Spacer(Modifier.height(8.dp))
-     Text("الإصدار 0.2.0 — تعريب تجريبي لموارد string في تطبيقات Android الأصلية.",color=Color(0xFF78818D),fontSize=11.sp)
+     Text("الإصدار 0.2.0 — تعريب تجريبي لموارد string في تطبيقات Android الأصلية.",color=Color(0xFF78877F),fontSize=11.sp)
     }
    }
+  }
   }
  }
 }
 
 @Composable
-private fun SectionTitle(value:String){Text(value,color=Color(0xFF36DFFF),fontWeight=FontWeight.Bold,fontSize=16.sp)}
+private fun SectionTitle(value:String){Text(value,color=Color(0xFF9AD8BC),fontWeight=FontWeight.Bold,fontSize=16.sp)}
 
 private fun copyUriToCache(context:Context,uri:Uri):File {
  val file=File(context.cacheDir,"arabify-import-${System.currentTimeMillis()}.apk")
