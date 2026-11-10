@@ -45,13 +45,48 @@ jobs:
         run: native/bergamot/build-android.sh
       - name: Build x86_64 JNI for API 35 emulator runtime test
         run: ANDROID_ABI=x86_64 native/bergamot/build-android.sh
+      - name: Stage and verify CMake compile databases for both Android ABIs
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import shutil
+
+          root = pathlib.Path("build/bergamot-compile-databases")
+          root.mkdir(parents=True, exist_ok=True)
+          records = {}
+          missing = []
+          for abi in ("arm64-v8a", "x86_64"):
+              source = pathlib.Path(".build") / f"bergamot-android-{abi}" / "compile_commands.json"
+              if source.is_file() and source.stat().st_size:
+                  destination = root / f"{abi}-compile_commands.json"
+                  shutil.copy2(source, destination)
+                  digest = hashlib.sha256(destination.read_bytes()).hexdigest()
+                  records[abi] = {"file": destination.name, "bytes": destination.stat().st_size, "sha256": digest}
+              else:
+                  records[abi] = {"file": None, "bytes": 0, "sha256": None}
+                  missing.append(abi)
+          manifest = {
+              "commitSha": os.environ.get("GITHUB_SHA"),
+              "requiredAbis": ["arm64-v8a", "x86_64"],
+              "compileDatabases": records,
+              "missingAbis": missing
+          }
+          (root / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\\n")
+          print(json.dumps(manifest, indent=2))
+          if missing:
+              raise SystemExit("Missing compile database(s): " + ", ".join(missing))
+          PY
       - name: Upload CMake compile databases for both Android ABIs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: arabify-bergamot-compile-databases
-          path: .build/bergamot-android-*/compile_commands.json
-          if-no-files-found: warn
+          path: build/bergamot-compile-databases/
+          if-no-files-found: error
           retention-days: 14
       - name: Verify native library ABIs and dependencies
         run: |
