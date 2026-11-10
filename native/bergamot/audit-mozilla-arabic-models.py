@@ -110,8 +110,6 @@ def main() -> None:
         vocab_name = unpacked_names["vocab"]
         shortlist_name = unpacked_names["lexicalShortlist"]
         config = "\n".join([
-            "bergamot-mode: native",
-            "relative-paths: true",
             "models:",
             f"  - {model_name}",
             "vocabs:",
