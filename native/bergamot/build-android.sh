@@ -4,7 +4,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PIN="9271618ebbdc5d21ac4dc4df9e72beb7ce644774"
 SOURCE="${BERGAMOT_SOURCE_DIR:-$ROOT/.build/bergamot-translator}"
-BUILD="$ROOT/.build/bergamot-android-arm64"
+ABI="${ANDROID_ABI:-arm64-v8a}"
+case "$ABI" in
+  arm64-v8a) DEFAULT_ARCH=armv8-a; LIBCXX_ARCH=aarch64-linux-android ;;
+  x86_64) DEFAULT_ARCH=x86-64-v2; LIBCXX_ARCH=x86_64-linux-android ;;
+  *) echo "Unsupported ANDROID_ABI: $ABI" >&2; exit 5 ;;
+esac
+BUILD="$ROOT/.build/bergamot-android-$ABI"
+CPU_ARCH="${BUILD_ARCH:-$DEFAULT_ARCH}"
 NDK="${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-}}"
 
 if [[ -z "$NDK" || ! -f "$NDK/build/cmake/android.toolchain.cmake" ]]; then
@@ -34,18 +41,18 @@ fi
 
 cmake -S "$ROOT/native/bergamot" -B "$BUILD" -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
-  -DANDROID_ABI=arm64-v8a \
+  -DANDROID_ABI="$ABI" \
   -DANDROID_PLATFORM=android-28 \
   -DANDROID_STL=c++_shared \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_HAVE_LIBC_PTHREAD=ON \
-  -DBUILD_ARCH=armv8-a \
+  -DBUILD_ARCH="$CPU_ARCH" \
   -DBERGAMOT_SOURCE_DIR="$SOURCE"
 cmake --build "$BUILD" --target arabify_bergamot --parallel 2
 
-OUT="$ROOT/app/src/main/jniLibs/arm64-v8a"
+OUT="$ROOT/app/src/main/jniLibs/$ABI"
 mkdir -p "$OUT"
 find "$BUILD" -type f -name 'libarabify_bergamot.so' -exec cp {} "$OUT/" \; -quit
 test -s "$OUT/libarabify_bergamot.so"
-cp "$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" "$OUT/"
+cp "$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/${LIBCXX_ARCH}/libc++_shared.so" "$OUT/"
 sha256sum "$OUT"/*.so
