@@ -10,7 +10,7 @@ android {
   applicationId = "com.omega.arabify"
   minSdk = 31
   targetSdk = 35
-  ndk { abiFilters += listOf("arm64-v8a") }
+  ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
   testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   versionCode = 2
   versionName = "0.2.0"
