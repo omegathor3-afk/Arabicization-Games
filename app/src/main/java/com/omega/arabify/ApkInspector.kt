@@ -3,8 +3,28 @@ package com.omega.arabify
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.InputStream
 import java.util.zip.ZipFile
+
+/** Reads an archive entry with an actual-byte limit, not only its ZIP header size. */
+internal object BoundedArchiveInput {
+ fun readAll(input: InputStream, maxBytes: Long): ByteArray {
+  require(maxBytes in 0..Int.MAX_VALUE.toLong())
+  val output = ByteArrayOutputStream(minOf(maxBytes, 16L * 1024L).toInt())
+  val buffer = ByteArray(16 * 1024)
+  var total = 0L
+  while (true) {
+   val count = input.read(buffer)
+   if (count < 0) break
+   total = Math.addExact(total, count.toLong())
+   require(total <= maxBytes) { "Archive entry exceeded its configured byte limit." }
+   output.write(buffer, 0, count)
+  }
+  return output.toByteArray()
+ }
+}
 
 internal data class ApkScanResult(
  val fileName:String,val fileSize:Long,val packageName:String?,val versionName:String?,
@@ -16,6 +36,9 @@ internal object ApkInspector {
  private const val MAX_APK_BYTES=1_500L*1024L*1024L
  private const val MAX_SINGLE_TEXT_BYTES=512L*1024L
  private const val MAX_TOTAL_TEXT_BYTES=3L*1024L*1024L
+ private const val MAX_FONT_BYTES=20L*1024L*1024L
+ private const val MAX_ZIP_ENTRIES=100_000
+ private const val MAX_PATH_CHARS=4096
  private val extensions=setOf("json","xml","txt","csv","properties","po","strings","yaml","yml","ini")
  fun inspect(context:Context,uri:Uri):ApkScanResult {
   val resolver=context.contentResolver
@@ -35,9 +58,9 @@ internal object ApkInspector {
     val en=zip.entries()
     while(en.hasMoreElements()){
      val e=en.nextElement();if(e.isDirectory)continue
-     count++;val path=e.name;paths += path
+     count++;require(count<=MAX_ZIP_ENTRIES){"عدد ملفات الأرشيف يتجاوز حد الفحص الآمن (100,000)."};val path=e.name;require(path.length<=MAX_PATH_CHARS){"مسار داخل الأرشيف أطول من الحد الآمن."};paths += path
      if(ArabicFontAnalyzer.isFontPath(path)&&e.size in 1..(20L*1024L*1024L)&&fonts.size<64)try {
-      val fontBytes=zip.getInputStream(e).use{it.readBytes()}
+      val fontBytes=zip.getInputStream(e).use{BoundedArchiveInput.readAll(it,MAX_FONT_BYTES)}
       fonts +=ArabicFontAnalyzer.inspect(path,fontBytes)
      } catch(_:Exception){notes+="تعذر تحليل ملف الخط: $path"}
      if(path.matches(Regex("(^|.*/)classes([0-9]+)?\\.dex",RegexOption.IGNORE_CASE)))dex++
@@ -45,10 +68,13 @@ internal object ApkInspector {
      if(ext in extensions && (path.startsWith("assets/")||path.startsWith("res/raw/")||path.startsWith("localization/")||path.startsWith("strings/"))){
       candidates+=path
       val size=e.size
-      if(size in 1..MAX_SINGLE_TEXT_BYTES && textBytes+size<=MAX_TOTAL_TEXT_BYTES)try{
-       val body=zip.getInputStream(e).bufferedReader(Charsets.UTF_8).use{it.readText()};textBytes+=size
+      if(size in 1..MAX_SINGLE_TEXT_BYTES && textBytes<MAX_TOTAL_TEXT_BYTES)try{
+       val budget=minOf(MAX_SINGLE_TEXT_BYTES,MAX_TOTAL_TEXT_BYTES-textBytes)
+       val bodyBytes=zip.getInputStream(e).use{BoundedArchiveInput.readAll(it,budget)}
+       textBytes+=bodyBytes.size
+       val body=bodyBytes.toString(Charsets.UTF_8)
        body.lineSequence().map{it.trim()}.filter{it.length in 3..240&&it.any(Char::isLetter)}.take(8).forEach{line->if(samples.size<60)samples+="$path\n$line"}
-      }catch(_:Exception){notes+="تعذر قراءة نص UTF-8 من: $path"}
+      }catch(_:Exception){notes+="تعذر قراءة نص UTF-8 من: $path (تجاوز حد الحجم أو تلف الملف)"}
      }
     }
    }
