@@ -45,6 +45,14 @@ jobs:
         run: native/bergamot/build-android.sh
       - name: Build x86_64 JNI for API 35 emulator runtime test
         run: ANDROID_ABI=x86_64 native/bergamot/build-android.sh
+      - name: Upload CMake compile databases for both Android ABIs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arabify-bergamot-compile-databases
+          path: .build/bergamot-android-*/compile_commands.json
+          if-no-files-found: warn
+          retention-days: 14
       - name: Verify native library ABIs and dependencies
         run: |
           for abi in arm64-v8a x86_64; do
