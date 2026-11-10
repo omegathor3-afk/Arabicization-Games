@@ -4,7 +4,7 @@ This workflow tests the ARABIFY APK and runs an instrumentation test against a r
 
 ## Workflow
 
-Run **Actions → Firebase Test Lab - real game localization → Run workflow** on the branch `feat/unity-mono-streamingassets`.
+The workflow watches pushes to `feat/unity-mono-streamingassets`. To enable its Firebase job, first add the three secrets below and set the repository Actions variable `FIREBASE_TEST_LAB_ENABLED` to `true` under GitHub → Settings → Secrets and variables → Actions → Variables. Then push a commit to the branch. Until that explicit opt-in is set, the Firebase job is skipped and no Test Lab device minutes are consumed.
 
 The workflow:
 1. Builds the app and its Android instrumentation APK.
@@ -27,7 +27,13 @@ Configure Workload Identity Federation for GitHub Actions:
 3. Grant the provider's repository principal `roles/iam.workloadIdentityUser` on the dedicated service account.
 4. Enable the required Google APIs, including `testing.googleapis.com` and `iamcredentials.googleapis.com`.
 
-Add these three **repository Actions secrets** under GitHub → Settings → Secrets and variables → Actions:
+Add this **repository Actions variable** and these three **repository Actions secrets** under GitHub → Settings → Secrets and variables → Actions:
+
+| Variable | Value |
+|---|---|
+| `FIREBASE_TEST_LAB_ENABLED` | `true` (explicitly enables the Firebase job) |
+
+
 
 | Secret | Value |
 |---|---|
