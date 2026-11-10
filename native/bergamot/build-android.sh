@@ -55,6 +55,7 @@ if [[ "$ABI" == "x86_64" ]]; then
   python3 - "$BUILD/compile_commands.json" <<'PY'
 import json
 import pathlib
+import shlex
 import sys
 
 database = pathlib.Path(sys.argv[1])
@@ -65,10 +66,10 @@ matches = [entry for entry in commands if pathlib.Path(entry.get("file", "")).na
 if not matches:
     raise SystemExit("VectorTransform.cpp is absent from the x86_64 compile database")
 for entry in matches:
-    command = entry.get("command", " ".join(entry.get("arguments", [])))
-    if "-include pmmintrin.h" not in command:
-        raise SystemExit("FAISS VectorTransform.cpp is missing '-include pmmintrin.h': " + command)
-    print("Verified FAISS SSE header flag:", command)
+    arguments = entry.get("arguments") or shlex.split(entry.get("command", ""))
+    if not any(arguments[index:index + 2] == ["-include", "pmmintrin.h"] for index in range(len(arguments) - 1)):
+        raise SystemExit("FAISS VectorTransform.cpp is missing adjacent '-include pmmintrin.h' arguments: " + " ".join(arguments))
+    print("Verified FAISS SSE header flag:", " ".join(arguments))
 PY
 fi
 
