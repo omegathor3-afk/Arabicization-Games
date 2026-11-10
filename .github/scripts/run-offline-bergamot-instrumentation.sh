@@ -14,7 +14,7 @@ adb shell dumpsys connectivity > "$GITHUB_WORKSPACE/build/bergamot-instrumented/
 adb shell dumpsys wifi > "$GITHUB_WORKSPACE/build/bergamot-instrumented/wifi-before.txt" || true
 adb shell getprop ro.build.version.sdk > "$GITHUB_WORKSPACE/build/bergamot-instrumented/api-level.txt" || true
 adb shell getprop ro.build.fingerprint > "$GITHUB_WORKSPACE/build/bergamot-instrumented/build-fingerprint.txt" || true
-if gradle connectedDebugAndroidTest --stacktrace; then
+if gradle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.omega.arabify.BergamotOfflineInstrumentedTest --stacktrace; then
   test_status=0
 else
   test_status=$?
