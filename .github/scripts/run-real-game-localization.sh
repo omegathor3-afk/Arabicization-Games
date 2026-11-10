@@ -8,16 +8,12 @@ adb install build/test-game/minesweeper.apk || exit $?
 test_status=0
 gradle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.omega.arabify.RealGameLocalizationInstrumentedTest --stacktrace || test_status=$?
 
-# The instrumentation test writes evidence into app-private storage. Pull it
-# through run-as rather than /sdcard/Android/data, which adb shell cannot
-# reliably traverse on recent Android releases.
-EVIDENCE_DIR="files/real-game-test"
+# Instrumentation may uninstall the target app during cleanup. The test exports
+# its signed APK and report via MediaStore to the public Downloads collection.
 OUTPUT_DIR="build/test-game/localized/pulled-evidence"
 mkdir -p "$OUTPUT_DIR"
-if adb shell run-as com.omega.arabify test -s "$EVIDENCE_DIR/minesweeper-arabic.apk"; then
-  adb exec-out run-as com.omega.arabify cat "$EVIDENCE_DIR/minesweeper-arabic.apk" > "$OUTPUT_DIR/minesweeper-arabic.apk" || true
-  adb exec-out run-as com.omega.arabify cat "$EVIDENCE_DIR/report.txt" > "$OUTPUT_DIR/report.txt" || true
-fi
+adb pull /sdcard/Download/ARABIFY/minesweeper-arabic.apk "$OUTPUT_DIR/minesweeper-arabic.apk" || true
+adb pull /sdcard/Download/ARABIFY/report.txt "$OUTPUT_DIR/report.txt" || true
 
 GENERATED_APK="$OUTPUT_DIR/minesweeper-arabic.apk"
 launch_status=0
@@ -37,30 +33,33 @@ if [[ -s "$GENERATED_APK" ]]; then
     fi
   fi
 else
-  echo "Translated APK was not preserved by the instrumentation test." >&2
+  echo "Translated APK was not exported to the shared Downloads collection." >&2
   if [[ "$test_status" -eq 0 ]]; then test_status=1; fi
 fi
 if [[ "$test_status" -eq 0 && "$launch_status" -ne 0 ]]; then
   test_status="$launch_status"
 fi
 
-# Launch ARABIFY using its explicit manifest component; package-only monkey
-# discovery returned no launcher activity on the API 35 CI image.
+# connectedDebugAndroidTest can uninstall the target application at cleanup.
+# Reinstall the exact CI-built ARABIFY APK before exercising its launcher.
 ui_status=0
 mkdir -p build/maestro
-if ! adb shell am start -W -n com.omega.arabify/.MainActivity; then
-  ui_status=1
-else
-  sleep 5
-  adb shell pidof com.omega.arabify > build/maestro/app-process.txt || ui_status=$?
-  adb exec-out screencap -p > build/maestro/arabify-screen.png || ui_status=$?
-  adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || true
-  adb shell cat /sdcard/window.xml > build/maestro/window.xml || true
-  if ! grep -q "ARABIFY" build/maestro/window.xml; then
-    echo "ARABIFY launcher UI text was not found in the accessibility hierarchy." >&2
+adb install -r app/build/outputs/apk/debug/app-debug.apk || ui_status=$?
+if [[ "$ui_status" -eq 0 ]]; then
+  if ! adb shell am start -W -n com.omega.arabify/.MainActivity; then
     ui_status=1
+  else
+    sleep 5
+    adb shell pidof com.omega.arabify > build/maestro/app-process.txt || ui_status=$?
+    adb exec-out screencap -p > build/maestro/arabify-screen.png || ui_status=$?
+    adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || true
+    adb shell cat /sdcard/window.xml > build/maestro/window.xml || true
+    if ! grep -q "ARABIFY" build/maestro/window.xml; then
+      echo "ARABIFY launcher UI text was not found in the accessibility hierarchy." >&2
+      ui_status=1
+    fi
+    adb logcat -d -v time > build/maestro/launch-logcat.txt || true
   fi
-  adb logcat -d -v time > build/maestro/launch-logcat.txt || true
 fi
 if [[ "$test_status" -eq 0 && "$ui_status" -ne 0 ]]; then
   test_status="$ui_status"
