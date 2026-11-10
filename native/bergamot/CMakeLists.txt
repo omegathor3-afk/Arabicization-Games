@@ -15,6 +15,9 @@ set(COMPILE_CUDA OFF CACHE BOOL "" FORCE)
 set(USE_MKL OFF CACHE BOOL "" FORCE)
 set(USE_STATIC_LIBS ON CACHE BOOL "" FORCE)
 set(SSPLIT_COMPILE_LIBRARY_ONLY ON CACHE BOOL "" FORCE)
+# Android NDK does not ship system PCRE2; build the pinned ssplit dependency's
+# bundled PCRE2 as a static, PIC library instead of searching host libraries.
+set(SSPLIT_USE_INTERNAL_PCRE2 ON CACHE BOOL "" FORCE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 add_subdirectory("${BERGAMOT_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/bergamot-upstream" EXCLUDE_FROM_ALL)
