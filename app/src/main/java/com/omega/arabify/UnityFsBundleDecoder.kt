@@ -112,7 +112,13 @@ internal object UnityFsBundleDecoder {
                 for (block in blockInfo.blocks) {
                     val codec = unityCompressionCodecFromFlags(block.flags.toLong())
                         ?: error("Unsupported UnityFS storage-block compression")
-                    requireWorkingSet(block.compressedSize, block.uncompressedSize, codec, limits)
+                    requireWorkingSet(
+                        block.compressedSize,
+                        block.uncompressedSize,
+                        codec,
+                        limits,
+                        retainedBytes = Math.addExact(compressedInfoSize, uncompressedInfoSize)
+                    )
                     val compressedBytes = readRange(input, cursor, block.compressedSize.toInt())
                     cursor = Math.addExact(cursor, block.compressedSize)
                     totalDecoded = Math.addExact(totalDecoded, block.uncompressedSize)
@@ -181,9 +187,10 @@ internal object UnityFsBundleDecoder {
         compressedBytes: Long,
         decodedBytes: Long,
         codec: UnityCompressionCodec,
-        limits: UnityFsDecodeLimits
+        limits: UnityFsDecodeLimits,
+        retainedBytes: Long = 0L
     ) {
-        var required = Math.addExact(compressedBytes, decodedBytes)
+        var required = Math.addExact(retainedBytes, Math.addExact(compressedBytes, decodedBytes))
         if (codec == UnityCompressionCodec.LZMA_ALONE) {
             required = Math.addExact(required, limits.maxLzmaMemoryBytes)
         }
