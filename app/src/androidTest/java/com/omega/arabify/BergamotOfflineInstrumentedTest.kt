@@ -57,6 +57,11 @@ class BergamotOfflineInstrumentedTest {
                 val translateMs = SystemClock.elapsedRealtime() - translateStart
                 assertTrue("${direction.name} returned blank output", translated.isNotBlank())
                 assertNotEquals("${direction.name} returned unchanged source text", direction.input, translated)
+                if (direction.name == "ar-en") {
+                    assertTrue("ar-en output lacks Latin text: $translated", translated.any { it.code in 65..90 || it.code in 97..122 })
+                } else {
+                    assertTrue("en-ar output lacks Arabic script: $translated", translated.any { it.code in 0x0600..0x06FF || it.code in 0x0750..0x077F || it.code in 0x08A0..0x08FF })
+                }
 
                 val afterPssKb = Debug.MemoryInfo().let { info ->
                     Debug.getMemoryInfo(info)
