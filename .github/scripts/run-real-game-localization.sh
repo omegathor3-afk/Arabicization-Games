@@ -14,17 +14,25 @@ adb pull "$PRESERVED_DIR" build/test-game/localized/pulled-evidence || true
 GENERATED_APK="build/test-game/localized/pulled-evidence/minesweeper-arabic.apk"
 if [[ -s "$GENERATED_APK" ]]; then
   APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n1)"
-  test -x "$APKSIGNER"
-  "$APKSIGNER" verify --verbose "$GENERATED_APK"
+  launch_status=0
+  if [[ ! -x "$APKSIGNER" ]] || ! "$APKSIGNER" verify --verbose "$GENERATED_APK"; then
+    launch_status=1
+  fi
   adb uninstall com.joeld.minesweeper || true
-  adb install "$GENERATED_APK"
-  adb shell monkey -p com.joeld.minesweeper 1
-  sleep 8
-  adb shell pidof com.joeld.minesweeper > build/test-game/localized/game-process.txt
-  adb exec-out screencap -p > build/test-game/localized/minesweeper-arabic-screen.png
-  adb logcat -d -v time > build/test-game/localized/game-launch-logcat.txt
+  adb install "$GENERATED_APK" || launch_status=$?
+  if [[ "$launch_status" -eq 0 ]]; then
+    adb shell monkey -p com.joeld.minesweeper 1 || launch_status=$?
+    sleep 8
+    adb shell pidof com.joeld.minesweeper > build/test-game/localized/game-process.txt || launch_status=$?
+    adb exec-out screencap -p > build/test-game/localized/minesweeper-arabic-screen.png || launch_status=$?
+    adb logcat -d -v time > build/test-game/localized/game-launch-logcat.txt || true
+  fi
+  if [[ "$test_status" -eq 0 && "$launch_status" -ne 0 ]]; then
+    test_status="$launch_status"
+  fi
 else
   echo "Translated APK was not preserved by the instrumentation test." >&2
+  if [[ "$test_status" -eq 0 ]]; then test_status=1; fi
 fi
 
 exit "$test_status"
