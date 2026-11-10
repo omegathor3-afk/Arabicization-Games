@@ -1,0 +1,104 @@
+name: Firebase Test Lab - real game localization
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: arabify-firebase-test-lab
+  cancel-in-progress: false
+
+jobs:
+  real-game-localization:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/unity-mono-streamingassets
+
+      - name: Check Firebase Test Lab connection settings
+        env:
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          for name in FIREBASE_PROJECT_ID GCP_WORKLOAD_IDENTITY_PROVIDER GCP_SERVICE_ACCOUNT; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing GitHub Actions secret: $name"
+              exit 1
+            fi
+          done
+          echo "Firebase project and keyless GitHub OIDC authentication settings are present."
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+
+      - name: Build app and instrumentation APKs
+        run: gradle assembleDebug assembleDebugAndroidTest --stacktrace
+
+      - name: Download the open-source Minesweeper game used for the real-package test
+        run: |
+          mkdir -p build/test-game
+          curl --fail --location --retry 3 \
+            https://f-droid.org/repo/com.joeld.minesweeper_7.apk \
+            --output build/test-game/minesweeper.apk
+          test -s build/test-game/minesweeper.apk
+          sha256sum build/test-game/minesweeper.apk | tee build/test-game/SHA256SUMS
+
+      - name: Authenticate to Google Cloud using GitHub OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          project_id: ${{ secrets.FIREBASE_PROJECT_ID }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Verify Firebase Test Lab access and available Android targets
+        env:
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+        run: |
+          gcloud config set project "$FIREBASE_PROJECT_ID"
+          gcloud services list --enabled --filter="config.name:testing.googleapis.com" --format="value(config.name)"
+          gcloud firebase test android models list --filter="id:Pixel5" --format="table(id,name,form)"
+      
+      - name: Test ARABIFY and translate a real third-party game package on Firebase Test Lab
+        env:
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          gcloud firebase test android run \
+            --type instrumentation \
+            --app app/build/outputs/apk/debug/app-debug.apk \
+            --test app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk \
+            --additional-apks build/test-game/minesweeper.apk \
+            --device model=Pixel5,version=31,locale=ar,orientation=portrait \
+            --device model=Pixel5,version=31,locale=en,orientation=portrait \
+            --timeout 30m \
+            --use-orchestrator \
+            --record-video \
+            --performance-metrics \
+            --client-details matrixLabel=ARABIFY-real-game-localization,gitBranch=feat/unity-mono-streamingassets,game=com.joeld.minesweeper
+
+      - name: Upload test input identity and build outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arabify-firebase-test-inputs
+          path: |
+            build/test-game/SHA256SUMS
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          if-no-files-found: ignore
+          retention-days: 14
