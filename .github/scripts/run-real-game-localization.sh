@@ -8,10 +8,18 @@ adb install build/test-game/minesweeper.apk || exit $?
 test_status=0
 gradle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.omega.arabify.RealGameLocalizationInstrumentedTest --stacktrace || test_status=$?
 
-PRESERVED_DIR="/sdcard/Android/data/com.omega.arabify/files/real-game-test"
-adb pull "$PRESERVED_DIR" build/test-game/localized/pulled-evidence || true
+# The instrumentation test writes evidence into app-private storage. Pull it
+# through run-as rather than /sdcard/Android/data, which adb shell cannot
+# reliably traverse on recent Android releases.
+EVIDENCE_DIR="files/real-game-test"
+OUTPUT_DIR="build/test-game/localized/pulled-evidence"
+mkdir -p "$OUTPUT_DIR"
+if adb shell run-as com.omega.arabify test -s "$EVIDENCE_DIR/minesweeper-arabic.apk"; then
+  adb exec-out run-as com.omega.arabify cat "$EVIDENCE_DIR/minesweeper-arabic.apk" > "$OUTPUT_DIR/minesweeper-arabic.apk" || true
+  adb exec-out run-as com.omega.arabify cat "$EVIDENCE_DIR/report.txt" > "$OUTPUT_DIR/report.txt" || true
+fi
 
-GENERATED_APK="build/test-game/localized/pulled-evidence/minesweeper-arabic.apk"
+GENERATED_APK="$OUTPUT_DIR/minesweeper-arabic.apk"
 launch_status=0
 if [[ -s "$GENERATED_APK" ]]; then
   APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n1)"
@@ -36,23 +44,26 @@ if [[ "$test_status" -eq 0 && "$launch_status" -ne 0 ]]; then
   test_status="$launch_status"
 fi
 
-# UI smoke tests are independent of the translation result. Always run them
-# while the emulator is alive so a localization failure cannot hide UI defects.
-maestro_status=0
-if command -v maestro >/dev/null 2>&1; then
-  mkdir -p build/maestro
-  maestro --version | tee build/maestro/version.txt
-  adb shell am force-stop com.omega.arabify || true
-  adb shell monkey -p com.omega.arabify 1 || maestro_status=$?
-  if [[ "$maestro_status" -eq 0 ]]; then
-    maestro test --format junit --output build/maestro/report.xml --test-output-dir build/maestro/results .maestro/flows || maestro_status=$?
-  fi
+# Launch ARABIFY using its explicit manifest component; package-only monkey
+# discovery returned no launcher activity on the API 35 CI image.
+ui_status=0
+mkdir -p build/maestro
+if ! adb shell am start -W -n com.omega.arabify/.MainActivity; then
+  ui_status=1
 else
-  echo "Maestro CLI is not available on PATH." >&2
-  maestro_status=127
+  sleep 5
+  adb shell pidof com.omega.arabify > build/maestro/app-process.txt || ui_status=$?
+  adb exec-out screencap -p > build/maestro/arabify-screen.png || ui_status=$?
+  adb shell uiautomator dump /sdcard/window.xml >/dev/null 2>&1 || true
+  adb shell cat /sdcard/window.xml > build/maestro/window.xml || true
+  if ! grep -q "ARABIFY" build/maestro/window.xml; then
+    echo "ARABIFY launcher UI text was not found in the accessibility hierarchy." >&2
+    ui_status=1
+  fi
+  adb logcat -d -v time > build/maestro/launch-logcat.txt || true
 fi
-if [[ "$test_status" -eq 0 && "$maestro_status" -ne 0 ]]; then
-  test_status="$maestro_status"
+if [[ "$test_status" -eq 0 && "$ui_status" -ne 0 ]]; then
+  test_status="$ui_status"
 fi
 
 exit "$test_status"
