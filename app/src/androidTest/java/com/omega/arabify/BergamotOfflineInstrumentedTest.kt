@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Debug
 import android.os.SystemClock
+import android.provider.Settings
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -38,18 +39,14 @@ class BergamotOfflineInstrumentedTest {
             val modelDir = File(root, direction.name)
             val config = File(modelDir, "config.yml")
             assertTrue("Missing ${direction.name} config", config.isFile)
-            val modelBytes = modelDir.listFiles()
-                ?.filter { it.isFile && it.name != "config.yml" }
-                ?.sumOf { it.length() } ?: 0L
-            assertTrue("${direction.name} model package is unexpectedly small: $modelBytes", modelBytes > 30_000_000L)
+            val packageBytes = modelDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+            assertTrue("${direction.name} model package is unexpectedly small: $packageBytes", packageBytes > 30_000_000L)
 
-            val beforePssKb = Debug.MemoryInfo().let { info ->
-                Debug.getMemoryInfo(info)
-                info.totalPss
-            }
+            val beforePssKb = currentPssKb()
             val loadStart = SystemClock.elapsedRealtime()
             val session = BergamotNative.nativeCreate(config.absolutePath)
             val loadMs = SystemClock.elapsedRealtime() - loadStart
+            val afterLoadPssKb = currentPssKb()
             try {
                 assertTrue("${direction.name} native session was not created", session != 0L)
                 val translateStart = SystemClock.elapsedRealtime()
@@ -63,18 +60,18 @@ class BergamotOfflineInstrumentedTest {
                     assertTrue("en-ar output lacks Arabic script: $translated", translated.any { it.code in 0x0600..0x06FF || it.code in 0x0750..0x077F || it.code in 0x08A0..0x08FF })
                 }
 
-                val afterPssKb = Debug.MemoryInfo().let { info ->
-                    Debug.getMemoryInfo(info)
-                    info.totalPss
-                }
+                val afterTranslatePssKb = currentPssKb()
                 Log.i(
                     tag,
-                    "direction=${direction.name} packageBytes=$modelBytes loadMs=$loadMs " +
-                        "translateMs=$translateMs pssBeforeKb=$beforePssKb pssAfterKb=$afterPssKb"
+                    "direction=${direction.name} packageBytes=$packageBytes loadMs=$loadMs " +
+                        "translateMs=$translateMs pssBeforeKb=$beforePssKb " +
+                        "pssAfterLoadKb=$afterLoadPssKb pssAfterTranslateKb=$afterTranslatePssKb " +
+                        "translated=${translated.replace('\n', ' ')}"
                 )
                 assertTrue("${direction.name} load time was not measured", loadMs > 0L)
                 assertTrue("${direction.name} translation time was not measured", translateMs >= 0L)
-                assertTrue("${direction.name} memory measurement unavailable", afterPssKb > 0)
+                assertTrue("${direction.name} memory measurement unavailable", afterLoadPssKb > 0 && afterTranslatePssKb > 0)
+
             } finally {
                 BergamotNative.nativeDestroy(session)
             }
@@ -82,12 +79,35 @@ class BergamotOfflineInstrumentedTest {
     }
 
     private fun assertNoInternet(context: Context) {
+        val airplaneModeEnabled = Settings.Global.getInt(
+            context.contentResolver,
+            Settings.Global.AIRPLANE_MODE_ON,
+            0
+        ) == 1
+        assertTrue("CI emulator must have airplane mode enabled", airplaneModeEnabled)
+
         val connectivity = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val network = connectivity.activeNetwork
-        val hasInternet = network?.let {
-            connectivity.getNetworkCapabilities(it)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-        } ?: false
-        assertFalse("CI emulator must have networking disabled for this offline test", hasInternet)
+        val internetCapableNetworks = connectivity.allNetworks.filter { network ->
+            val capabilities = connectivity.getNetworkCapabilities(network)
+            capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true ||
+                capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
+        }
+        assertTrue(
+            "CI emulator still exposes internet-capable networks: ${internetCapableNetworks.size}",
+            internetCapableNetworks.isEmpty()
+        )
+        val activeNetwork = connectivity.activeNetwork
+        val activeCapabilities = activeNetwork?.let(connectivity::getNetworkCapabilities)
+        assertFalse(
+            "CI emulator active network still has internet capability",
+            activeCapabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+        )
+    }
+
+    private fun currentPssKb(): Int {
+        val info = Debug.MemoryInfo()
+        Debug.getMemoryInfo(info)
+        return info.totalPss
     }
 
     private fun copyAssetTree(context: Context, assetPath: String, destination: File) {
