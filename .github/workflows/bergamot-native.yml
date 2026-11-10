@@ -128,7 +128,8 @@ jobs:
           disable-animations: true
           script: |
             adb shell settings put global airplane_mode_on 1
-            adb shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state true
             adb shell svc wifi disable
             adb shell svc data disable
+            adb shell cmd connectivity airplane-mode enable || true
+            adb shell dumpsys connectivity
             ./gradlew connectedDebugAndroidTest --stacktrace
