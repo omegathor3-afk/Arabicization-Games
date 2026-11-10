@@ -89,66 +89,82 @@ internal object ApkBackupManager {
 
     fun extractAndVerify(archive: File, destination: File): VerifiedApkBackup {
         require(archive.isFile) { "ملف النسخة الاحتياطية غير موجود." }
-        destination.mkdirs()
-        require(destination.isDirectory) { "تعذر تجهيز مجلد الاستعادة." }
-        ZipFile(archive).use { zip ->
-            val manifestEntry = zip.getEntry(MANIFEST) ?: error("ملف النسخة الاحتياطية لا يحتوي على manifest.")
-            val manifestText = zip.getInputStream(manifestEntry).use { input ->
-                BoundedArchiveInput.readAll(input, MAX_MANIFEST_BYTES).toString(Charsets.UTF_8)
-            }
-            val manifest = JSONObject(manifestText)
-            require(manifest.optString("format") == "ARABIFY_APK_BACKUP") { "صيغة النسخة الاحتياطية غير معروفة." }
-            require(manifest.optInt("schemaVersion") == 1) { "إصدار النسخة الاحتياطية غير مدعوم." }
-            val packageName = manifest.getString("packageName")
-            require(packageName.isNotBlank()) { "اسم الحزمة غير صالح." }
-            val array = manifest.getJSONArray("apks")
-            require(array.length() in 1..MAX_APK_COUNT) { "قائمة ملفات APK غير صالحة." }
-            var total = 0L
-            val seenEntries = HashSet<String>()
-            val verified = ArrayList<BackupApk>(array.length())
-            for (index in 0 until array.length()) {
-                val item = array.getJSONObject(index)
-                val entryName = item.getString("entry")
-                require(seenEntries.add(entryName)) { "ملف مكرر داخل manifest." }
-                require((index == 0 && entryName == "base.apk") || (index > 0 && entryName == "splits/split-%02d.apk".format(index))) {
-                    "مسار ملف داخل النسخة الاحتياطية غير مسموح."
+        require(!destination.exists() || (destination.isDirectory && destination.list()?.isEmpty() == true)) {
+            "مجلد الاستعادة موجود وغير فارغ."
+        }
+        require(destination.mkdirs() || destination.isDirectory) { "تعذر تجهيز مجلد الاستعادة." }
+        try {
+            return ZipFile(archive).use { zip ->
+                val zipNames = HashSet<String>()
+                val entries = zip.entries()
+                while (entries.hasMoreElements()) {
+                    val entry = entries.nextElement()
+                    require(zipNames.add(entry.name)) { "مدخل مكرر داخل ملف النسخة الاحتياطية." }
+                    require(!entry.isDirectory) { "المجلدات غير مسموحة داخل النسخة الاحتياطية." }
                 }
-                val expectedSize = item.getLong("sizeBytes")
-                require(expectedSize in 1..MAX_APK_BYTES) { "حجم APK في manifest غير صالح." }
-                total = Math.addExact(total, expectedSize)
-                require(total <= MAX_TOTAL_BYTES) { "الحجم الإجمالي للنسخة الاحتياطية أكبر من الحد." }
-                val source = zip.getEntry(entryName) ?: error("ملف APK مفقود من النسخة الاحتياطية: $entryName")
-                require(!source.isDirectory) { "مدخل APK غير صالح." }
-                val target = File(destination, entryName)
-                require(target.canonicalPath.startsWith(destination.canonicalPath + File.separator)) { "مسار استخراج غير آمن." }
-                target.parentFile?.mkdirs()
-                zip.getInputStream(source).use { input ->
-                    FileOutputStream(target).use { output ->
-                        val buffer = ByteArray(64 * 1024)
-                        var copied = 0L
-                        while (true) {
-                            val count = input.read(buffer)
-                            if (count < 0) break
-                            copied = Math.addExact(copied, count.toLong())
-                            require(copied <= expectedSize && copied <= MAX_APK_BYTES) { "حجم APK الفعلي تجاوز القيمة المسجلة." }
-                            output.write(buffer, 0, count)
-                        }
-                        require(copied == expectedSize) { "حجم APK لا يطابق manifest." }
+                require(MANIFEST in zipNames) { "ملف النسخة الاحتياطية لا يحتوي على manifest." }
+                val manifestEntry = zip.getEntry(MANIFEST)
+                val manifestText = zip.getInputStream(manifestEntry).use { input ->
+                    BoundedArchiveInput.readAll(input, MAX_MANIFEST_BYTES).toString(Charsets.UTF_8)
+                }
+                val manifest = JSONObject(manifestText)
+                require(manifest.optString("format") == "ARABIFY_APK_BACKUP") { "صيغة النسخة الاحتياطية غير معروفة." }
+                require(manifest.optInt("schemaVersion") == 1) { "إصدار النسخة الاحتياطية غير مدعوم." }
+                val packageName = manifest.getString("packageName")
+                require(packageName.matches(Regex("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+"))) { "اسم الحزمة غير صالح." }
+                val array = manifest.getJSONArray("apks")
+                require(array.length() in 1..MAX_APK_COUNT) { "قائمة ملفات APK غير صالحة." }
+                var total = 0L
+                val expectedEntries = linkedSetOf(MANIFEST)
+                val verified = ArrayList<BackupApk>(array.length())
+                for (index in 0 until array.length()) {
+                    val item = array.getJSONObject(index)
+                    val entryName = item.getString("entry")
+                    require((index == 0 && entryName == "base.apk") || (index > 0 && entryName == "splits/split-%02d.apk".format(index))) {
+                        "مسار ملف داخل النسخة الاحتياطية غير مسموح."
                     }
+                    require(expectedEntries.add(entryName)) { "ملف مكرر داخل manifest." }
+                    val expectedSize = item.getLong("sizeBytes")
+                    require(expectedSize in 1..MAX_APK_BYTES) { "حجم APK في manifest غير صالح." }
+                    total = Math.addExact(total, expectedSize)
+                    require(total <= MAX_TOTAL_BYTES) { "الحجم الإجمالي للنسخة الاحتياطية أكبر من الحد." }
+                    val source = zip.getEntry(entryName) ?: error("ملف APK مفقود من النسخة الاحتياطية: $entryName")
+                    require(!source.isDirectory) { "مدخل APK غير صالح." }
+                    val target = File(destination, entryName)
+                    require(target.canonicalPath.startsWith(destination.canonicalPath + File.separator)) { "مسار استخراج غير آمن." }
+                    target.parentFile?.mkdirs()
+                    zip.getInputStream(source).use { input ->
+                        FileOutputStream(target).use { output ->
+                            val buffer = ByteArray(64 * 1024)
+                            var copied = 0L
+                            while (true) {
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                copied = Math.addExact(copied, count.toLong())
+                                require(copied <= expectedSize && copied <= MAX_APK_BYTES) { "حجم APK الفعلي تجاوز القيمة المسجلة." }
+                                output.write(buffer, 0, count)
+                            }
+                            require(copied == expectedSize) { "حجم APK لا يطابق manifest." }
+                        }
+                    }
+                    val actualHash = sha256(target)
+                    require(item.getString("sha256").matches(Regex("[a-fA-F0-9]{64}"))) { "قيمة SHA-256 في manifest غير صالحة." }
+                    require(actualHash.equals(item.getString("sha256"), ignoreCase = true)) {
+                        "فشل التحقق من SHA-256 للملف $entryName."
+                    }
+                    verified += BackupApk(entryName, target, actualHash, expectedSize)
                 }
-                val actualHash = sha256(target)
-                require(actualHash.equals(item.getString("sha256"), ignoreCase = true)) {
-                    "فشل التحقق من SHA-256 للملف $entryName."
-                }
-                verified += BackupApk(entryName, target, actualHash, expectedSize)
+                require(zipNames == expectedEntries) { "ملف ZIP يحتوي على مدخلات غير موثقة في manifest." }
+                VerifiedApkBackup(
+                    packageName = packageName,
+                    appLabel = manifest.optString("appLabel", packageName),
+                    versionName = manifest.optString("versionName").takeUnless { it == "null" || it.isBlank() },
+                    apks = verified
+                )
             }
-            require(verified.first().name == "base.apk") { "ملف APK الأساسي غير موجود." }
-            return VerifiedApkBackup(
-                packageName = packageName,
-                appLabel = manifest.optString("appLabel", packageName),
-                versionName = manifest.optString("versionName").takeUnless { it == "null" || it.isBlank() },
-                apks = verified
-            )
+        } catch (error: Exception) {
+            destination.deleteRecursively()
+            throw error
         }
     }
 }
