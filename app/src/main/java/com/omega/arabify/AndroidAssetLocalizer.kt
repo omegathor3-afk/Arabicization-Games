@@ -128,6 +128,9 @@ internal object AndroidAssetLocalizer {
  private const val MAX_FILE_BYTES=512L*1024L
  private const val MAX_TOTAL_TRANSLATION_BYTES=4L*1024L*1024L
  private const val MAX_CANDIDATE_FILES=2048
+ private const val MAX_ARCHIVE_ENTRIES=100_000
+ private const val MAX_SINGLE_REBUILT_ENTRY_BYTES=2L*1024L*1024L*1024L
+ private const val MAX_TOTAL_REBUILT_BYTES=4L*1024L*1024L*1024L
  private val supported=setOf("json","txt","properties","strings")
  private val allowedRoots=listOf("assets/","res/raw/","localization/","strings/")
 
@@ -191,8 +194,11 @@ internal object AndroidAssetLocalizer {
    val entries=zip.entries()
    val candidates=mutableListOf<ZipEntry>()
    var hasNativeLibraries=false
+   var archiveEntryCount=0
    while(entries.hasMoreElements()){
     val entry=entries.nextElement()
+    archiveEntryCount++
+    require(archiveEntryCount<=MAX_ARCHIVE_ENTRIES){"عدد عناصر APK يتجاوز حد إعادة البناء الآمن (100,000)."}
     if(entry.name.startsWith("lib/")&&entry.name.endsWith(".so",true))hasNativeLibraries=true
     if(!entry.isDirectory&&isSupportedTextAsset(entry.name,entry.size,allowedPathPrefixes)){
      candidates+=entry
@@ -232,8 +238,12 @@ internal object AndroidAssetLocalizer {
    unsignedApk.parentFile?.mkdirs()
    ZipOutputStream(unsignedApk.outputStream().buffered()).use { out ->
     val all=zip.entries()
+    var copiedArchiveBytes=0L
+    var writtenEntries=0
     while(all.hasMoreElements()){
      val entry=all.nextElement()
+     writtenEntries++
+     require(writtenEntries<=MAX_ARCHIVE_ENTRIES){"عدد عناصر APK تغير أثناء إعادة البناء."}
      if(isOldSignature(entry.name))continue
      val target=ZipEntry(entry.name).apply{
       time=entry.time
@@ -242,8 +252,20 @@ internal object AndroidAssetLocalizer {
      out.putNextEntry(target)
      if(!entry.isDirectory){
       val replacement=transformed[entry.name]
-      if(replacement!=null)out.write(replacement)
-      else zip.getInputStream(entry).use{it.copyTo(out)}
+      val remaining=MAX_TOTAL_REBUILT_BYTES-copiedArchiveBytes
+      require(remaining>=0L){"الحجم المفكوك للأرشيف تجاوز حد إعادة البناء الآمن."}
+      val entryBudget=minOf(MAX_SINGLE_REBUILT_ENTRY_BYTES,remaining)
+      if(replacement!=null){
+       require(replacement.size.toLong()<=entryBudget){"النص المعرب تجاوز حد حجم الملف الآمن."}
+       out.write(replacement)
+       copiedArchiveBytes=Math.addExact(copiedArchiveBytes,replacement.size.toLong())
+      } else {
+       val copied=zip.getInputStream(entry).use{BoundedArchiveInput.copy(it,out,entryBudget)}
+       require(entry.size<0L || copied==entry.size){
+        "حجم عنصر ZIP الفعلي لا يطابق بياناته: ${entry.name}"
+       }
+       copiedArchiveBytes=Math.addExact(copiedArchiveBytes,copied)
+      }
      }
      out.closeEntry()
     }
