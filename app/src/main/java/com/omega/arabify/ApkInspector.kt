@@ -24,6 +24,20 @@ internal object BoundedArchiveInput {
   }
   return output.toByteArray()
  }
+
+ fun copy(input: InputStream, output: java.io.OutputStream, maxBytes: Long): Long {
+  require(maxBytes >= 0L)
+  val buffer = ByteArray(64 * 1024)
+  var total = 0L
+  while (true) {
+   val count = input.read(buffer)
+   if (count < 0) break
+   total = Math.addExact(total, count.toLong())
+   require(total <= maxBytes) { "Archive entry exceeded its configured copy limit." }
+   output.write(buffer, 0, count)
+  }
+  return total
+ }
 }
 
 internal data class ApkScanResult(
