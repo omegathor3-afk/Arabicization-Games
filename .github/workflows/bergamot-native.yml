@@ -24,6 +24,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # The legacy 'tools' package was removed from Google's SDK repository.
+          packages: 'platform-tools'
       - name: Install pinned Android NDK and CMake
         run: |
           sdkmanager --install "ndk;27.2.12479018" "cmake;3.31.6"
