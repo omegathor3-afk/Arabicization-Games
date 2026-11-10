@@ -96,10 +96,11 @@ class RealGameLocalizationInstrumentedTest {
 
             // Preserve the generated APK outside cache so CI and Test Lab can
             // pull the exact artifact and perform a separate install/launch check.
-            val evidenceBase = context.getExternalFilesDir(null)
-                ?: error("External app-specific storage is unavailable on the test device")
-            val evidenceDir = File(evidenceBase, "real-game-test")
-            evidenceDir.mkdirs()
+            // Keep CI evidence in the app's private files directory. Android 15
+            // may deny adb shell direct traversal of /sdcard/Android/data even
+            // though the app itself can write there; CI retrieves this via run-as.
+            val evidenceDir = File(context.filesDir, "real-game-test")
+            check(evidenceDir.mkdirs() || evidenceDir.isDirectory)
             val preservedApk = File(evidenceDir, "minesweeper-arabic.apk")
             output.copyTo(preservedApk, overwrite = true)
             File(evidenceDir, "report.txt").writeText(
