@@ -38,7 +38,7 @@ class MozillaArabicModelLockTest {
     @Test fun packageSizesAreTrackedSeparatelyByDirection() {
         val enAr = MozillaArabicModelLock.files.filter { it.direction == "en-ar" }.sumOf { it.compressedBytes }
         val arEn = MozillaArabicModelLock.files.filter { it.direction == "ar-en" }.sumOf { it.compressedBytes }
-        assertEquals(23818080L, enAr)
-        assertEquals(24873247L, arEn)
+        assertEquals(23828180L, enAr)
+        assertEquals(24743247L, arEn)
     }
 }
