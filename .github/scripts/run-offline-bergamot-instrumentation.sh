@@ -19,7 +19,11 @@ if gradle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments
 else
   test_status=$?
 fi
-adb logcat -d -v threadtime -s BergamotOfflineTest:I > "$GITHUB_WORKSPACE/build/bergamot-instrumented/instrumentation.log"
+# Keep both focused phase markers and the complete device/crash buffers.
+adb logcat -d -v threadtime -s BergamotOfflineTest:I > "$GITHUB_WORKSPACE/build/bergamot-instrumented/instrumentation.log" || true
+adb logcat -b all -d -v threadtime > "$GITHUB_WORKSPACE/build/bergamot-instrumented/device-logcat-all.txt" || true
+adb logcat -b crash -d -v threadtime > "$GITHUB_WORKSPACE/build/bergamot-instrumented/crash-logcat.txt" || true
+adb shell dumpsys meminfo com.omega.arabify > "$GITHUB_WORKSPACE/build/bergamot-instrumented/app-meminfo-after.txt" || true
 adb shell settings get global airplane_mode_on > "$GITHUB_WORKSPACE/build/bergamot-instrumented/airplane-mode-after.txt" || true
 adb shell settings get global wifi_on > "$GITHUB_WORKSPACE/build/bergamot-instrumented/wifi-setting-after.txt" || true
 adb shell settings get global mobile_data > "$GITHUB_WORKSPACE/build/bergamot-instrumented/mobile-data-after.txt" || true
