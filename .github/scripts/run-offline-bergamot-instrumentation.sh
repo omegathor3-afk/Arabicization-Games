@@ -3,6 +3,7 @@ cd "$GITHUB_WORKSPACE"
 mkdir -p "$GITHUB_WORKSPACE/build/bergamot-instrumented"
 adb shell settings put global airplane_mode_on 1
 adb shell svc wifi disable
+adb shell settings put global mobile_data 0
 adb shell svc data disable
 adb shell cmd wifi set-wifi-enabled disabled || true
 adb shell cmd connectivity airplane-mode enable || true
