@@ -38,3 +38,32 @@ Mozilla documents Arabic among Firefox Translations supported languages, and the
 - RTranslator 3.0 project description: https://nlnet.nl/project/RTranslator/
 - MADLAD-400 model card: https://huggingface.co/google/madlad400-7b-mt-bt (Apache-2.0 model card; 7B-class weights are not a practical default for modest Android devices).
 - Firefox Translations model mirror: https://huggingface.co/midudev/firefox-translations (MPL-2.0; direction-specific packages; verify Arabic availability from the registry before selecting).
+
+
+## Verified Mozilla Arabic registry snapshot (2026-11-10)
+
+The official Mozilla Remote Settings collection `translations-models-v2` was fetched directly. It contained 404 records in this snapshot and exactly six records for Arabic: three for `en→ar` and three for `ar→en` (model, lexicon shortlist, SentencePiece vocabulary). All six are version `3.0`, architecture `base-memory`. The exact compressed and decompressed SHA-256 values, sizes and attachment locations are pinned in:
+
+- `app/src/main/assets/translation-models/mozilla-arabic-models-v2.lock.json`
+- `MozillaArabicModelLock.kt` with unit tests.
+
+Each direction is a separate package; the compressed download totals are 23,828,180 bytes for en→ar and 24,743,247 bytes for ar→en (about 48.6 MB before decompression and storage overhead). The decompressed payloads total more; do not advertise this as the installed footprint. Mozilla's `mozilla/translations` repository states that its published model files are MPL-2.0. The registry hashes are integrity metadata, not proof of output quality or native compatibility.
+
+## Engine pin candidate and Android integration boundary
+
+Pinned source candidate: `browsermt/bergamot-translator@9271618ebbdc5d21ac4dc4df9e72beb7ce644774` (MPL-2.0). Its recorded submodule revisions are:
+
+- `3rd_party/marian-dev`: `2781d735d4a10dca876d61be587afdab2726293c`
+- `3rd_party/ssplit-cpp`: `a311f9865ade34db1e8e080e6cc146f55dafb067`
+- `3rd_party/pybind11`: `9ec1128c7aac3d069a4ec2bd1dfc7f57c6526d1c`
+- `bergamot-translator-tests`: `a04432d7921bfa1dd62bc2e5cdca46b226f256de`
+
+This is a source pin, not yet an Android native binary. The upstream CMake project is C++17 and initializes git submodules during CMake configuration by default. A mobile integration must explicitly disable implicit submodule mutation and check out the exact gitlinks above. The Android JNI pattern in RTranslator v3.00 is a useful implementation reference, but its app-level Apache-2.0 license does not relicense Bergamot, Marian, SentencePiece or other native dependencies.
+
+**Compatibility gate still open:** model v3.0 uses zstd-compressed registry attachments and must be decompressed and checked against each published decompressed hash before loading. We have not yet proved that this exact engine pin can load these model-v3.0 payloads on Android arm64-v8a. We have not built JNI, translated a real sentence, or measured Android memory/latency. Do not mark Bergamot as available until those checks pass.
+
+Sources:
+- Official Mozilla registry: https://firefox.settings.services.mozilla.com/v1/buckets/main/collections/translations-models-v2/records
+- Mozilla model source and MPL-2.0 statement: https://github.com/mozilla/translations
+- Pinned Bergamot source: https://github.com/browsermt/bergamot-translator/tree/9271618ebbdc5d21ac4dc4df9e72beb7ce644774
+- Android JNI reference: https://github.com/niedev/RTranslator/tree/v3.00
