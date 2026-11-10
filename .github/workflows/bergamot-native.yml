@@ -101,6 +101,8 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
       - uses: actions/download-artifact@v4
         with:
           name: arabify-bergamot-arm64-jni
@@ -135,20 +137,28 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
           script: |
+            set -uo pipefail
+            cd "$GITHUB_WORKSPACE"
+            mkdir -p "$GITHUB_WORKSPACE/build/bergamot-instrumented"
             adb shell settings put global airplane_mode_on 1
             adb shell svc wifi disable
             adb shell svc data disable
             adb shell cmd connectivity airplane-mode enable || true
-            adb shell dumpsys connectivity
+            adb shell settings get global airplane_mode_on > "$GITHUB_WORKSPACE/build/bergamot-instrumented/airplane-mode-before.txt" || true
+            adb shell settings get global wifi_on > "$GITHUB_WORKSPACE/build/bergamot-instrumented/wifi-setting-before.txt" || true
+            adb shell settings get global mobile_data > "$GITHUB_WORKSPACE/build/bergamot-instrumented/mobile-data-before.txt" || true
+            adb shell dumpsys connectivity > "$GITHUB_WORKSPACE/build/bergamot-instrumented/connectivity-before.txt" || true
+            adb shell dumpsys wifi > "$GITHUB_WORKSPACE/build/bergamot-instrumented/wifi-before.txt" || true
             set +e
-            ./gradlew connectedDebugAndroidTest --stacktrace
+            gradle connectedDebugAndroidTest --stacktrace
             test_status=$?
-            mkdir -p build/bergamot-instrumented
-            adb logcat -d -v threadtime -s BergamotOfflineTest:I > build/bergamot-instrumented/instrumentation.log
-            adb shell settings get global airplane_mode_on > build/bergamot-instrumented/airplane-mode.txt || true
-            adb shell dumpsys connectivity > build/bergamot-instrumented/connectivity.txt || true
-            adb shell dumpsys wifi > build/bergamot-instrumented/wifi.txt || true
-            printf '%s\n' "$test_status" > build/bergamot-instrumented/test-exit-code.txt
+            adb logcat -d -v threadtime -s BergamotOfflineTest:I > "$GITHUB_WORKSPACE/build/bergamot-instrumented/instrumentation.log"
+            adb shell settings get global airplane_mode_on > "$GITHUB_WORKSPACE/build/bergamot-instrumented/airplane-mode-after.txt" || true
+            adb shell settings get global wifi_on > "$GITHUB_WORKSPACE/build/bergamot-instrumented/wifi-setting-after.txt" || true
+            adb shell settings get global mobile_data > "$GITHUB_WORKSPACE/build/bergamot-instrumented/mobile-data-after.txt" || true
+            adb shell dumpsys connectivity > "$GITHUB_WORKSPACE/build/bergamot-instrumented/connectivity-after.txt" || true
+            adb shell dumpsys wifi > "$GITHUB_WORKSPACE/build/bergamot-instrumented/wifi-after.txt" || true
+            printf '%s\\n' "$test_status" > "$GITHUB_WORKSPACE/build/bergamot-instrumented/test-exit-code.txt"
             exit "$test_status"
       - name: Upload offline translation metrics and emulator state
         if: always()
