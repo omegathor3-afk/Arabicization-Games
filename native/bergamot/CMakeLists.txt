@@ -23,19 +23,38 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_subdirectory("${BERGAMOT_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/bergamot-upstream" EXCLUDE_FROM_ALL)
 
 # The pinned Marian/FAISS VectorTransform.cpp uses SSE intrinsics behind
-# __SSE__ but omits the intrinsic header on Android. Apply the workaround
-# to the source file itself: the upstream FAISS target can be nested or
-# renamed by its pinned CMake revision, so relying on TARGET faiss silently
-# skipped the option in the observed x86_64 compile command.
+# __SSE__ but omits the intrinsic header on Android. Source properties are
+# directory-scoped: explicitly set them in the directory that created FAISS.
+# TARGET_DIRECTORY is supported by the pinned CMake 3.31.6 toolchain.
 if(ANDROID AND (CMAKE_ANDROID_ARCH_ABI STREQUAL "x86_64" OR ANDROID_ABI STREQUAL "x86_64"))
+    if(NOT TARGET faiss)
+        message(FATAL_ERROR "Expected upstream FAISS target is missing; cannot apply x86_64 SSE workaround")
+    endif()
     set(_faiss_vector_transform "${BERGAMOT_SOURCE_DIR}/3rd_party/marian-dev/src/3rd_party/faiss/VectorTransform.cpp")
     if(NOT EXISTS "${_faiss_vector_transform}")
         message(FATAL_ERROR "Expected FAISS source is missing: ${_faiss_vector_transform}")
     endif()
-    set_source_files_properties("${_faiss_vector_transform}" PROPERTIES
-        COMPILE_OPTIONS "-include;pmmintrin.h"
+    set_source_files_properties("${_faiss_vector_transform}"
+        TARGET_DIRECTORY faiss
+        PROPERTIES COMPILE_OPTIONS "-include;pmmintrin.h"
     )
-    message(STATUS "Applying pmmintrin.h directly to FAISS VectorTransform.cpp for x86_64")
+    get_source_file_property(_faiss_vector_transform_options "${_faiss_vector_transform}"
+        TARGET_DIRECTORY faiss COMPILE_OPTIONS
+    )
+    list(FIND _faiss_vector_transform_options "-include" _faiss_include_flag_index)
+    if(_faiss_include_flag_index LESS 0)
+        message(FATAL_ERROR "pmmintrin.h compile option was not attached in FAISS source directory")
+    endif()
+    math(EXPR _faiss_include_header_index "${_faiss_include_flag_index} + 1")
+    list(LENGTH _faiss_vector_transform_options _faiss_option_count)
+    if(_faiss_include_header_index GREATER_EQUAL _faiss_option_count)
+        message(FATAL_ERROR "Incomplete FAISS forced-include option")
+    endif()
+    list(GET _faiss_vector_transform_options ${_faiss_include_header_index} _faiss_include_header)
+    if(NOT _faiss_include_header STREQUAL "pmmintrin.h")
+        message(FATAL_ERROR "Unexpected FAISS forced header: ${_faiss_include_header}")
+    endif()
+    message(STATUS "Verified pmmintrin.h source option in FAISS target directory")
 endif()
 
 if(NOT TARGET bergamot-translator)
