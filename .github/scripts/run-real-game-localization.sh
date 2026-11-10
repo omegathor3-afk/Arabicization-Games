@@ -49,10 +49,18 @@ if [[ -s "$GENERATED_APK" ]]; then
         adb shell pidof com.joeld.minesweeper > build/test-game/localized/game-process.txt || launch_status=$?
         adb shell uiautomator dump /sdcard/minesweeper-window.xml >/dev/null 2>&1 || launch_status=$?
         adb shell cat /sdcard/minesweeper-window.xml > build/test-game/localized/minesweeper-window.xml || launch_status=$?
-        if ! grep -q "لعبة جديدة" build/test-game/localized/minesweeper-window.xml; then
-          echo "Arabic UI text 'لعبة جديدة' was not visible after setting system locale to ar-EG." >&2
-          launch_status=1
-        fi
+        for required_arabic in "لعبة جديدة" "سهل" "متوسط" "صعب"; do
+          if ! grep -q "$required_arabic" build/test-game/localized/minesweeper-window.xml; then
+            echo "Required Arabic UI label '$required_arabic' was not visible." >&2
+            launch_status=1
+          fi
+        done
+        for forbidden_english in 'text="Easy"' 'text="Medium"' 'text="Hard"'; do
+          if grep -q "$forbidden_english" build/test-game/localized/minesweeper-window.xml; then
+            echo "Untranslated difficulty label remains visible: $forbidden_english" >&2
+            launch_status=1
+          fi
+        done
         adb exec-out screencap -p > build/test-game/localized/minesweeper-arabic-screen.png || launch_status=$?
         adb logcat -d -v time > build/test-game/localized/game-launch-logcat.txt || true
       fi

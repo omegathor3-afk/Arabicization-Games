@@ -62,9 +62,13 @@ internal object AndroidResourceLocalizer {
      onProgress(index + 1, sources.size)
      return@forEachIndexed
     }
+    // Keep short, high-visibility game difficulty labels deterministic;
+    // neural translation can otherwise leave these short words unchanged.
+    val knownGameLabels = mapOf("Easy" to "سهل", "Medium" to "متوسط", "Hard" to "صعب")
     val protected = PlaceholderProtector.protect(source)
     try {
-     val translatedText = translator.translateEnglishToArabic(protected.text)
+     val translatedText = knownGameLabels[source.trim()]
+      ?: translator.translateEnglishToArabic(protected.text)
      val tokenWasLost = protected.tokens.indices.any { tokenIndex ->
       !translatedText.contains("__ARABIFY_TOKEN_${tokenIndex}__")
      }

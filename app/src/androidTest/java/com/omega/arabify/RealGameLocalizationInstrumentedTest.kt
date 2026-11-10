@@ -76,13 +76,22 @@ class RealGameLocalizationInstrumentedTest {
                 )
                 Log.i("RealGameLocalization", "new_game Arabic value: $newGameArabic")
                 var count = 0
+                val arabicValues = mutableListOf<String>()
                 val blocks = stringType.getTypeBlocks()
                 while (blocks.hasNext()) {
                     val block = blocks.next()
                     if (block.getResConfig().getQualifiers().contains("ar")) {
-                        count += block.listEntries(true).count()
+                        val entries = block.listEntries(true)
+                        while (entries.hasNext()) {
+                            val entry = entries.next()
+                            entry.getValueAsString()?.let(arabicValues::add)
+                            count++
+                        }
                     }
                 }
+                assertTrue("Easy difficulty was not localized", arabicValues.contains("سهل"))
+                assertTrue("Medium difficulty was not localized", arabicValues.contains("متوسط"))
+                assertTrue("Hard difficulty was not localized", arabicValues.contains("صعب"))
                 count
             } finally {
                 module.close()
