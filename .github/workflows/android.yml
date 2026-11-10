@@ -7,7 +7,7 @@ on:
  workflow_dispatch:
 concurrency:
  group: arabify-android-${{ github.ref }}
- cancel-in-progress: true
+ cancel-in-progress: false
 permissions:
  contents: read
 jobs:
@@ -67,6 +67,11 @@ jobs:
       test -s ../minesweeper.apk
       cd ../../..
       sha256sum build/test-game/minesweeper.apk | tee build/test-game/SHA256SUMS
+   - name: Enable KVM access
+     run: |
+      echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+      sudo udevadm control --reload-rules
+      sudo udevadm trigger --name-match=kvm
    - name: Run real-game localization on Android emulator
      uses: reactivecircus/android-emulator-runner@v2
      with:
@@ -74,6 +79,11 @@ jobs:
       target: google_apis
       arch: x86_64
       profile: pixel_5
+      disable-linux-hw-accel: false
+      pre-emulator-launch-script: |
+       adb kill-server || true
+       adb start-server
+       adb devices
       emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
       disable-animations: true
       script: |
