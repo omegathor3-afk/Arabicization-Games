@@ -1,6 +1,7 @@
 package com.omega.arabify
 
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -82,6 +83,12 @@ private fun ArabifyApp(context: Context) {
  var assetProgress by remember { mutableStateOf(0 to 0) }
  var assetReport by remember { mutableStateOf<AssetLocalizationReport?>(null) }
  var assetError by remember { mutableStateOf<String?>(null) }
+ var backupBusy by remember { mutableStateOf(false) }
+ var backupMessage by remember { mutableStateOf<String?>(null) }
+ var backupError by remember { mutableStateOf<String?>(null) }
+ var restoreBusy by remember { mutableStateOf(false) }
+ var restoreMessage by remember { mutableStateOf<String?>(null) }
+ var restoreError by remember { mutableStateOf<String?>(null) }
  LaunchedEffect(context) { installedApps = withContext(Dispatchers.IO) { loadInstalledApps(context) } }
  val offlineTranslator = remember(context) { OfflineArabicTranslator(context) }
  DisposableEffect(offlineTranslator) { onDispose { offlineTranslator.close() } }
@@ -107,6 +114,44 @@ private fun ArabifyApp(context: Context) {
      }
      exportError=null
     } catch(e:Exception) { exportError=e.message ?: "تعذر حفظ APK." }
+   }
+  }
+ }
+ val backupLauncher=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { targetUri:Uri? ->
+  val app=selectedInstalledApp
+  if(targetUri!=null && app!=null) {
+   backupBusy=true;backupError=null;backupMessage=null
+   scope.launch {
+    try {
+     withContext(Dispatchers.IO) {
+      val packageInfo=context.packageManager.getPackageInfo(app.packageName,0)
+      val files=listOf(app.apkPath)+app.splitApkPaths
+      val archive=File(context.cacheDir,"arabify-backup-${System.currentTimeMillis()}.zip")
+      ApkBackupManager.createBackup(app.packageName,app.label,packageInfo.versionName,files.map(::File),archive)
+      context.contentResolver.openOutputStream(targetUri,"wt")?.use { output -> archive.inputStream().use { it.copyTo(output) } }
+       ?: error("تعذر حفظ ملف النسخة الاحتياطية.")
+      archive.delete()
+     }
+     backupMessage="تم إنشاء النسخة الاحتياطية والتحقق من SHA-256 لكل ملفات APK."
+    } catch(e:Exception) { backupError=e.message ?: "تعذر إنشاء النسخة الاحتياطية." }
+    finally { backupBusy=false }
+   }
+  }
+ }
+ val restorePicker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri:Uri? ->
+  if(uri!=null) {
+   restoreBusy=true;restoreError=null;restoreMessage=null
+   scope.launch {
+    try {
+     val backup=withContext(Dispatchers.IO) {
+      val archive=copyUriToCache(context,uri)
+      try { ApkBackupManager.extractAndVerify(archive,File(context.cacheDir,"arabify-restore-${System.currentTimeMillis()}")) }
+      finally { archive.delete() }
+     }
+     withContext(Dispatchers.Main) { ApkRestoreInstaller.install(context,backup) }
+     restoreMessage="تم التحقق من الملفات وإرسال مجموعة APK إلى مُثبّت Android. أكّد التثبيت في نافذة النظام."
+    } catch(e:Exception) { restoreError=e.message ?: "تعذرت استعادة النسخة الاحتياطية." }
+    finally { restoreBusy=false }
    }
   }
  }
@@ -171,6 +216,28 @@ private fun ArabifyApp(context: Context) {
         Text("فحص ملفات التثبيت: ${inspectionProgress.first} من ${inspectionProgress.second}",color=ArabifyPalette.info,fontSize=11.sp)
        }
        Text("يتم فحص ملفات APK الأساسية وملفات Split الإضافية كلٌ على حدة. إعادة بناء وتوقيع مجموعة Split كحزمة قابلة للتثبيت ما زالت غير مفعّلة؛ لذلك يتوقف التصدير الآمن لهذه الألعاب بدل إنتاج تثبيت ناقص.",color=ArabifyPalette.warning,fontSize=11.sp)
+      }
+     }
+    }
+    if(selectedInstalledApp!=null) item {
+     Card(colors=CardDefaults.cardColors(containerColor=ArabifyPalette.surfaceAccent),shape=RoundedCornerShape(20.dp),border=BorderStroke(1.dp,ArabifyPalette.outline)) {
+      Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
+       Text("نسخة احتياطية آمنة للعبة المختارة",color=ArabifyPalette.accent,fontWeight=FontWeight.Bold,fontSize=17.sp)
+       Text("سيتم حفظ APK الأساسي وكل ملفات Split في ملف ZIP واحد، مع manifest يحتوي SHA-256 والحجم لكل ملف. يتم فحص النسخة بعد إنشائها وقبل السماح باستعادتها.",color=ArabifyPalette.textSecondary,fontSize=12.sp)
+       Button(onClick={backupLauncher.launch("arabify-${selectedInstalledApp!!.packageName}-backup.zip")},enabled=!backupBusy,modifier=Modifier.fillMaxWidth()) { Text(if(backupBusy) "جارٍ إنشاء النسخة الاحتياطية..." else "إنشاء وحفظ نسخة احتياطية") }
+       backupMessage?.let { Text(it,color=ArabifyPalette.success,fontSize=12.sp) }
+       backupError?.let { Text(it,color=ArabifyPalette.danger,fontSize=12.sp) }
+      }
+     }
+    }
+    item {
+     Card(colors=CardDefaults.cardColors(containerColor=ArabifyPalette.surface),shape=RoundedCornerShape(20.dp),border=BorderStroke(1.dp,ArabifyPalette.outline)) {
+      Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
+       Text("استعادة نسخة APK احتياطية",color=ArabifyPalette.accent,fontWeight=FontWeight.Bold,fontSize=17.sp)
+       Text("اختر ملف ARABIFY ZIP. سيتحقق التطبيق من manifest والأحجام وSHA-256، ثم يرسل كل ملفات APK إلى مُثبّت Android في جلسة واحدة، بما فيها ملفات Split.",color=ArabifyPalette.textSecondary,fontSize=12.sp)
+       Button(onClick={restorePicker.launch(arrayOf("application/zip","application/octet-stream"))},enabled=!restoreBusy,modifier=Modifier.fillMaxWidth()) { Text(if(restoreBusy) "جارٍ التحقق والاستعادة..." else "اختيار نسخة احتياطية واستعادتها") }
+       restoreMessage?.let { Text(it,color=ArabifyPalette.success,fontSize=12.sp) }
+       restoreError?.let { Text(it,color=ArabifyPalette.danger,fontSize=12.sp) }
       }
      }
     }
