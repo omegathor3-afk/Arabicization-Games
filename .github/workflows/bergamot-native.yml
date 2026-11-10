@@ -43,16 +43,26 @@ jobs:
           ninja --version
       - name: Build pinned Bergamot JNI library
         run: native/bergamot/build-android.sh
-      - name: Verify native library ABI and dependencies
+      - name: Build x86_64 JNI for API 35 emulator runtime test
+        run: ANDROID_ABI=x86_64 native/bergamot/build-android.sh
+      - name: Verify native library ABIs and dependencies
         run: |
-          file app/src/main/jniLibs/arm64-v8a/*.so
-          readelf -h app/src/main/jniLibs/arm64-v8a/libarabify_bergamot.so
-          readelf -d app/src/main/jniLibs/arm64-v8a/libarabify_bergamot.so
-          sha256sum app/src/main/jniLibs/arm64-v8a/*.so
+          for abi in arm64-v8a x86_64; do
+            file "app/src/main/jniLibs/$abi/"*.so
+            readelf -h "app/src/main/jniLibs/$abi/libarabify_bergamot.so"
+            readelf -d "app/src/main/jniLibs/$abi/libarabify_bergamot.so"
+            sha256sum "app/src/main/jniLibs/$abi/"*.so
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: arabify-bergamot-arm64-jni
           path: app/src/main/jniLibs/arm64-v8a/*.so
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arabify-bergamot-x86_64-jni
+          path: app/src/main/jniLibs/x86_64/*.so
           if-no-files-found: error
           retention-days: 14
 
@@ -91,6 +101,10 @@ jobs:
         with:
           name: arabify-mozilla-arabic-model-lock
           path: build
+      - uses: actions/download-artifact@v4
+        with:
+          name: arabify-bergamot-x86_64-jni
+          path: app/src/main/jniLibs/x86_64
       - name: Stage verified offline model assets
         run: |
           test -s app/src/main/jniLibs/arm64-v8a/libarabify_bergamot.so
