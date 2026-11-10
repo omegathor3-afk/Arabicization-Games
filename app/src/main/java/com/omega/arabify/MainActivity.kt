@@ -255,7 +255,11 @@ private fun ArabifyApp(context: Context) {
       Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
        Text("استعادة نسخة APK احتياطية",color=ArabifyPalette.accent,fontWeight=FontWeight.Bold,fontSize=17.sp)
        Text("اختر ملف ARABIFY ZIP. سيتحقق التطبيق من manifest والأحجام وSHA-256، ثم يرسل كل ملفات APK إلى مُثبّت Android في جلسة واحدة، بما فيها ملفات Split.",color=ArabifyPalette.textSecondary,fontSize=12.sp)
-       Button(onClick={restorePicker.launch(arrayOf("application/zip","application/octet-stream"))},enabled=!restoreBusy,modifier=Modifier.fillMaxWidth()) { Text(if(restoreBusy) "جارٍ التحقق والاستعادة..." else "اختيار نسخة احتياطية واستعادتها") }
+       Button(onClick={
+        if(!context.packageManager.canRequestPackageInstalls()) {
+         context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } else restorePicker.launch(arrayOf("application/zip","application/octet-stream"))
+       },enabled=!restoreBusy,modifier=Modifier.fillMaxWidth()) { Text(if(restoreBusy) "جارٍ التحقق والاستعادة..." else "اختيار نسخة احتياطية واستعادتها") }
        restoreMessage?.let { Text(it,color=ArabifyPalette.success,fontSize=12.sp) }
        restoreError?.let { Text(it,color=ArabifyPalette.danger,fontSize=12.sp) }
       }
