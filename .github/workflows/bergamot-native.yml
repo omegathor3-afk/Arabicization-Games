@@ -52,3 +52,17 @@ jobs:
           path: app/src/main/jniLibs/arm64-v8a/*.so
           if-no-files-found: error
           retention-days: 14
+
+  model-package-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and verify Mozilla Arabic base-memory Release packages
+        run: python3 native/bergamot/audit-mozilla-arabic-models.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arabify-mozilla-arabic-model-lock
+          path: build/arabic-model-lock.json
+          if-no-files-found: error
+          retention-days: 30
