@@ -63,6 +63,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: arabify-mozilla-arabic-model-lock
-          path: build/arabic-model-lock.json
+          path: |
+            build/arabic-model-lock.json
+            build/moz-models/
           if-no-files-found: error
           retention-days: 30
