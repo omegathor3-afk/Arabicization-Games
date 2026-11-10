@@ -355,7 +355,7 @@ private fun ArabifyApp(context: Context) {
          }
          localizationReport?.let { report ->
           Text("اكتمل إنشاء الموارد العربية: ${report.translatedStrings} نصًا من ${report.discoveredStrings}.",color=ArabifyPalette.success,fontSize=13.sp)
-          Button(onClick={saveLauncher.launch("arabify_arabic.apk")},modifier=Modifier.fillMaxWidth()){Text("حفظ APK المعرب")}
+          Button(onClick={saveLauncher.launch("arabify_arabic.apk")},modifier=Modifier.fillMaxWidth()){Text("الخطوة الأخيرة: حفظ APK المعرب")}
          }
          localizationError?.let{Text(it,color=ArabifyPalette.danger,fontSize=12.sp)}
          exportError?.let{Text(it,color=ArabifyPalette.danger,fontSize=12.sp)}
@@ -420,7 +420,7 @@ private fun ArabifyApp(context: Context) {
          }
          assetReport?.let { report ->
           Text("الملفات: ${report.filesTranslated} / ${report.filesDiscovered} • النصوص المترجمة: ${report.stringsTranslated} • المتروكة: ${report.stringsSkipped}",color=ArabifyPalette.success,fontSize=13.sp)
-          Button(onClick={saveLauncher.launch("arabify_assets_arabic.apk")},modifier=Modifier.fillMaxWidth()){Text("حفظ APK بعد تعريب الملفات")}
+          Button(onClick={saveLauncher.launch("arabify_assets_arabic.apk")},modifier=Modifier.fillMaxWidth()){Text("الخطوة الأخيرة: حفظ APK بعد التعريب")}
          }
          assetError?.let{Text(it,color=ArabifyPalette.danger,fontSize=12.sp)}
         }
