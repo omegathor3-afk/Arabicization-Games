@@ -50,6 +50,42 @@ jobs:
       "$AAPT" dump badging "$APK" > badging.txt
       head -n 5 badging.txt
       sha256sum "$APK"
+   - name: Build instrumentation test APK
+     run: gradle assembleDebugAndroidTest
+   - name: Download open-source Android game test fixture
+     run: |
+      mkdir -p build/test-game
+      curl --fail --location --retry 3 \
+        https://f-droid.org/repo/com.joeld.minesweeper_7.apk \
+        --output build/test-game/minesweeper.apk
+      test -s build/test-game/minesweeper.apk
+      sha256sum build/test-game/minesweeper.apk | tee build/test-game/SHA256SUMS
+   - name: Run real-game localization on Android emulator
+     uses: reactivecircus/android-emulator-runner@v2
+     with:
+      api-level: 35
+      target: google_apis
+      arch: x86_64
+      profile: pixel_5
+      emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+      disable-animations: true
+      script: |
+       set -euo pipefail
+       adb install build/test-game/minesweeper.apk
+       gradle connectedDebugAndroidTest \
+         -Pandroid.testInstrumentationRunnerArguments.class=com.omega.arabify.RealGameLocalizationInstrumentedTest \
+         --stacktrace
+   - name: Upload real-game localization test reports
+     if: always()
+     uses: actions/upload-artifact@v4
+     with:
+      name: arabify-real-game-localization-test
+      path: |
+       app/build/outputs/androidTest-results/connected/
+       app/build/reports/androidTests/connected/
+       build/test-game/SHA256SUMS
+      if-no-files-found: ignore
+      retention-days: 14
    - uses: actions/upload-artifact@v4
      with:
       name: arabify-debug-apk
