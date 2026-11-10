@@ -1,0 +1,46 @@
+name: Bergamot Android native CI
+
+on:
+  push:
+    branches: ["feat/unity-mono-streamingassets"]
+    paths:
+      - "native/bergamot/**"
+      - "app/src/main/java/com/omega/arabify/BergamotNative.kt"
+      - ".github/workflows/bergamot-native.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: arabify-bergamot-native-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-arm64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install pinned Android NDK and CMake
+        run: |
+          sdkmanager --install "ndk;27.2.12479018" "cmake;3.31.6"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Build pinned Bergamot JNI library
+        run: native/bergamot/build-android.sh
+      - name: Verify native library ABI and dependencies
+        run: |
+          file app/src/main/jniLibs/arm64-v8a/*.so
+          readelf -h app/src/main/jniLibs/arm64-v8a/libarabify_bergamot.so
+          readelf -d app/src/main/jniLibs/arm64-v8a/libarabify_bergamot.so
+          sha256sum app/src/main/jniLibs/arm64-v8a/*.so
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arabify-bergamot-arm64-jni
+          path: app/src/main/jniLibs/arm64-v8a/*.so
+          if-no-files-found: error
+          retention-days: 14
