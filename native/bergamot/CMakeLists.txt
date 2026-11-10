@@ -19,8 +19,6 @@ set(SSPLIT_COMPILE_LIBRARY_ONLY ON CACHE BOOL "" FORCE)
 # bundled PCRE2 as a static, PIC library instead of searching host libraries.
 set(SSPLIT_USE_INTERNAL_PCRE2 ON CACHE BOOL "" FORCE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-# Do not let Marian emit host-native x86 flags during an Android ARM cross-build.
-set(BUILD_ARCH armv8-a CACHE STRING "" FORCE)
 
 add_subdirectory("${BERGAMOT_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/bergamot-upstream" EXCLUDE_FROM_ALL)
 
