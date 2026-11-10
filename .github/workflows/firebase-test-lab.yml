@@ -1,6 +1,11 @@
 name: Firebase Test Lab - real game localization
 
 on:
+  push:
+    branches: ["feat/unity-mono-streamingassets"]
+    paths:
+      - "app/**"
+      - ".github/workflows/firebase-test-lab.yml"
   workflow_dispatch:
 
 permissions:
@@ -13,6 +18,7 @@ concurrency:
 
 jobs:
   real-game-localization:
+    if: ${{ vars.FIREBASE_TEST_LAB_ENABLED == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
