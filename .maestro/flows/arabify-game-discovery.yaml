@@ -12,7 +12,7 @@ name: ARABIFY game discovery, scan, and APK picker
 - inputText: "Minesweeper"
 - assertVisible: "Minesweeper"
 - tapOn:
-    accessibilityText: "اختيار Minesweeper com.joeld.minesweeper"
+    text: "اختيار Minesweeper com.joeld.minesweeper"
 - assertVisible: "نتيجة الفحص"
 - assertVisible: "المحرك:"
 - scrollUntilVisible:
