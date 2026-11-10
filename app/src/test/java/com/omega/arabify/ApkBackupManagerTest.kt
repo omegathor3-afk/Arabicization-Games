@@ -56,4 +56,55 @@ class ApkBackupManagerTest {
             }
         } finally { root.deleteRecursively() }
     }
+
+    @Test fun restoreRejectsUnlistedZipEntriesAndCleansPartialExtraction() {
+        val root = createTempDir(prefix = "arabify-extra-entry-test")
+        try {
+            val base = File(root, "base.apk").apply { writeBytes("valid-apk".toByteArray()) }
+            val archive = File(root, "game.zip")
+            ApkBackupManager.createBackup("com.example.game", "Game", null, listOf(base), archive)
+            val withExtra = File(root, "with-extra.zip")
+            ZipFile(archive).use { source ->
+                java.util.zip.ZipOutputStream(withExtra.outputStream()).use { target ->
+                    val entries = source.entries()
+                    while (entries.hasMoreElements()) {
+                        val entry = entries.nextElement()
+                        target.putNextEntry(java.util.zip.ZipEntry(entry.name))
+                        source.getInputStream(entry).use { it.copyTo(target) }
+                        target.closeEntry()
+                    }
+                    target.putNextEntry(java.util.zip.ZipEntry("unlisted/payload.bin"))
+                    target.write(byteArrayOf(1, 2, 3))
+                    target.closeEntry()
+                }
+            }
+            val destination = File(root, "restore")
+            try {
+                ApkBackupManager.extractAndVerify(withExtra, destination)
+                fail("Expected unlisted ZIP entry rejection")
+            } catch (expected: IllegalArgumentException) {
+                assertTrue(expected.message.orEmpty().contains("غير موثقة"))
+            }
+            assertFalse("Partial extraction directory must be removed", destination.exists())
+        } finally { root.deleteRecursively() }
+    }
+
+    @Test fun restoreRejectsNonEmptyDestinationWithoutDeletingExistingFiles() {
+        val root = createTempDir(prefix = "arabify-destination-test")
+        try {
+            val base = File(root, "base.apk").apply { writeBytes("valid-apk".toByteArray()) }
+            val archive = File(root, "game.zip")
+            ApkBackupManager.createBackup("com.example.game", "Game", null, listOf(base), archive)
+            val destination = File(root, "restore").apply { mkdirs() }
+            val keep = File(destination, "keep.txt").apply { writeText("keep") }
+            try {
+                ApkBackupManager.extractAndVerify(archive, destination)
+                fail("Expected non-empty destination rejection")
+            } catch (expected: IllegalArgumentException) {
+                assertTrue(expected.message.orEmpty().contains("غير فارغ"))
+            }
+            assertEquals("keep", keep.readText())
+        } finally { root.deleteRecursively() }
+    }
+
 }
