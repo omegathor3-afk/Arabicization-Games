@@ -67,7 +67,9 @@ class RealGameLocalizationInstrumentedTest {
                 newGameArabic = packageBlock.getEntry(arabicConfig, "string", "new_game")?.getValueAsString()
                 assertTrue(
                     "The known 'new_game' string was not translated into Arabic: $newGameArabic",
-                    !newGameArabic.isNullOrBlank() && newGameArabic.any { it.code in 0x0600..0x06FF }
+                    !newGameArabic.isNullOrBlank() &&
+                        newGameArabic.any { it.code in 0x0600..0x06FF } &&
+                        (newGameArabic.contains("لعبة") || newGameArabic.contains("جديد"))
                 )
                 Log.i("RealGameLocalization", "new_game Arabic value: $newGameArabic")
                 var count = 0
