@@ -4,6 +4,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
+import android.content.pm.PackageManager
 import java.io.File
 
 internal object ApkRestoreInstaller {
@@ -12,7 +13,7 @@ internal object ApkRestoreInstaller {
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
             setAppPackageName(backup.packageName)
-            setInstallReason(PackageInstaller.INSTALL_REASON_USER)
+            setInstallReason(PackageManager.INSTALL_REASON_USER)
             setSize(backup.apks.sumOf { it.sizeBytes })
         }
         val sessionId = installer.createSession(params)
