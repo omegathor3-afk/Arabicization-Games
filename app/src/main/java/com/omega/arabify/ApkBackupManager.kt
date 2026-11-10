@@ -18,6 +18,7 @@ internal object ApkBackupManager {
     private const val MAX_APK_BYTES = 1_500L * 1024L * 1024L
     private const val MAX_TOTAL_BYTES = 3L * 1024L * 1024L * 1024L
     private const val MAX_APK_COUNT = 64
+    private const val MAX_MANIFEST_BYTES = 1024L * 1024L
 
     fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
@@ -92,7 +93,9 @@ internal object ApkBackupManager {
         require(destination.isDirectory) { "تعذر تجهيز مجلد الاستعادة." }
         ZipFile(archive).use { zip ->
             val manifestEntry = zip.getEntry(MANIFEST) ?: error("ملف النسخة الاحتياطية لا يحتوي على manifest.")
-            val manifestText = zip.getInputStream(manifestEntry).bufferedReader(Charsets.UTF_8).use { it.readText() }
+            val manifestText = zip.getInputStream(manifestEntry).use { input ->
+                BoundedArchiveInput.readAll(input, MAX_MANIFEST_BYTES).toString(Charsets.UTF_8)
+            }
             val manifest = JSONObject(manifestText)
             require(manifest.optString("format") == "ARABIFY_APK_BACKUP") { "صيغة النسخة الاحتياطية غير معروفة." }
             require(manifest.optInt("schemaVersion") == 1) { "إصدار النسخة الاحتياطية غير مدعوم." }
@@ -101,11 +104,13 @@ internal object ApkBackupManager {
             val array = manifest.getJSONArray("apks")
             require(array.length() in 1..MAX_APK_COUNT) { "قائمة ملفات APK غير صالحة." }
             var total = 0L
+            val seenEntries = HashSet<String>()
             val verified = ArrayList<BackupApk>(array.length())
             for (index in 0 until array.length()) {
                 val item = array.getJSONObject(index)
                 val entryName = item.getString("entry")
-                require(entryName == "base.apk" || entryName.matches(Regex("splits/split-[0-9]{2}\\.apk"))) {
+                require(seenEntries.add(entryName)) { "ملف مكرر داخل manifest." }
+                require((index == 0 && entryName == "base.apk") || (index > 0 && entryName == "splits/split-%02d.apk".format(index))) {
                     "مسار ملف داخل النسخة الاحتياطية غير مسموح."
                 }
                 val expectedSize = item.getLong("sizeBytes")
