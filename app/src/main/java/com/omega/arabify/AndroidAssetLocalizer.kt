@@ -119,7 +119,7 @@ internal object AssetTextTransformer {
   if(text.startsWith("http://")||text.startsWith("https://")||text.contains("@@"))return false
   if(text.matches(Regex("[0-9\\s.,+\\-/%:]+")))return false
   if(text.matches(Regex("[A-Z0-9_./:-]{3,}")))return false
-  if(text.contains("\\u0000"))return false
+  if(text.contains('\u0000'))return false
   return text.any{it.isLetter()} && (text.contains(' ')||text.length>=3)
  }
 }
