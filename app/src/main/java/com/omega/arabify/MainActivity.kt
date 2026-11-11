@@ -3,8 +3,6 @@ package com.omega.arabify
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.pm.PackageInstaller
-import android.widget.Toast
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.Drawable
@@ -60,24 +58,6 @@ class MainActivity : ComponentActivity() {
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
   setContent { ArabifyApp(applicationContext) }
-  handleInstallStatus(intent)
- }
- override fun onNewIntent(intent:Intent) {
-  super.onNewIntent(intent)
-  setIntent(intent)
-  handleInstallStatus(intent)
- }
- private fun handleInstallStatus(intent:Intent?) {
-  if(intent?.action != ApkRestoreInstaller.ACTION_INSTALL_STATUS) return
-  when(intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
-   PackageInstaller.STATUS_PENDING_USER_ACTION -> {
-    @Suppress("DEPRECATION")
-    val confirmation = intent.getParcelableExtra(Intent.EXTRA_INTENT) as? Intent
-    if(confirmation != null) startActivity(confirmation)
-   }
-   PackageInstaller.STATUS_SUCCESS -> Toast.makeText(this,"تم تثبيت النسخة الاحتياطية بنجاح.",Toast.LENGTH_LONG).show()
-   else -> Toast.makeText(this,intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "تعذر تثبيت النسخة الاحتياطية.",Toast.LENGTH_LONG).show()
-  }
  }
 }
 
