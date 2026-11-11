@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -36,11 +37,13 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.semantics.contentDescription
@@ -100,6 +103,7 @@ private fun ArabifyApp(context: Context) {
  var generatedApk by remember { mutableStateOf<File?>(null) }
  var localizationError by remember { mutableStateOf<String?>(null) }
  var exportError by remember { mutableStateOf<String?>(null) }
+ var showLocalizationChoice by remember { mutableStateOf(false) }
  var assetBusy by remember { mutableStateOf(false) }
  var assetProgress by remember { mutableStateOf(0 to 0) }
  var assetReport by remember { mutableStateOf<AssetLocalizationReport?>(null) }
@@ -111,6 +115,7 @@ private fun ArabifyApp(context: Context) {
  var restoreMessage by remember { mutableStateOf<String?>(null) }
  var restoreError by remember { mutableStateOf<String?>(null) }
  LaunchedEffect(context) { installedApps = withContext(Dispatchers.IO) { loadInstalledApps(context) } }
+ val clipboardManager=LocalClipboardManager.current
  val offlineTranslator = remember(context) { OfflineArabicTranslator(context) }
  DisposableEffect(offlineTranslator) { onDispose { offlineTranslator.close() } }
  val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri:Uri? ->
@@ -119,7 +124,7 @@ private fun ArabifyApp(context: Context) {
    scope.launch {
     try { result=withContext(Dispatchers.IO){ApkInspector.inspect(context,uri)} }
     catch(e:Exception){error=e.message ?: "حدث خطأ أثناء فحص الملف."}
-    finally{busy=false}
+    finally{busy=false;showLocalizationChoice=true}
    }
   }
  }
@@ -176,8 +181,81 @@ private fun ArabifyApp(context: Context) {
    }
   }
  }
+
+ fun startSelectedLocalization() {
+  val scan=result ?: return
+  val uri=selectedUri ?: return
+  if(!modelReady) { localizationError="نزّل نموذج الترجمة أولًا، ثم اضغط ابدأ التعريب."; showLocalizationChoice=false; return }
+  showLocalizationChoice=false
+  if(scan.engine==GameEngine.ANDROID) {
+   if((selectedInstalledApp?.splitCount ?: 0)>0) { localizationError="تعريب مجموعات Split وتصديرها غير مدعومين بعد؛ أوقفنا العملية بأمان."; return }
+   localizeBusy=true;localizationError=null;localizationProgress=0 to 0;localizationReport=null
+   scope.launch {
+    try {
+     val report=withContext(Dispatchers.IO) {
+      val input=copyUriToCache(context,uri);val stamp=System.currentTimeMillis()
+      AndroidResourceLocalizer.localizeEnglishStrings(input,File(context.cacheDir,"arabify-$stamp-unsigned.apk"),File(context.cacheDir,"arabify-$stamp-signed.apk"),offlineTranslator,context) { done,total -> scope.launch { localizationProgress=done to total } }
+     }
+     localizationReport=report;generatedApk=report.signedApk
+    } catch(e:Exception) { localizationError=e.message ?: "تعذر تعريب موارد اللعبة." }
+    finally { localizeBusy=false }
+   }
+  } else {
+   if((selectedInstalledApp?.splitCount ?: 0)>0) { assetError="تعريب مجموعات Split وتصديرها غير مدعومين بعد؛ أوقفنا العملية بأمان."; return }
+   assetBusy=true;assetError=null;assetReport=null;assetProgress=0 to 0
+   scope.launch {
+    try {
+     val report=withContext(Dispatchers.IO) {
+      val input=copyUriToCache(context,uri);val stamp=System.currentTimeMillis()
+      if(scan.engine==GameEngine.UNITY) UnityMonoLocalizer.localize(context,input,File(context.cacheDir,"arabify-assets-$stamp-unsigned.apk"),File(context.cacheDir,"arabify-assets-$stamp-signed.apk"),offlineTranslator) { done,total -> scope.launch { assetProgress=done to total } }
+      else AndroidAssetLocalizer.localize(context,input,File(context.cacheDir,"arabify-assets-$stamp-unsigned.apk"),File(context.cacheDir,"arabify-assets-$stamp-signed.apk"),offlineTranslator) { done,total -> scope.launch { assetProgress=done to total } }
+     }
+     assetReport=report;generatedApk=report.outputApk
+    } catch(e:Exception) { assetError=e.message ?: "تعذر تعريب ملفات النصوص." }
+    finally { assetBusy=false }
+   }
+  }
+ }
+ val activityReport=buildString {
+  appendLine("ARABIFY — التقرير الكامل")
+  appendLine("التطبيق: ${selectedInstalledApp?.label ?: result?.fileName ?: "غير محدد"}")
+  appendLine("الحزمة: ${result?.packageName ?: selectedInstalledApp?.packageName ?: "غير معروفة"}")
+  appendLine("المحرك: ${result?.engine?.displayName ?: "لم يتم تحديده"}")
+  result?.let { scan ->
+   appendLine("الإصدار: ${scan.versionName ?: "غير معروف"}")
+   appendLine("الحجم: ${scan.fileSize} bytes | ZIP: ${scan.entryCount} | DEX: ${scan.dexCount}")
+   appendLine("الملفات المرشحة:")
+   scan.candidateFiles.forEach { appendLine(it) }
+   appendLine("عينات النصوص:")
+   scan.extractedTextSamples.forEach { appendLine(it) }
+   appendLine("الخطوط:")
+   scan.fontAssessments.forEach { appendLine("${it.path} — ${it.coveragePercent}% — shaping=${it.hasArabicShapingTables}") }
+   appendLine("ملاحظات الفحص:")
+   scan.notes.forEach { appendLine(it) }
+   scan.unityAssetInventory?.let { appendLine(it.report) }
+  }
+  appendLine("النموذج: ${if(modelReady) "جاهز" else "لم يتم تجهيزه"}")
+  translatedText?.let { appendLine("الترجمة التجريبية: $it") }
+  translationError?.let { appendLine("خطأ الترجمة: $it") }
+  localizationReport?.let { appendLine("موارد Android: ${it.translatedStrings}/${it.discoveredStrings} نصًا") }
+  localizationError?.let { appendLine("خطأ تعريب Android: $it") }
+  assetReport?.let { appendLine("ملفات النصوص: ${it.filesTranslated}/${it.filesDiscovered}؛ مترجم ${it.stringsTranslated}؛ متروك ${it.stringsSkipped}") }
+  assetError?.let { appendLine("خطأ تعريب الملفات: $it") }
+  if(localizeBusy) appendLine("حالة التعريب: ${localizationProgress.first}/${localizationProgress.second}")
+  if(assetBusy) appendLine("حالة تعريب الملفات: ${assetProgress.first}/${assetProgress.second}")
+  error?.let { appendLine("خطأ الفحص: $it") }
+  exportError?.let { appendLine("خطأ التصدير: $it") }
+ }
  ArabifyTheme {
+
   CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+  if(showLocalizationChoice && result!=null) AlertDialog(
+   onDismissRequest={showLocalizationChoice=false},
+   title={Text("هل تريد بدء تعريب التطبيق؟")},
+   text={Text("تم اختيار ${selectedInstalledApp?.label ?: result?.fileName}. يمكنك بدء التعريب الآن أو المتابعة دون تعديل. لن يتم تغيير التطبيق الأصلي.")},
+   confirmButton={TextButton(onClick={::startSelectedLocalization},enabled=!busy&&!localizeBusy&&!assetBusy){Text("ابدأ التعريب")}},
+   dismissButton={TextButton(onClick={showLocalizationChoice=false}){Text("ليس الآن")}}
+  )
   Surface(Modifier.fillMaxSize(),color=ArabifyPalette.canvas) {
    LazyColumn(Modifier.fillMaxSize().padding(horizontal=18.dp, vertical=16.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
     item {
@@ -226,7 +304,7 @@ private fun ArabifyApp(context: Context) {
           scope.launch {
            try { result=withContext(Dispatchers.IO){inspectInstalledPackage(context,app){done,total -> scope.launch { inspectionProgress=done to total }}} }
            catch(e:Exception){error=e.message ?: "تعذر فحص التطبيق المثبت."}
-           finally{busy=false}
+           finally{busy=false;showLocalizationChoice=true}
           }
          },enabled=!busy,modifier=Modifier.semantics { contentDescription = "اختيار ${app.label} ${app.packageName}" }) { Text(if(selectedInstalledApp?.packageName==app.packageName) "محدد" else "اختيار") }
         }
@@ -483,9 +561,19 @@ private fun ArabifyApp(context: Context) {
      item{SectionTitle("ملاحظات وحدود الفحص")}
      items(scan.notes){note->Text("• $note",color=ArabifyPalette.warningText,fontSize=12.sp)}
     }
+    if(result!=null || error!=null || localizationError!=null || assetError!=null) item {
+     Card(colors=CardDefaults.cardColors(containerColor=ArabifyPalette.surfaceAccent),shape=RoundedCornerShape(20.dp),border=BorderStroke(1.dp,ArabifyPalette.outline)) {
+      Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
+       Text("التقرير الكامل — جاهز للنسخ والإرسال",color=ArabifyPalette.accent,fontWeight=FontWeight.Bold,fontSize=17.sp)
+       Text("يجمع بيانات التطبيق ونتائج الفحص والخطوط والنصوص والملاحظات وأخطاء ونتائج التعريب في نص واحد.",color=ArabifyPalette.textSecondary,fontSize=12.sp)
+       OutlinedTextField(value=activityReport,onValueChange={},readOnly=true,modifier=Modifier.fillMaxWidth(),minLines=8,maxLines=18,label={Text("كل تفاصيل العملية")})
+       Button(onClick={clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(activityReport))},modifier=Modifier.fillMaxWidth()){Text("نسخ التقرير الكامل")}
+      }
+     }
+    }
     item {
      Spacer(Modifier.height(8.dp))
-     Text("الإصدار 0.2.0 — تعريب تجريبي لموارد string في تطبيقات Android الأصلية.",color=ArabifyPalette.textDisabled,fontSize=11.sp)
+     Text("الإصدار 0.3.0 — خيار بدء التعريب وتقرير موحد قابل للنسخ.",color=ArabifyPalette.textDisabled,fontSize=11.sp)
     }
    }
   }
