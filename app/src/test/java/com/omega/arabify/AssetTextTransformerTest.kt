@@ -2,6 +2,7 @@ package com.omega.arabify
 
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -47,4 +48,17 @@ class AssetTextTransformerTest {
   assertEquals(0,result.translated)
   assertEquals(1,result.skipped)
  }
+ @Test fun nulCharactersArePreservedAndNeverSentToTranslator()=runBlocking {
+  val source="Start\u0000Game"
+  var translatorCalled=false
+  val result=AssetTextTransformer.transform("assets/dialogue.txt",source){
+   translatorCalled=true
+   "ابدأ اللعبة"
+  }
+  assertFalse(translatorCalled)
+  assertEquals(source,result.text)
+  assertEquals(0,result.translated)
+  assertEquals(1,result.skipped)
+ }
+
 }
