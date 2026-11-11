@@ -59,6 +59,27 @@ class UnitySerializedFileInspectorTest {
         assertEquals(2048L, result.objectTable!!.objects.first().absoluteDataOffset)
     }
 
+    @Test fun readsMetadataAcrossShortInputReadsWithoutTouchingObjectPayloads() {
+        val bytes = fileBytes()
+        val metadataSize = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN).int
+        var bytesRead = 0
+        val chunked = object : ByteArrayInputStream(bytes) {
+            override fun read(target: ByteArray, offset: Int, length: Int): Int {
+                val count = super.read(target, offset, minOf(length, 3))
+                if (count > 0) bytesRead += count
+                return count
+            }
+        }
+
+        val result = UnitySerializedFileInspector.inspect(chunked, bytes.size.toLong())
+
+        assertNotNull(result)
+        assertEquals(UnitySerializedInspectionStage.OBJECT_TABLE_PARSED, result!!.stage)
+        // The inspector should consume only the 48-byte header and bounded metadata,
+        // never the object payload region that follows it.
+        assertEquals(48 + metadataSize, bytesRead)
+    }
+
     @Test fun rejectsTruncatedHeadersAndMetadata() {
         val bytes = fileBytes()
         assertNull(UnitySerializedFileInspector.inspect(
