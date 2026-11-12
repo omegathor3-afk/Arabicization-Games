@@ -13,6 +13,7 @@ import com.reandroid.apk.ApkModule
 import com.reandroid.arsc.value.ResConfig
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -89,6 +90,7 @@ class RealGameLocalizationInstrumentedTest {
 
             val module = ApkModule.loadApkFile(output)
             var newGameArabic: String? = null
+            var createModeArabic: String? = null
             val arabicResourceCount = try {
                 val table = module.getTableBlock() ?: error("Translated APK has no resources.arsc")
                 val packageBlock = table.firstOrNull { it.getName() == report.packageName }
@@ -97,6 +99,8 @@ class RealGameLocalizationInstrumentedTest {
                     ?: error("Translated APK has no string resources")
                 val arabicConfig = ResConfig.parse("-ar")
                 newGameArabic = packageBlock.getEntry(arabicConfig, "string", "new_game")?.getValueAsString()
+                createModeArabic = packageBlock.getEntry(arabicConfig, "string", "create_mode")?.getValueAsString()
+                assertEquals("The common Create button must use the reviewed UI term", "إنشاء", createModeArabic)
                 assertTrue(
                     "The known 'new_game' string was not translated into Arabic: $newGameArabic",
                     !newGameArabic.isNullOrBlank() &&
@@ -146,6 +150,7 @@ class RealGameLocalizationInstrumentedTest {
                     "translatedStrings=${report.translatedStrings}\n" +
                     "arabicStringResources=$arabicResourceCount\n" +
                     "new_gameArabic=$newGameArabic\n" +
+                    "create_modeArabic=$createModeArabic\n" +
                     "signatureVerified=${signature.isVerified}\n"
             )
 
