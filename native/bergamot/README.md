@@ -22,14 +22,29 @@ The script targets arm64-v8a / Android API 28 and writes the JNI library plus li
 
 `BergamotNative.nativeCreate(configPath)` loads a Bergamot model configuration from app-private storage and returns an opaque session handle. `nativeTranslate` translates one input synchronously; `nativeDestroy` releases the session.
 
-This boundary does not download or install models. The model-v3.0 registry records are zstd-compressed and directional; a model config must refer to the verified decompressed model, shortlist and SentencePiece files. No translation should be enabled until the installer, config generation, real model load, airplane-mode translation test and device benchmarks are complete.
+This boundary does not yet provide the production model-installation flow. The model-v3.0 registry records are zstd-compressed and directional; a model config must refer to the verified decompressed model, shortlist and SentencePiece files.
 
-## Known gates
+CI now generates both model configs, builds the pinned JNI runtime for arm64-v8a and x86_64, loads the actual Mozilla base-memory v3.0 packages in an Android 15 / API 35 x86_64 emulator, and translates in both directions with airplane mode enabled, Wi-Fi/mobile data disabled, and zero internet-capable networks. This proves the pinned model/runtime combination in that emulator environment; it does **not** prove physical-device performance or a production installer. The JNI boundary remains test-only and is not wired into the end-user translation UI.
 
-- Confirm Android cross-build succeeds for the exact pinned source and its full dependency graph.
-- Verify the exact model-v3.0 config schema against Mozilla's released runtime before model loading.
-- Add device instrumentation tests for both directions and measure APK delta, installed model bytes, peak PSS/native heap and cold/warm latency.
+## CI emulator validation (2026-11-12)
+
+The successful API 35 / Android 15 x86_64 instrumentation run recorded:
+
+| Direction | Model package (decompressed) | Native load | First translation | Warm translation | PSS after first translation |
+|---|---:|---:|---:|---:|---:|
+| Arabic → English | 37,049,402 bytes | 77.6 ms | 211.9 ms | 6.3 ms | 265,901 KiB |
+| English → Arabic | 35,565,450 bytes | 67.0 ms | 209.9 ms | 7.8 ms | 255,704 KiB |
+
+The test asserted both directions returned meaningful text while networking was disabled. These are emulator measurements, not phone benchmarks. The observed roughly 250–260 MiB PSS is substantial and must be treated as a device-compatibility risk until tested on representative ARM64 phones.
+
+The instrumentation suite now also guards repeated warm translations with a 384 MiB total-PSS ceiling and a 32 MiB maximum PSS increase over the first translated result. Those are CI regression ceilings, not minimum-device specifications.
+
+## Remaining gates
+
+- Build and integrate a production model installer that atomically verifies every downloaded/decompressed file before activation and supports safe removal.
+- Run both directions on physical ARM64 devices; measure cold/warm latency, peak PSS/native heap, APK and installed model bytes, battery/thermal behavior, and output quality on representative game dialogue.
 - Audit and ship every transitive dependency notice, not only the Bergamot MPL-2.0 notice.
+- Keep the native engine out of the user-facing translation flow until the installer, lifecycle cleanup, device memory budget, and quality gates pass.
 
 ## Mozilla Arabic model registry audit (2026-11-10)
 
