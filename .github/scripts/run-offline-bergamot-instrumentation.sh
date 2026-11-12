@@ -1,12 +1,33 @@
 set -uo pipefail
 cd "$GITHUB_WORKSPACE"
 mkdir -p "$GITHUB_WORKSPACE/build/bergamot-instrumented"
+# Google SDK Setup can re-enable Wi-Fi shortly after the API 35 emulator
+# boots, even while airplane mode is on. Disable that one-shot setup package
+# in this disposable CI emulator before enforcing the offline state.
+adb shell pm disable-user --user 0 com.google.android.googlesdksetup || true
+adb shell am force-stop com.google.android.googlesdksetup || true
 adb shell settings put global airplane_mode_on 1
-adb shell svc wifi disable
+adb shell cmd connectivity airplane-mode enable || true
 adb shell settings put global mobile_data 0
 adb shell svc data disable
-adb shell cmd wifi set-wifi-enabled disabled || true
-adb shell cmd connectivity airplane-mode enable || true
+wifi_state=""
+for attempt in $(seq 1 30); do
+  adb shell am force-stop com.google.android.googlesdksetup || true
+  adb shell svc wifi disable || true
+  adb shell cmd wifi set-wifi-enabled disabled || true
+  wifi_state="$(adb shell settings get global wifi_on | tr -d '\\r')"
+  if [[ "$wifi_state" == "0" ]]; then
+    sleep 1
+    wifi_state="$(adb shell settings get global wifi_on | tr -d '\\r')"
+    [[ "$wifi_state" == "0" ]] && break
+  fi
+  sleep 1
+done
+if [[ "$wifi_state" != "0" ]]; then
+  echo "Wi-Fi did not remain disabled after stopping Google SDK Setup (wifi_on=$wifi_state)." >&2
+  adb shell dumpsys wifi | tail -120 >&2 || true
+  exit 1
+fi
 adb shell settings get global airplane_mode_on > "$GITHUB_WORKSPACE/build/bergamot-instrumented/airplane-mode-before.txt" || true
 adb shell settings get global wifi_on > "$GITHUB_WORKSPACE/build/bergamot-instrumented/wifi-setting-before.txt" || true
 adb shell settings get global mobile_data > "$GITHUB_WORKSPACE/build/bergamot-instrumented/mobile-data-before.txt" || true
