@@ -37,13 +37,13 @@ if git -C "$SOURCE" submodule status --recursive | grep -Eq '^[+-]'; then
   git -C "$SOURCE" submodule status --recursive >&2
   exit 4
 fi
+# Marian's upstream enables Ruy SGEMM by default only for ARM. Without an
+# explicit backend, x86_64 can compile but abort inside sgemm on first inference.
 cmake -S "$ROOT/native/bergamot" -B "$BUILD" -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
   -DANDROID_ABI="$ABI" \
   -DANDROID_PLATFORM=android-28 \
   -DANDROID_STL=c++_shared \
-  # Marian's upstream enables Ruy SGEMM by default only for ARM. Without an
-  # explicit backend, x86_64 can compile but abort inside sgemm on first inference.
   -DUSE_RUY:BOOL=ON \
   -DUSE_RUY_SGEMM:BOOL=ON \
   -DCMAKE_BUILD_TYPE=Release \
