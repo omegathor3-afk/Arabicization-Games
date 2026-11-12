@@ -43,9 +43,9 @@ jobs:
           if [[ -z "$NINJA" ]]; then sudo apt-get update && sudo apt-get install -y ninja-build; else echo "$(dirname "$NINJA")" >> "$GITHUB_PATH"; fi
           ninja --version
       - name: Build pinned Bergamot JNI library
-        run: native/bergamot/build-android.sh
+        run: bash native/bergamot/build-android.sh
       - name: Build x86_64 JNI for API 35 emulator runtime test
-        run: ANDROID_ABI=x86_64 native/bergamot/build-android.sh
+        run: ANDROID_ABI=x86_64 bash native/bergamot/build-android.sh
       - name: Stage and verify CMake compile databases for both Android ABIs
         if: always()
         run: |
