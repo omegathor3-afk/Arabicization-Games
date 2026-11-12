@@ -42,11 +42,18 @@ cmake -S "$ROOT/native/bergamot" -B "$BUILD" -G Ninja \
   -DANDROID_ABI="$ABI" \
   -DANDROID_PLATFORM=android-28 \
   -DANDROID_STL=c++_shared \
+  # Marian's upstream enables Ruy SGEMM by default only for ARM. Without an
+  # explicit backend, x86_64 can compile but abort inside sgemm on first inference.
+  -DUSE_RUY:BOOL=ON \
+  -DUSE_RUY_SGEMM:BOOL=ON \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_HAVE_LIBC_PTHREAD=ON \
   -DBUILD_ARCH="$CPU_ARCH" \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
   -DBERGAMOT_SOURCE_DIR="$SOURCE"
+CACHE_FILE="$BUILD/CMakeCache.txt"
+grep -Fqx 'USE_RUY:BOOL=ON' "$CACHE_FILE" || { echo "Ruy must be enabled for every Android ABI" >&2; exit 6; }
+grep -Fqx 'USE_RUY_SGEMM:BOOL=ON' "$CACHE_FILE" || { echo "Ruy SGEMM must be enabled for every Android ABI" >&2; exit 7; }
 python3 - "$BUILD/compile_commands.json" "$SOURCE" "$ABI" <<'PY'
 import json
 import pathlib
@@ -60,6 +67,13 @@ expected = (source_root / "3rd_party/marian-dev/src/3rd_party/faiss/VectorTransf
 if not database.is_file():
     raise SystemExit(f"Missing CMake compile database: {database}")
 entries = json.loads(database.read_text())
+if not any(
+    "-DUSE_RUY_SGEMM=1" in " ".join(
+        entry.get("arguments") or shlex.split(entry.get("command", ""))
+    )
+    for entry in entries
+):
+    raise SystemExit("Compile database does not prove USE_RUY_SGEMM=1 is active")
 matches = []
 for entry in entries:
     source = pathlib.Path(entry.get("file", ""))

@@ -5,6 +5,12 @@ if(NOT DEFINED BERGAMOT_SOURCE_DIR OR NOT EXISTS "${BERGAMOT_SOURCE_DIR}/CMakeLi
     message(FATAL_ERROR "BERGAMOT_SOURCE_DIR must point to the pinned Bergamot checkout")
 endif()
 
+# The pinned Marian runtime otherwise leaves x86_64 without an SGEMM backend:
+# the app compiles successfully but aborts inside sgemm() on its first translation.
+if(ANDROID AND (NOT USE_RUY OR NOT USE_RUY_SGEMM))
+    message(FATAL_ERROR "Android Bergamot builds require USE_RUY=ON and USE_RUY_SGEMM=ON for every ABI")
+endif()
+
 # Keep the upstream checkout immutable during configure. build-android.sh checks out
 # the superproject and every gitlink before CMake is invoked.
 set(GIT_SUBMODULE OFF CACHE BOOL "Do not mutate upstream submodules during CMake" FORCE)
