@@ -27,9 +27,11 @@ Mozilla documents Arabic among Firefox Translations supported languages, and the
 
 - Pin exact Bergamot and Marian commits and generate a complete third-party license inventory (including SentencePiece, protobuf, fastText and build dependencies).
 - Select an Arabic-capable compatible model package; validate its redistribution/commercial terms and tokenizer/lexicon provenance.
-- Build native arm64-v8a artifacts with reproducible NDK/CMake settings and verify ABI/symbol loading.
-- Add instrumentation tests that load the real model and translate English to Arabic in airplane mode.
-- Measure memory and package size on target phones before setting minimum hardware requirements.
+- [x] Build pinned native arm64-v8a and x86_64 artifacts with NDK/CMake and verify ABI/dependencies in CI.
+- [x] Load both real directional model-v3.0 packages and translate in airplane mode on an API 35 emulator.
+- [x] Record emulator package size, load latency, warm latency and PSS; add repeated-call memory regression ceilings.
+- [ ] Integrate an atomic, app-private production model installer and explicit session lifecycle into the app.
+- [ ] Measure memory, native heap, battery/thermal behavior and output quality on target physical phones before setting minimum hardware requirements.
 
 ## Sources checked
 
@@ -60,7 +62,9 @@ Pinned source candidate: `browsermt/bergamot-translator@9271618ebbdc5d21ac4dc4df
 
 This is a source pin, not yet an Android native binary. The upstream CMake project is C++17 and initializes git submodules during CMake configuration by default. A mobile integration must explicitly disable implicit submodule mutation and check out the exact gitlinks above. The Android JNI pattern in RTranslator v3.00 is a useful implementation reference, but its app-level Apache-2.0 license does not relicense Bergamot, Marian, SentencePiece or other native dependencies.
 
-**Compatibility gate still open:** model v3.0 uses zstd-compressed registry attachments and must be decompressed and checked against each published decompressed hash before loading. We have not yet proved that this exact engine pin can load these model-v3.0 payloads on Android arm64-v8a. We have not built JNI, translated a real sentence, or measured Android memory/latency. Do not mark Bergamot as available until those checks pass.
+**Updated compatibility status (2026-11-12):** CI now downloads and verifies the pinned zstd attachments and decompressed hashes, builds the pinned JNI source for arm64-v8a and x86_64, generates both directional model configs, and loads/translates the actual model-v3.0 payloads in an Android 15 / API 35 x86_64 emulator with networking disabled. The two directions produced meaningful output. This closes the emulator model/runtime compatibility gate, but it does not establish physical ARM64 device compatibility or a shippable translation feature.
+
+The successful emulator run measured approximately 250–260 MiB PSS after the first translation, with first-call latency around 210 ms and subsequent calls around 6–8 ms. These values are recorded in native/bergamot/README.md and the CI metrics artifact. The native bridge remains test-only; the production model installer, lifecycle integration, physical-device memory/thermal benchmarks, and dialogue-quality evaluation remain open. Do not label Bergamot as an end-user feature until those gates pass.
 
 Sources:
 - Official Mozilla registry: https://firefox.settings.services.mozilla.com/v1/buckets/main/collections/translations-models-v2/records
