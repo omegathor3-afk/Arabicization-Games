@@ -15,10 +15,10 @@ for attempt in $(seq 1 30); do
   adb shell am force-stop com.google.android.googlesdksetup || true
   adb shell svc wifi disable || true
   adb shell cmd wifi set-wifi-enabled disabled || true
-  wifi_state="$(adb shell settings get global wifi_on | tr -d '\\r')"
+  wifi_state="$(adb shell settings get global wifi_on | tr -d '\r')"
   if [[ "$wifi_state" == "0" ]]; then
     sleep 1
-    wifi_state="$(adb shell settings get global wifi_on | tr -d '\\r')"
+    wifi_state="$(adb shell settings get global wifi_on | tr -d '\r')"
     [[ "$wifi_state" == "0" ]] && break
   fi
   sleep 1
