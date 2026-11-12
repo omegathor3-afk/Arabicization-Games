@@ -24,6 +24,13 @@ import java.util.Locale
 class BergamotOfflineInstrumentedTest {
     private val tag = "BergamotOfflineTest"
 
+    companion object {
+        // CI-only regression ceilings, not device compatibility guarantees.
+        private const val WARM_TRANSLATION_ITERATIONS = 8
+        private const val MAX_TRANSLATION_PSS_KB = 384 * 1024
+        private const val MAX_WARM_TRANSLATION_PSS_GROWTH_KB = 32 * 1024
+    }
+
     @Test
     fun bothArabicDirectionsLoadAndTranslateWithNetworkDisabled() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -80,6 +87,17 @@ class BergamotOfflineInstrumentedTest {
                 val pssAfterSubsequentTranslateKb = currentPssKb()
                 Log.i(tag, "phase=subsequent-translate:complete direction=${direction.name} durationMs=$subsequentTranslateMs outputLength=${subsequentOutput.length}")
 
+                var repeatedOutput = subsequentOutput
+                repeat(WARM_TRANSLATION_ITERATIONS) {
+                    repeatedOutput = BergamotNative.nativeTranslate(session, direction.subsequentInput)
+                    assertTrue("${direction.name} repeated translation is blank at iteration $it", repeatedOutput.isNotBlank())
+                }
+                val pssAfterRepeatedTranslateKb = currentPssKb()
+                Log.i(
+                    tag,
+                    "phase=warm-translation-budget:complete direction=${direction.name} iterations=$WARM_TRANSLATION_ITERATIONS pssKb=$pssAfterRepeatedTranslateKb"
+                )
+
                 val record = JSONObject()
                     .put("direction", direction.name)
                     .put("modelPackageBytes", packageBytes)
@@ -87,10 +105,12 @@ class BergamotOfflineInstrumentedTest {
                     .put("loadMs", loadMs)
                     .put("firstTranslateMs", firstTranslateMs)
                     .put("subsequentTranslateMs", subsequentTranslateMs)
+                    .put("warmTranslationIterations", WARM_TRANSLATION_ITERATIONS)
                     .put("pssBeforeLoadKb", pssBeforeLoadKb)
                     .put("pssAfterLoadKb", pssAfterLoadKb)
                     .put("pssAfterFirstTranslateKb", pssAfterFirstTranslateKb)
                     .put("pssAfterSubsequentTranslateKb", pssAfterSubsequentTranslateKb)
+                    .put("pssAfterRepeatedTranslateKb", pssAfterRepeatedTranslateKb)
                     .put("firstInput", direction.input)
                     .put("firstOutput", firstOutput)
                     .put("subsequentInput", direction.subsequentInput)
@@ -112,7 +132,16 @@ class BergamotOfflineInstrumentedTest {
                 assertTrue("${direction.name} model load measurement unavailable", loadMs > 0.0)
                 assertTrue("${direction.name} first translation measurement unavailable", firstTranslateMs >= 0.0)
                 assertTrue("${direction.name} subsequent translation measurement unavailable", subsequentTranslateMs >= 0.0)
-                assertTrue("${direction.name} PSS measurement unavailable", pssAfterLoadKb > 0 && pssAfterFirstTranslateKb > 0 && pssAfterSubsequentTranslateKb > 0)
+                assertTrue("${direction.name} PSS measurement unavailable", pssAfterLoadKb > 0 && pssAfterFirstTranslateKb > 0 && pssAfterSubsequentTranslateKb > 0 && pssAfterRepeatedTranslateKb > 0)
+                assertTrue(
+                    "${direction.name} PSS exceeded the CI translation budget: ${pssAfterRepeatedTranslateKb} KiB",
+                    pssAfterRepeatedTranslateKb <= MAX_TRANSLATION_PSS_KB
+                )
+                assertTrue(
+                    "${direction.name} warm translations grew PSS by more than the allowed budget",
+                    pssAfterRepeatedTranslateKb <= pssAfterFirstTranslateKb + MAX_WARM_TRANSLATION_PSS_GROWTH_KB
+                )
+                assertLanguageScript(direction.name, repeatedOutput, direction.subsequentInput)
             } finally {
                 if (session != 0L) BergamotNative.nativeDestroy(session)
             }
