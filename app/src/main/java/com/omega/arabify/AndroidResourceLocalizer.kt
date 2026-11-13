@@ -126,6 +126,8 @@ internal object ArabicUiGlossary {
         "easy" to "سهل",
         "medium" to "متوسط",
         "hard" to "صعب",
+        "ng" to "دون تخمين",
+        "nf" to "دون أعلام",
         "beginner" to "مبتدئ",
         "intermediate" to "متوسط",
         "expert" to "خبير",
