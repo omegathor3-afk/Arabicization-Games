@@ -91,6 +91,7 @@ class RealGameLocalizationInstrumentedTest {
             val module = ApkModule.loadApkFile(output)
             var newGameArabic: String? = null
             var createModeArabic: String? = null
+            var noGuessShortArabic: String? = null
             val arabicResourceCount = try {
                 val table = module.getTableBlock() ?: error("Translated APK has no resources.arsc")
                 val packageBlock = table.firstOrNull { it.getName() == report.packageName }
@@ -100,7 +101,9 @@ class RealGameLocalizationInstrumentedTest {
                 val arabicConfig = ResConfig.parse("-ar")
                 newGameArabic = packageBlock.getEntry(arabicConfig, "string", "new_game")?.getValueAsString()
                 createModeArabic = packageBlock.getEntry(arabicConfig, "string", "create_mode")?.getValueAsString()
+                noGuessShortArabic = packageBlock.getEntry(arabicConfig, "string", "no_guess_short")?.getValueAsString()
                 assertEquals("The common Create button must use the reviewed UI term", "إنشاء", createModeArabic)
+                assertEquals("The compact no-guess badge must be localized too", "دون تخمين", noGuessShortArabic)
                 assertTrue(
                     "The known 'new_game' string was not translated into Arabic: $newGameArabic",
                     !newGameArabic.isNullOrBlank() &&
@@ -151,6 +154,7 @@ class RealGameLocalizationInstrumentedTest {
                     "arabicStringResources=$arabicResourceCount\n" +
                     "new_gameArabic=$newGameArabic\n" +
                     "create_modeArabic=$createModeArabic\n" +
+                    "no_guess_shortArabic=$noGuessShortArabic\n" +
                     "signatureVerified=${signature.isVerified}\n"
             )
 
