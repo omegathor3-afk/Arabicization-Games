@@ -36,11 +36,15 @@ jobs:
           "$SDKMANAGER" --install "ndk;27.2.12479018" "cmake;3.31.6"
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          CMAKE_BIN="$ANDROID_HOME/cmake/3.31.6/bin"
+          test -x "$CMAKE_BIN/cmake"
+          echo "$CMAKE_BIN" >> "$GITHUB_PATH"
           echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          "$CMAKE_BIN/cmake" --version | head -n 1 | grep -F "3.31.6"
       - name: Install Ninja
         run: |
-          NINJA="$(find "$ANDROID_HOME/cmake" -type f -name ninja -perm -111 -print -quit)"
-          if [[ -z "$NINJA" ]]; then sudo apt-get update && sudo apt-get install -y ninja-build; else echo "$(dirname "$NINJA")" >> "$GITHUB_PATH"; fi
+          NINJA="$ANDROID_HOME/cmake/3.31.6/bin/ninja"
+          if [[ ! -x "$NINJA" ]]; then sudo apt-get update && sudo apt-get install -y ninja-build; else echo "$(dirname "$NINJA")" >> "$GITHUB_PATH"; fi
           ninja --version
       - name: Build pinned Bergamot JNI library
         run: bash native/bergamot/build-android.sh
