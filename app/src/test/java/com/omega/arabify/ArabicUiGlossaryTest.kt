@@ -21,6 +21,13 @@ class ArabicUiGlossaryTest {
     }
 
     @Test
+    fun compactModeAbbreviationsUseReviewedArabicLabels() {
+        assertEquals("دون تخمين", ArabicUiGlossary.translateExact("NG"))
+        assertEquals("دون أعلام", ArabicUiGlossary.translateExact("NF"))
+        assertEquals("دون تخمين", ArabicUiGlossary.translateExact(" ng "))
+    }
+
+    @Test
     fun longerSentencesAreNotReplacedBySubstringMatches() {
         assertNull(ArabicUiGlossary.translateExact("Create a new profile"))
         assertNull(ArabicUiGlossary.translateExact("Continue playing where you left off"))
