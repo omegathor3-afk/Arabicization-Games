@@ -29,8 +29,9 @@ internal object AssetTextTransformer {
    val protected=PlaceholderProtector.protect(value)
    return try {
     val result=translate(protected.text)
-    val lost=protected.tokens.indices.any{!result.contains("__ARABIFY_TOKEN_${it}__")}
-    if(lost){skipped++;value}
+    val expectedTokens=protected.tokens.indices.map { "__ARABIFY_TOKEN_${it}__" }
+    val quality=TranslationQualityGate.review(value,result,expectedTokens)
+    if(!quality.accepted){skipped++;value}
     else {
      val restored=PlaceholderProtector.restore(result,protected.tokens)
      if(restored.isBlank()){skipped++;value}else{translated++;restored}
@@ -118,7 +119,7 @@ internal object AssetTextTransformer {
   if(text.startsWith("http://")||text.startsWith("https://")||text.contains("@@"))return false
   if(text.matches(Regex("[0-9\\s.,+\\-/%:]+")))return false
   if(text.matches(Regex("[A-Z0-9_./:-]{3,}")))return false
-  if(text.contains("\\u0000"))return false
+  if(text.contains('\u0000'))return false
   return text.any{it.isLetter()} && (text.contains(' ')||text.length>=3)
  }
 }
@@ -126,12 +127,54 @@ internal object AssetTextTransformer {
 internal object AndroidAssetLocalizer {
  private const val MAX_FILE_BYTES=512L*1024L
  private const val MAX_TOTAL_TRANSLATION_BYTES=4L*1024L*1024L
+ private const val MAX_CANDIDATE_FILES=2048
+ private const val MAX_ARCHIVE_ENTRIES=100_000
+ private const val MAX_SINGLE_REBUILT_ENTRY_BYTES=2L*1024L*1024L*1024L
+ private const val MAX_TOTAL_REBUILT_BYTES=4L*1024L*1024L*1024L
  private val supported=setOf("json","txt","properties","strings")
  private val allowedRoots=listOf("assets/","res/raw/","localization/","strings/")
 
+ internal fun isSupportedTextAsset(
+  path:String,
+  size:Long,
+  allowedPathPrefixes:List<String> = allowedRoots
+ ):Boolean {
+  val safePath = normalizeArchivePath(path) ?: return false
+  val safeRoots = allowedPathPrefixes.mapNotNull(::normalizeAllowedRoot)
+  val extension=safePath.substringAfterLast('.', "").lowercase()
+  return supported.contains(extension) &&
+   safeRoots.any { safePath.startsWith(it) } &&
+   size in 1..MAX_FILE_BYTES
+ }
+
+ /**
+  * ZIP entry names must remain relative and may not contain traversal or
+  * ambiguous empty path segments. Backslashes are normalized before checking
+  * because archives from third-party tooling are not always consistent.
+  */
+ private fun normalizeArchivePath(path:String):String? {
+  if(path.isBlank() || path.startsWith('/') || path.startsWith('\\')) return null
+  if(path.contains('\u0000')) return null
+  val normalized=path.replace('\\','/')
+  val segments=normalized.split('/')
+  if(segments.any { it.isEmpty() || it=="." || it==".." }) return null
+  if(segments.first().contains(':')) return null
+  return segments.joinToString("/")
+ }
+
+ private fun normalizeAllowedRoot(root:String):String? {
+  if(root.isBlank() || root.startsWith('/') || root.startsWith('\\')) return null
+  val normalized=root.replace('\\','/').trimEnd('/')
+  val segments=normalized.split('/')
+  if(segments.any { it.isEmpty() || it=="." || it==".." }) return null
+  if(segments.first().contains(':')) return null
+  return "$normalized/"
+ }
+
  suspend fun localize(
   context:Context,inputApk:File,unsignedApk:File,signedApk:File,
-  translator:OfflineArabicTranslator,onProgress:(Int,Int)->Unit={_,_->}
+  translator:OfflineArabicTranslator,onProgress:(Int,Int)->Unit={_,_->},
+  allowedPathPrefixes:List<String> = allowedRoots
  ):AssetLocalizationReport {
   require(inputApk.isFile){"ملف APK الأصلي غير موجود."}
   val archiveInfo=try{
@@ -151,12 +194,15 @@ internal object AndroidAssetLocalizer {
    val entries=zip.entries()
    val candidates=mutableListOf<ZipEntry>()
    var hasNativeLibraries=false
+   var archiveEntryCount=0
    while(entries.hasMoreElements()){
     val entry=entries.nextElement()
+    archiveEntryCount++
+    require(archiveEntryCount<=MAX_ARCHIVE_ENTRIES){"عدد عناصر APK يتجاوز حد إعادة البناء الآمن (100,000)."}
     if(entry.name.startsWith("lib/")&&entry.name.endsWith(".so",true))hasNativeLibraries=true
-    val ext=entry.name.substringAfterLast('.',"").lowercase()
-    if(!entry.isDirectory&&supported.contains(ext)&&allowedRoots.any{entry.name.startsWith(it)}&&entry.size in 1..MAX_FILE_BYTES){
+    if(!entry.isDirectory&&isSupportedTextAsset(entry.name,entry.size,allowedPathPrefixes)){
      candidates+=entry
+     require(candidates.size<=MAX_CANDIDATE_FILES){"عدد ملفات النصوص المرشحة يتجاوز حد المعالجة الآمن (2,048)."}
     }
    }
    if(hasNativeLibraries&&!extractNativeLibs){
@@ -164,18 +210,27 @@ internal object AndroidAssetLocalizer {
    }
    discovered=candidates.size
    candidates.forEachIndexed { index,entry ->
-    val bytes=zip.getInputStream(entry).use{it.readBytes()}
+    val remaining=MAX_TOTAL_TRANSLATION_BYTES-totalBytes
+    if(remaining<=0L || entry.size>minOf(MAX_FILE_BYTES,remaining)){
+     skippedStrings++
+     onProgress(index+1,candidates.size)
+     return@forEachIndexed
+    }
+    val bytes=zip.getInputStream(entry).use{
+     BoundedArchiveInput.readAll(it,minOf(MAX_FILE_BYTES,remaining))
+    }
+    require(entry.size==bytes.size.toLong()){
+     "حجم الملف الفعلي لا يطابق بيانات ZIP: ${entry.name}"
+    }
     totalBytes+=bytes.size
-    if(totalBytes<=MAX_TOTAL_TRANSLATION_BYTES){
-     val original=bytes.toString(Charsets.UTF_8)
-     val result=AssetTextTransformer.transform(entry.name,original){value->translator.translateEnglishToArabic(value)}
-     if(result.translated>0){
-      transformed[entry.name]=result.text.toByteArray(Charsets.UTF_8)
-      translatedFiles++
-     }
-     translatedStrings+=result.translated
-     skippedStrings+=result.skipped
-    }else skippedStrings++
+    val original=bytes.toString(Charsets.UTF_8)
+    val result=AssetTextTransformer.transform(entry.name,original){value->translator.translateEnglishToArabic(value)}
+    if(result.translated>0){
+     transformed[entry.name]=result.text.toByteArray(Charsets.UTF_8)
+     translatedFiles++
+    }
+    translatedStrings+=result.translated
+    skippedStrings+=result.skipped
     onProgress(index+1,candidates.size)
    }
 
@@ -183,8 +238,12 @@ internal object AndroidAssetLocalizer {
    unsignedApk.parentFile?.mkdirs()
    ZipOutputStream(unsignedApk.outputStream().buffered()).use { out ->
     val all=zip.entries()
+    var copiedArchiveBytes=0L
+    var writtenEntries=0
     while(all.hasMoreElements()){
      val entry=all.nextElement()
+     writtenEntries++
+     require(writtenEntries<=MAX_ARCHIVE_ENTRIES){"عدد عناصر APK تغير أثناء إعادة البناء."}
      if(isOldSignature(entry.name))continue
      val target=ZipEntry(entry.name).apply{
       time=entry.time
@@ -193,8 +252,20 @@ internal object AndroidAssetLocalizer {
      out.putNextEntry(target)
      if(!entry.isDirectory){
       val replacement=transformed[entry.name]
-      if(replacement!=null)out.write(replacement)
-      else zip.getInputStream(entry).use{it.copyTo(out)}
+      val remaining=MAX_TOTAL_REBUILT_BYTES-copiedArchiveBytes
+      require(remaining>=0L){"الحجم المفكوك للأرشيف تجاوز حد إعادة البناء الآمن."}
+      val entryBudget=minOf(MAX_SINGLE_REBUILT_ENTRY_BYTES,remaining)
+      if(replacement!=null){
+       require(replacement.size.toLong()<=entryBudget){"النص المعرب تجاوز حد حجم الملف الآمن."}
+       out.write(replacement)
+       copiedArchiveBytes=Math.addExact(copiedArchiveBytes,replacement.size.toLong())
+      } else {
+       val copied=zip.getInputStream(entry).use{BoundedArchiveInput.copy(it,out,entryBudget)}
+       require(entry.size<0L || copied==entry.size){
+        "حجم عنصر ZIP الفعلي لا يطابق بياناته: ${entry.name}"
+       }
+       copiedArchiveBytes=Math.addExact(copiedArchiveBytes,copied)
+      }
      }
      out.closeEntry()
     }

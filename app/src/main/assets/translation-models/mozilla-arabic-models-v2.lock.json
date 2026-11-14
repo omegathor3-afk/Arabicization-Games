@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "source": "Mozilla Remote Settings translations-models-v2",
+  "registryUrl": "https://firefox.settings.services.mozilla.com/v1/buckets/main/collections/translations-models-v2/records",
+  "engine": {
+    "name": "Bergamot Translator",
+    "repository": "https://github.com/browsermt/bergamot-translator",
+    "commit": "9271618ebbdc5d21ac4dc4df9e72beb7ce644774",
+    "license": "MPL-2.0",
+    "status": "pinned-source-candidate; Android NDK/JNI build not yet integrated or validated"
+  },
+  "modelLicense": "MPL-2.0",
+  "modelVersion": "3.0",
+  "architecture": "base-memory",
+  "directions": {
+    "en-ar": [
+      {"type":"model","filename":"model.enar.intgemm.alphas.bin.zst","compressedBytes":22272394,"sha256":"41dc919c1110508ad7f03ee53bbb28a54abd61d1b15bbc3fe51c5df5c9331016","decompressedBytes":31561787,"decompressedSha256":"ae659d7045fc2e5d6ba50583586a5d94ee4358d92c019847e37b57a0e627faa8","registryLocation":"main-workspace/translations-models-v2/0d56ac93-c0ac-4854-b48e-09e38d51dace.zst"},
+      {"type":"lex","filename":"lex.50.50.enar.s2t.bin.zst","compressedBytes":1204697,"sha256":"f5fe1d8d145e38b4c6fd9f7a35d0d5779388fa135743561e1d25e982d7191222","decompressedBytes":3139692,"decompressedSha256":"2b7194817c5dd9225ca90c0d908cc92e1d6d1f45625781a5feb037ac568d6a61","registryLocation":"main-workspace/translations-models-v2/6b7c1061-729a-44e3-858d-409a7061a704.zst"},
+      {"type":"vocab","filename":"vocab.enar.spm.zst","compressedBytes":351089,"sha256":"9f68a65a64d4c64ea41d94024160e1443ff51b6c7ba0a2f93e7702beaa0b1d25","decompressedBytes":863591,"decompressedSha256":"8d93c54aa5e2044c416ec680b5ff9af0227bd698521666e8b1a1ea1b041fbae8","registryLocation":"main-workspace/translations-models-v2/371728a2-8c02-4528-bd76-4cd1c4e8f05e.zst"}
+    ],
+    "ar-en": [
+      {"type":"model","filename":"model.aren.intgemm.alphas.bin.zst","compressedBytes":22770191,"sha256":"beed6b0da7378dfe256a9c0604a0d07dcb2b9ad4ce5295ac1ea6f1c5815eed65","decompressedBytes":31561787,"decompressedSha256":"7b7af0282dc5f4d8805b9a298c2fa828967e3f09ca10f1942ebeea0b2cfc12fa","registryLocation":"main-workspace/translations-models-v2/c1fc44d3-7b80-415e-9b74-57c4ee027559.zst"},
+      {"type":"lex","filename":"lex.50.50.aren.s2t.bin.zst","compressedBytes":1623998,"sha256":"0dc3d51a8e41da0ee6f53784e04b2cd044e20e15f15b09aa9c1d96047de803b4","decompressedBytes":4627200,"decompressedSha256":"4b45f14dbea40d368093a13563fc1ca48457ee70c1291c82b206f3baff210081","registryLocation":"main-workspace/translations-models-v2/5fef8e32-9215-4eda-b63d-b4105b9820f6.zst"},
+      {"type":"vocab","filename":"vocab.aren.spm.zst","compressedBytes":349058,"sha256":"4e7256a9b84ae2773a5b32a234418d1c111a018b9e1bf2580ad83972d5166687","decompressedBytes":860035,"decompressedSha256":"51b4ee3f828d10015464523d0b4f5a6c086b0b2a9bde716a581001cf6c260366","registryLocation":"main-workspace/translations-models-v2/324af319-7174-4574-a0e5-dc047a78aa33.zst"}
+    ]
+  }
+}

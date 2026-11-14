@@ -1,0 +1,50 @@
+name: CodeQL and secret scanning
+
+on:
+  push:
+    branches: ["feat/unity-mono-streamingassets"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: CodeQL and Gitleaks
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Scan repository history for secrets
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@9418214df1f2c4b8128c770156c409013b07d6b9
+        with:
+          languages: java-kotlin, actions
+          queries: security-extended
+
+      # This repository intentionally uses the installed Gradle CLI rather than
+      # a root gradlew wrapper. CodeQL autobuild assumes a wrapper/build tool
+      # layout that this repository does not provide, so build explicitly.
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+        with:
+          gradle-version: "8.13"
+
+      - name: Build Kotlin and Android sources for CodeQL extraction
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@9418214df1f2c4b8128c770156c409013b07d6b9

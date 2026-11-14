@@ -3,7 +3,7 @@ package com.omega.arabify
 internal data class ProtectedText(val text: String, val tokens: List<String>)
 
 internal object PlaceholderProtector {
- private val tokenPattern = Regex("%(?:[0-9]+\\$)?[sdif]|\\$\\{[^}]+}|\\{[^{}]+}|<[^>]+>|\\\\[nt]")
+ private val tokenPattern = Regex("%(?:[0-9]+\\$)?[sdif]|\\$\\{[^}]+\\}|\\{[^{}]+\\}|<[^>]+>|\\\\[nt]")
 
  fun protect(source: String): ProtectedText {
   val tokens = mutableListOf<String>()

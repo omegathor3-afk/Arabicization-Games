@@ -22,9 +22,43 @@ class ArabicFontAnalyzerTest {
     }
 
     @Test fun ranksArabicSuitableFontAheadOfLatinOnlyFont() {
-        val latin = ArabicFontAssessment("latin.ttf", "TTF", 0, 100, 0, false, 1000)
-        val arabic = ArabicFontAssessment("arabic.ttf", "TTF", 95, 100, 95, true, 2000)
+        val latin = ArabicFontAssessment("latin.ttf", "TTF", 0, 100, 0, false, false, 1000)
+        val arabic = ArabicFontAssessment("arabic.ttf", "TTF", 95, 100, 95, true, true, 2000)
         assertEquals("arabic.ttf", ArabicFontAnalyzer.rank(listOf(latin, arabic)).first().path)
+    }
+
+    @Test fun requiresArabicScriptInBothGsubAndGposForSuitableRanking() {
+        val complete = ArabicFontAnalyzer.inspect("fonts/arabic-complete.ttf", fontWithFullArabicCmap(includeShaping = true))
+        assertEquals(100, complete.coveragePercent)
+        assertTrue(complete.hasArabicShapingTables)
+        assertTrue(complete.suitableForArabic)
+
+        val cmapOnly = ArabicFontAnalyzer.inspect("fonts/arabic-cmap-only.ttf", fontWithFullArabicCmap(includeShaping = false))
+        assertEquals(100, cmapOnly.coveragePercent)
+        assertFalse(cmapOnly.hasArabicShapingTables)
+        assertFalse(cmapOnly.suitableForArabic)
+    }
+
+    @Test fun readsFamilySubfamilyWeightAndItalicMetadata() {
+        val assessment = ArabicFontAnalyzer.inspect("fonts/example-bold-italic.ttf", fontWithNameAndOs2Tables())
+        assertEquals("Example Sans", assessment.familyName)
+        assertEquals("Bold Italic", assessment.subfamilyName)
+        assertEquals(700, assessment.weightClass)
+        assertTrue(assessment.italic == true)
+    }
+
+    @Test fun ranksClosestArabicFontStyleAheadOfOtherFamiliesAndWeights() {
+        val matching = ArabicFontAssessment(
+            "matching.ttf", "TTF", 90, 100, 90, true, true, 3000,
+            familyName = "Example Sans", weightClass = 700, italic = true
+        )
+        val wrongWeight = matching.copy(path = "regular.ttf", weightClass = 400)
+        val wrongFamily = matching.copy(path = "other.ttf", familyName = "Other Family")
+        val ranked = ArabicFontAnalyzer.rankForStyle(
+            listOf(wrongFamily, wrongWeight, matching),
+            ArabicFontAnalyzer.FontStyleProfile("Example Sans", 700, true)
+        )
+        assertEquals("matching.ttf", ranked.first().path)
     }
 
     @Test fun recognizesSupportedFontExtensions() {
@@ -33,8 +67,96 @@ class ArabicFontAnalyzerTest {
         assertFalse(ArabicFontAnalyzer.isFontPath("assets/fonts/atlas.bin"))
     }
 
-    private fun fontWithArabicBasicCmap(): ByteArray {
-        val bytes = ByteArray(28 + 4 + 8 + 28)
+    private fun fontWithNameAndOs2Tables(): ByteArray {
+        val tableCount = 2
+        val nameOffset = 12 + tableCount * 16
+        val nameLength = 6 + 2 * 12 + 24 + 22
+        val os2Offset = nameOffset + nameLength
+        val bytes = ByteArray(os2Offset + 64)
+        val b = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN)
+        b.putInt(0, 0x00010000)
+        b.putShort(4, tableCount.toShort())
+        writeTableRecord(bytes, b, 12, "name", nameOffset, nameLength)
+        writeTableRecord(bytes, b, 28, "OS/2", os2Offset, 64)
+
+        b.putShort(nameOffset, 0)
+        b.putShort(nameOffset + 2, 2)
+        b.putShort(nameOffset + 4, 30)
+        val family = "Example Sans".toByteArray(Charsets.UTF_16BE)
+        val subfamily = "Bold Italic".toByteArray(Charsets.UTF_16BE)
+        val records = nameOffset + 6
+        b.putShort(records, 3); b.putShort(records + 2, 1); b.putShort(records + 4, 0x0409)
+        b.putShort(records + 6, 1); b.putShort(records + 8, family.size.toShort()); b.putShort(records + 10, 0)
+        b.putShort(records + 12, 3); b.putShort(records + 14, 1); b.putShort(records + 16, 0x0409)
+        b.putShort(records + 18, 2); b.putShort(records + 20, subfamily.size.toShort()); b.putShort(records + 22, family.size.toShort())
+        family.copyInto(bytes, nameOffset + 30)
+        subfamily.copyInto(bytes, nameOffset + 30 + family.size)
+
+        b.putShort(os2Offset + 4, 700)
+        b.putShort(os2Offset + 62, 1)
+        return bytes
+    }
+
+    private fun fontWithFullArabicCmap(includeShaping: Boolean): ByteArray {
+        val tableCount = if (includeShaping) 3 else 1
+        val cmapOffset = 12 + tableCount * 16
+        val cmapLength = 40
+        val shapingLength = 22
+        val gsubOffset = cmapOffset + cmapLength
+        val gposOffset = gsubOffset + shapingLength
+        val bytes = ByteArray(cmapOffset + cmapLength + if (includeShaping) shapingLength * 2 else 0)
+        val b = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN)
+        b.putInt(0, 0x00010000)
+        b.putShort(4, tableCount.toShort())
+        writeTableRecord(bytes, b, 12, "cmap", cmapOffset, cmapLength)
+        if (includeShaping) {
+            writeTableRecord(bytes, b, 28, "GSUB", gsubOffset, shapingLength)
+            writeTableRecord(bytes, b, 44, "GPOS", gposOffset, shapingLength)
+        }
+        b.putShort(cmapOffset, 0)
+        b.putShort(cmapOffset + 2, 1)
+        b.putShort(cmapOffset + 4, 3)
+        b.putShort(cmapOffset + 6, 10)
+        b.putInt(cmapOffset + 8, 12)
+        val subtable = cmapOffset + 12
+        b.putShort(subtable, 12)
+        b.putShort(subtable + 2, 0)
+        b.putInt(subtable + 4, 28)
+        b.putInt(subtable + 8, 0)
+        b.putInt(subtable + 12, 1)
+        b.putInt(subtable + 16, 0x0621)
+        b.putInt(subtable + 20, 0x08C9)
+        b.putInt(subtable + 24, 1)
+        if (includeShaping) {
+            writeArabicScriptTable(b, gsubOffset)
+            writeArabicScriptTable(b, gposOffset)
+        }
+        return bytes
+    }
+
+    private fun writeTableRecord(bytes: ByteArray, buffer: ByteBuffer, record: Int, tag: String, offset: Int, length: Int) {
+        tag.toByteArray(Charsets.US_ASCII).copyInto(bytes, record)
+        buffer.putInt(record + 8, offset)
+        buffer.putInt(record + 12, length)
+    }
+
+    private fun writeArabicScriptTable(buffer: ByteBuffer, base: Int) {
+        buffer.putShort(base, 1)
+        buffer.putShort(base + 2, 0)
+        buffer.putShort(base + 4, 10)
+        buffer.putShort(base + 6, 0)
+        buffer.putShort(base + 8, 0)
+        buffer.putShort(base + 10, 1)
+        buffer.put(base + 12, 97.toByte())
+        buffer.put(base + 13, 114.toByte())
+        buffer.put(base + 14, 97.toByte())
+        buffer.put(base + 15, 98.toByte())
+        buffer.putShort(base + 16, 8)
+        buffer.putShort(base + 18, 4)
+        buffer.putShort(base + 20, 0)
+    }
+
+    private fun fontWithArabicBasicCmap(): ByteArray {        val bytes = ByteArray(28 + 4 + 8 + 28)
         val b = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN)
         b.putInt(0, 0x00010000)
         b.putShort(4, 1)

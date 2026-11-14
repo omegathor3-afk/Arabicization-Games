@@ -15,9 +15,10 @@ internal class OfflineArabicTranslator(context: Context) {
    .build()
  )
 
- suspend fun prepareForOfflineUse() {
-  val conditions = DownloadConditions.Builder().requireWifi().build()
-  translator.downloadModelIfNeeded(conditions).await()
+ suspend fun prepareForOfflineUse(requireWifi: Boolean = true) {
+  val conditionsBuilder = DownloadConditions.Builder()
+  if (requireWifi) conditionsBuilder.requireWifi()
+  translator.downloadModelIfNeeded(conditionsBuilder.build()).await()
  }
 
  suspend fun translateEnglishToArabic(text: String): String {

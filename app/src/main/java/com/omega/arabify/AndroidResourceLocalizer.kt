@@ -5,6 +5,7 @@ import com.reandroid.arsc.chunk.PackageBlock
 import com.reandroid.arsc.chunk.TableBlock
 import com.reandroid.arsc.value.ResConfig
 import java.io.File
+import java.util.Locale
 
 internal data class AndroidLocalizationReport(
  val packageName: String,
@@ -62,9 +63,12 @@ internal object AndroidResourceLocalizer {
      onProgress(index + 1, sources.size)
      return@forEachIndexed
     }
+    // Exact UI labels use a small reviewed glossary; longer phrases still
+    // go through the offline translator and its placeholder/quality checks.
     val protected = PlaceholderProtector.protect(source)
     try {
-     val translatedText = translator.translateEnglishToArabic(protected.text)
+     val translatedText = ArabicUiGlossary.translateExact(source)
+      ?: translator.translateEnglishToArabic(protected.text)
      val tokenWasLost = protected.tokens.indices.any { tokenIndex ->
       !translatedText.contains("__ARABIFY_TOKEN_${tokenIndex}__")
      }
@@ -105,4 +109,55 @@ internal object AndroidResourceLocalizer {
   }
   return null
  }
+}
+
+
+/**
+ * High-confidence exact UI labels that should not depend on model wording.
+ * This is deliberately exact-match only: sentences and game-specific prose
+ * continue through the offline translator instead of receiving a bad substring
+ * replacement.
+ */
+internal object ArabicUiGlossary {
+    private val exactTranslations = mapOf(
+        "create" to "إنشاء",
+        "new game" to "لعبة جديدة",
+        "settings" to "الإعدادات",
+        "easy" to "سهل",
+        "medium" to "متوسط",
+        "hard" to "صعب",
+        "ng" to "دون تخمين",
+        "nf" to "دون أعلام",
+        "beginner" to "مبتدئ",
+        "intermediate" to "متوسط",
+        "expert" to "خبير",
+        "more info" to "مزيد من المعلومات",
+        "more information" to "مزيد من المعلومات",
+        "support minesweeper" to "دعم كاسحة الألغام",
+        "minesweeper" to "كاسحة الألغام",
+        "add mode" to "إضافة وضع",
+        "edit mode" to "تعديل الوضع",
+        "create anyway" to "إنشاء على أي حال",
+        "use existing" to "استخدام الموجود",
+        "no guess mode" to "وضع دون تخمين",
+        "no flag mode" to "وضع دون أعلام",
+        "continue" to "متابعة",
+        "back" to "رجوع",
+        "save" to "حفظ",
+        "add" to "إضافة",
+        "edit" to "تعديل",
+        "delete" to "حذف",
+        "cancel" to "إلغاء",
+        "close" to "إغلاق",
+        "open" to "فتح",
+        "apply" to "تطبيق",
+        "mode" to "الوضع",
+        "name" to "الاسم",
+        "width" to "العرض",
+        "height" to "الارتفاع",
+        "mines" to "الألغام"
+    )
+
+    fun translateExact(source: String): String? =
+        exactTranslations[source.trim().lowercase(Locale.ROOT)]
 }

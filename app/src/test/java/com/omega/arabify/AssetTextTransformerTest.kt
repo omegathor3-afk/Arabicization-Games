@@ -2,22 +2,34 @@ package com.omega.arabify
 
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AssetTextTransformerTest {
  @Test fun textFileTranslatesLinesAndKeepsCommentsAndPlaceholders()=runBlocking {
   val source="# dialogue\nThe door is open, {player}.\n"
-  val result=AssetTextTransformer.transform("assets/dialogue.txt",source){it.replace("The door is open","الباب مفتوح")}
+  val result=AssetTextTransformer.transform("assets/dialogue.txt",source){ "الباب مفتوح، __ARABIFY_TOKEN_0__." }
   assertTrue(result.text.contains("# dialogue"))
-  assertTrue(result.text.contains("الباب مفتوح, {player}."))
+  assertTrue(result.text.contains("الباب مفتوح، {player}."))
   assertEquals(1,result.translated)
+ }
+
+ @Test fun jsonTranslatesValuesKeepsKeysAndRestoresPlaceholders()=runBlocking {
+  val source="""{"menu":"Start Game","dialogue":{"welcome":"Hello {player}","url":"https://example.com"}}"""
+  val result=AssetTextTransformer.transform("assets/localization/en.json",source) {
+   if(it=="Start Game") "ابدأ اللعبة" else "مرحباً __ARABIFY_TOKEN_0__"
+  }
+  assertTrue(result.text.contains("\"menu\": \"ابدأ اللعبة\""))
+  assertTrue(result.text.contains("مرحباً {player}"))
+  assertTrue(result.text.contains("https://example.com"))
+  assertEquals(2,result.translated)
  }
 
  @Test fun propertiesKeepsKeysAndComments()=runBlocking {
   val source="# menu\nmenu.start=Start Game\nmenu.exit=Exit"
-  val result=AssetTextTransformer.transform("assets/lang.properties",source){ "AR:$it" }
-  assertTrue(result.text.contains("menu.start=AR:Start Game"))
+  val result=AssetTextTransformer.transform("assets/lang.properties",source){ "ابدأ" }
+  assertTrue(result.text.contains("menu.start=ابدأ"))
   assertTrue(result.text.contains("# menu"))
   assertEquals(2,result.translated)
  }
@@ -36,4 +48,17 @@ class AssetTextTransformerTest {
   assertEquals(0,result.translated)
   assertEquals(1,result.skipped)
  }
+ @Test fun nulCharactersArePreservedAndNeverSentToTranslator()=runBlocking {
+  val source="Start\u0000Game"
+  var translatorCalled=false
+  val result=AssetTextTransformer.transform("assets/dialogue.txt",source){
+   translatorCalled=true
+   "ابدأ اللعبة"
+  }
+  assertFalse(translatorCalled)
+  assertEquals(source,result.text)
+  assertEquals(0,result.translated)
+  assertEquals(1,result.skipped)
+ }
+
 }
