@@ -39,6 +39,21 @@ The test asserted both directions returned meaningful text while networking was 
 
 The instrumentation suite now also guards repeated warm translations with a 384 MiB total-PSS ceiling and a 32 MiB maximum PSS increase over the first translated result. Those are CI regression ceilings, not minimum-device specifications.
 
+## Latest offline emulator verification (2026-11-14)
+
+Workflow: [Bergamot Android native CI run 43584256442](https://github.com/omegathor3-afk/Arabicization-Games/actions/runs/43584256442). The model-package audit, ARM64 native build, and Android 15 / API 35 x86_64 instrumentation job all completed successfully.
+
+The uploaded metrics record `offlineVerified: true`, exit code 0, airplane mode enabled before and after the test, Wi-Fi and mobile data disabled, and zero internet-capable networks.
+
+| Direction | Decompressed package | Native load | First translation | Warm translation | PSS after repeated calls |
+|---|---:|---:|---:|---:|---:|
+| Arabic → English | 37,049,402 bytes | 56.8 ms | 158.6 ms | 4.8 ms | 266,724 KiB |
+| English → Arabic | 35,565,450 bytes | 53.6 ms | 150.9 ms | 5.6 ms | 256,528 KiB |
+
+Eight warm translations were measured per direction. Example outputs included `مرحبا بالعالم → Hello, the world.` and `The ocean is deep. → المحيط عميق.`.
+
+These are repeatable emulator measurements only. The roughly 250–260 MiB post-translation PSS remains a substantial physical-device compatibility risk; neither battery/thermal behavior nor ARM64 phone performance has been validated. This result does not enable Bergamot in the end-user UI or replace the existing ML Kit path.
+
 ## Remaining gates
 
 - Build and integrate a production model installer that atomically verifies every downloaded/decompressed file before activation and supports safe removal.
