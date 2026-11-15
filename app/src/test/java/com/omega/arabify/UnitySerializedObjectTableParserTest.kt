@@ -15,8 +15,12 @@ class UnitySerializedObjectTableParserTest {
         val typeTable: UnitySerializedTypeTable
     )
 
-    private fun fixture(version: Int = 22, bigId: Int = 0, duplicatePathId: Boolean = false): Fixture {
-        val order = ByteOrder.LITTLE_ENDIAN
+    private fun fixture(
+        version: Int = 22,
+        bigId: Int = 0,
+        duplicatePathId: Boolean = false,
+        order: ByteOrder = ByteOrder.LITTLE_ENDIAN
+    ): Fixture {
         val metadata = ByteBuffer.allocate(256).order(order)
         metadata.put("2022.3.0f1".toByteArray(Charsets.UTF_8))
         metadata.put(0)
@@ -64,7 +68,7 @@ class UnitySerializedObjectTableParserTest {
             fileSize = 4096,
             formatVersion = version,
             dataOffset = 2048,
-            endian = "little",
+            endian = if (order == ByteOrder.LITTLE_ENDIAN) "little" else "big",
             headerSize = headerSize
         )
         val prefix = UnitySerializedMetadataPrefixParser.parse(header, bytes)!!
@@ -87,6 +91,19 @@ class UnitySerializedObjectTableParserTest {
         assertEquals(202L, table.objects[1].pathId)
         assertEquals(2064L, table.objects[1].absoluteDataOffset)
         assertEquals(32L, table.objects[1].byteSize)
+    }
+
+    @Test fun parsesBigEndianVersion22ObjectRanges() {
+        val fixture = fixture(order = ByteOrder.BIG_ENDIAN)
+        val table = UnitySerializedObjectTableParser.parse(
+            fixture.header, fixture.typeTable, fixture.metadata
+        )
+        assertNotNull(table)
+        assertEquals(2, table!!.objects.size)
+        assertEquals(101L, table.objects[0].pathId)
+        assertEquals(2048L, table.objects[0].absoluteDataOffset)
+        assertEquals(202L, table.objects[1].pathId)
+        assertEquals(2064L, table.objects[1].absoluteDataOffset)
     }
 
     @Test fun parsesLegacyVersion13AndBigIdEnabledPathIds() {
