@@ -1,8 +1,8 @@
-# Unity Mono Serialized Asset Research (read-only phase)
+# Unity Mono Serialized Asset Research (read-only inspection and extraction phase)
 
 ## Scope and safety gate
 
-This phase is a bounded, read-only inspection pipeline. It parses UnityFS headers, block metadata and storage blocks, plus supported SerializedFile headers, metadata preambles, SerializedType/TypeTree records and object tables. It does **not** extract CAB node payloads from bundles, decode serialized object payloads, or rewrite `resources.assets`, `sharedassets*.assets`, `AssetBundles`, external resource streams or managed DLLs. Unsupported bytes remain untouched.
+This phase is a bounded, read-only inspection and extraction pipeline. It parses UnityFS headers, block metadata and storage blocks, extracts validated CAB node ranges into a new staging directory, and inspects supported SerializedFile headers, metadata preambles, SerializedType/TypeTree records and object tables. It does **not** decode serialized object payloads or rewrite `resources.assets`, `sharedassets*.assets`, `AssetBundles`, external resource streams or managed DLLs. Unsupported bytes remain untouched.
 
 A valid SerializedFile header is not proof that its TypeTree or object table can be parsed. Player builds often omit TypeTrees; without a supported TypeTree, generic object decoding is not safely possible. Text-looking bytes inside arbitrary objects are not treated as translatable strings.
 
@@ -32,7 +32,9 @@ License statements are based on upstream repository license files/readmes at the
 - Metadata preamble, SerializedType records, supported flat TypeTrees / v23+ TypeTree handlers, and the object-info table are connected through `UnitySerializedFileInspector`.
 - The APK inventory reports Unity version, platform, TypeTree state, type count, object count and the achieved inspection stage when parsing succeeds.
 - UnityFS header parsing, decompressed block-info parsing, and a read-only storage-block decoder for NONE, LZ4 and LZMA. Defaults cap compressed/decoded blocks at 64 MiB, aggregate decoded bytes at 512 MiB and the working set at 192 MiB.
-- The UnityFS decoder streams decoded storage blocks to a caller-owned output stream. It does **not** extract CAB nodes or rewrite the source bundle.
+- The UnityFS decoder streams decoded storage blocks to a caller-owned output stream.
+- A read-only CAB-node extractor validates path traversal, case-insensitive duplicates, overlapping/out-of-range byte ranges, per-file and aggregate limits, file/directory collisions and destination symlinks. It writes to a fresh staging tree and publishes the complete tree with a directory rename; partial output is cleaned on failure.
+- `UnityFsBundleExtractor` composes bounded UnityFS decoding with CAB-node extraction through a private scratch file that is deleted on success or failure. The original bundle is never modified.
 - Classification for StreamingAssets text candidates, SerializedFiles, bundles, external streams, managed DLLs and unknown binary data.
 - Synthetic tests cover parser bounds, endian handling, object counts, decompression limits and byte-identical preservation. They are not substitutes for real Unity game fixtures.
 
@@ -55,7 +57,7 @@ License statements are based on upstream repository license files/readmes at the
 
 ## Required gate before any asset edit
 
-1. Add bounded CAB-node extraction from the decoded UnityFS storage stream, validating every node path, range, aggregate output size and duplicate name. Keep extraction read-only.
+1. Validate CAB-node extraction against legally redistributable real UnityFS bundles across engine versions; compare extracted paths, byte ranges and hashes with UnityPy/UnityDataTools. Keep extraction read-only.
 2. Complete the remaining SerializedFile sections needed by a writer: script references, external references, v20+ reference types and v26 shared-subtree metadata for explicitly supported versions.
 3. Preserve original object bytes and all unrecognized fields; do not normalize or reorder unknown records.
 4. Build read -> write -> read round-trip tests against legally redistributable real Unity samples, comparing object IDs, type IDs, external references, TypeTrees, offsets, sizes and hashes of unchanged payloads.
@@ -64,4 +66,4 @@ License statements are based on upstream repository license files/readmes at the
 
 ## Test provenance
 
-The current unit tests use generated minimal binary headers and synthetic ZIP fixtures. They are useful for parser invariants and regression checks, but **they are not real game samples**. No third-party game APK or real game resource file has been claimed as tested. A legally redistributable sample set is still required before declaring real-file compatibility.
+The current unit tests use generated minimal binary headers, synthetic UnityFS bundles and synthetic ZIP fixtures. They are useful for parser invariants and regression checks, but **they are not real game samples**. No third-party game APK or real game resource file has been claimed as tested. A legally redistributable sample set is still required before declaring real-file compatibility.

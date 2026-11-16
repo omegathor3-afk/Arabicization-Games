@@ -273,4 +273,29 @@ class UnityFsBundleDecoderTest {
         ByteBuffer.wrap(unknownFlagBundle).order(ByteOrder.BIG_ENDIAN).putInt(43, 0x000101c2)
         assertNull(decode(unknownFlagBundle).first)
     }
+
+    @Test
+    fun extractsCabNodeFromUnityFsWithoutModifyingTheSourceBundle() {
+        val parent = java.nio.file.Files.createTempDirectory("unityfs-cab-pipeline-").toFile()
+        try {
+            val payload = "CAB fixture payload — مرحباً بالعالم".toByteArray(Charsets.UTF_8)
+            val bundleBytes = makeBundle(payload, infoAtEnd = true)
+            val bundle = File(parent, "sample.bundle").apply { writeBytes(bundleBytes) }
+            val scratch = File(parent, "scratch").apply { mkdirs() }
+            val destination = File(parent, "extracted")
+
+            val result = UnityFsBundleExtractor.extract(bundle, scratch, destination)
+
+            assertNotNull(result)
+            assertEquals("2021.3.0f1", result!!.engineVersion)
+            assertEquals(6, result.formatVersion)
+            assertEquals(1, result.filesExtracted)
+            assertEquals(payload.size.toLong(), result.bytesExtracted)
+            assertArrayEquals(payload, File(destination, "CAB-fixture/resource.assets").readBytes())
+            assertArrayEquals(bundleBytes, bundle.readBytes())
+            assertTrue(scratch.listFiles()!!.isEmpty())
+        } finally {
+            parent.deleteRecursively()
+        }
+    }
 }
