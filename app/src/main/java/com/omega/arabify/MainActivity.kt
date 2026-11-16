@@ -98,6 +98,14 @@ private fun ArabifyApp(context: Context) {
  val clipboardManager=LocalClipboardManager.current
  val offlineTranslator = remember(context) { OfflineArabicTranslator(context) }
  DisposableEffect(offlineTranslator) { onDispose { offlineTranslator.close() } }
+ LaunchedEffect(offlineTranslator) {
+  try {
+   modelReady = withContext(Dispatchers.IO) { offlineTranslator.isArabicModelDownloaded() }
+  } catch(e:Exception) {
+   modelReady = false
+   translationError = e.message ?: "تعذر التحقق من حالة نموذج الترجمة."
+  }
+ }
  val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri:Uri? ->
   if(uri!=null) {
    selectedUri=uri;selectedInstalledApp=null;busy=true;error=null;result=null;localizationReport=null;generatedApk=null
