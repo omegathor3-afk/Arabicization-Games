@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.Drawable
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.provider.Settings
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -158,7 +159,7 @@ private fun ArabifyApp(context: Context) {
    scope.launch {
     try {
      val backup=withContext(Dispatchers.IO) {
-      val archive=copyUriToCache(context,uri)
+      val archive=copyUriToCache(context,uri,MAX_BACKUP_ARCHIVE_BYTES)
       try { ApkBackupManager.extractAndVerify(archive,File(context.cacheDir,"arabify-restore-${System.currentTimeMillis()}")) }
       finally { archive.delete() }
      }
@@ -561,7 +562,7 @@ private fun ArabifyApp(context: Context) {
     }
     item {
      Spacer(Modifier.height(8.dp))
-     Text("الإصدار 0.3.0 — خيار بدء التعريب وتقرير موحد قابل للنسخ.",color=ArabifyPalette.textDisabled,fontSize=11.sp)
+     Text("الإصدار 0.2.0 — خيار بدء التعريب وتقرير موحد قابل للنسخ.",color=ArabifyPalette.textDisabled,fontSize=11.sp)
     }
    }
   }
@@ -572,12 +573,45 @@ private fun ArabifyApp(context: Context) {
 @Composable
 private fun SectionTitle(value:String){Text(value,color=ArabifyPalette.primary,fontWeight=FontWeight.Bold,fontSize=16.sp)}
 
-private fun copyUriToCache(context:Context,uri:Uri):File {
- val file=File(context.cacheDir,"arabify-import-${System.currentTimeMillis()}.apk")
- context.contentResolver.openInputStream(uri)?.use { input ->
-  file.outputStream().use { output -> input.copyTo(output) }
- } ?: error("تعذر قراءة ملف اللعبة.")
- return file
+private const val MAX_APK_IMPORT_BYTES = 1_500L * 1024L * 1024L
+private const val MAX_BACKUP_ARCHIVE_BYTES = 3L * 1024L * 1024L * 1024L + 1024L * 1024L
+private const val CACHE_RESERVE_BYTES = 16L * 1024L * 1024L
+
+private fun copyUriToCache(
+ context:Context,
+ uri:Uri,
+ maxBytes:Long = MAX_APK_IMPORT_BYTES
+):File {
+ require(maxBytes > 0L) { "حد حجم الملف غير صالح." }
+ val declaredSize = try {
+  context.contentResolver.query(uri,arrayOf(OpenableColumns.SIZE),null,null,null)?.use { cursor ->
+   if(cursor.moveToFirst()) cursor.getLong(0).takeIf { it >= 0L } else null
+  }
+ } catch(_:Exception) { null }
+ require(declaredSize == null || declaredSize <= maxBytes) {
+  "حجم الملف يتجاوز الحد المسموح."
+ }
+ val availableBytes = (context.cacheDir.usableSpace - CACHE_RESERVE_BYTES).coerceAtLeast(0L)
+ val copyLimit = minOf(maxBytes,availableBytes)
+ require(copyLimit > 0L) { "مساحة التخزين المؤقت غير كافية لاستيراد الملف بأمان." }
+ require(declaredSize == null || declaredSize <= copyLimit) {
+  "المساحة الحرة في التخزين المؤقت أقل من حجم الملف."
+ }
+ val file = File.createTempFile("arabify-import-",".bin",context.cacheDir)
+ try {
+  val copied = context.contentResolver.openInputStream(uri)?.use { input ->
+   file.outputStream().buffered().use { output ->
+    BoundedArchiveInput.copy(input,output,copyLimit)
+   }
+  } ?: error("تعذر قراءة الملف المحدد.")
+  require(declaredSize == null || copied == declaredSize) {
+   "حجم الملف تغير أو لم يكتمل أثناء النسخ."
+  }
+  return file
+ } catch(error:Exception) {
+  file.delete()
+  throw error
+ }
 }
 
 
