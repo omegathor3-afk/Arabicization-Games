@@ -67,7 +67,7 @@ class UnityBundleNodeExtractorTest {
                 }
                 assertFalse(destination.exists())
             }
-            assertFalse(File(parent.parentFile, "outside").exists())
+            assertFalse(File(parent, "outside").exists())
         } finally {
             parent.deleteRecursively()
         }

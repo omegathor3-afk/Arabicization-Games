@@ -5,7 +5,6 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.io.OutputStream
 import java.io.RandomAccessFile
-import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.FileVisitResult
 import java.nio.file.Files
 import java.nio.file.LinkOption
@@ -176,11 +175,9 @@ internal object UnityBundleNodeExtractor {
     }
 
     private fun moveWithoutReplacement(source: Path, target: Path) {
-        try {
-            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE)
-        } catch (_: AtomicMoveNotSupportedException) {
-            Files.move(source, target)
-        }
+        // A same-filesystem move is normally a rename. Avoid ATOMIC_MOVE here:
+        // some providers may replace an existing target when that option is used.
+        Files.move(source, target)
     }
 
     private fun deleteTree(root: Path) {
