@@ -585,7 +585,9 @@ private fun copyUriToCache(
  require(maxBytes > 0L) { "حد حجم الملف غير صالح." }
  val declaredSize = try {
   context.contentResolver.query(uri,arrayOf(OpenableColumns.SIZE),null,null,null)?.use { cursor ->
-   if(cursor.moveToFirst()) cursor.getLong(0).takeIf { it >= 0L } else null
+   if(cursor.moveToFirst()) {
+    BoundedArchiveInput.declaredSizeOrNull(cursor.isNull(0),cursor.getLong(0))
+   } else null
   }
  } catch(_:Exception) { null }
  require(declaredSize == null || declaredSize <= maxBytes) {

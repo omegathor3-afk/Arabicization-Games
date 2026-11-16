@@ -25,6 +25,9 @@ internal object BoundedArchiveInput {
   return output.toByteArray()
  }
 
+ fun declaredSizeOrNull(columnIsNull: Boolean, value: Long): Long? =
+  if (columnIsNull || value < 0L) null else value
+
  fun copy(input: InputStream, output: java.io.OutputStream, maxBytes: Long): Long {
   require(maxBytes >= 0L)
   val buffer = ByteArray(64 * 1024)

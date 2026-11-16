@@ -2,11 +2,28 @@ package com.omega.arabify
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 
 class BoundedArchiveInputTest {
+    @Test
+    fun treatsNullProviderSizeAsUnknownInsteadOfZero() {
+        assertNull(BoundedArchiveInput.declaredSizeOrNull(columnIsNull = true, value = 0L))
+    }
+
+    @Test
+    fun treatsNegativeProviderSizeAsUnknown() {
+        assertNull(BoundedArchiveInput.declaredSizeOrNull(columnIsNull = false, value = -1L))
+    }
+
+    @Test
+    fun preservesKnownZeroAndPositiveProviderSizes() {
+        assertEquals(0L, BoundedArchiveInput.declaredSizeOrNull(columnIsNull = false, value = 0L))
+        assertEquals(42L, BoundedArchiveInput.declaredSizeOrNull(columnIsNull = false, value = 42L))
+    }
+
     @Test
     fun copiesWithinLimitAndReturnsExactByteCount() {
         val bytes = "ARABIFY — ملف لعبة".toByteArray(Charsets.UTF_8)
