@@ -186,7 +186,10 @@ internal data class UnityAssetInventory(
     val externalStreams: Int,
     val preservedUnsupported: Int,
     val items: List<UnityAssetInventoryItem>,
-    val notes: List<String>
+    val notes: List<String>,
+    // Keep a bounded bundle index separate from the 100-row UI inventory preview.
+    // Deep inspection must still find bundles that appear after the preview limit.
+    val bundleCandidates: List<UnityAssetInventoryItem> = emptyList()
 ) {
     val report: String
         get() = "Unity assets: $totalUnityFiles • نصوص StreamingAssets: $streamingTextCandidates • SerializedFiles: $serializedFiles • Bundles: $bundleFiles • ملفات جانبية: $externalStreams • غير مدعوم/محفوظ: $preservedUnsupported"
@@ -198,6 +201,7 @@ internal data class UnityAssetInventory(
  */
 internal object UnityAssetInventoryScanner {
     private const val MAX_PREFIX_BYTES = 512
+    private const val MAX_DEEP_INSPECTION_BUNDLE_CANDIDATES = 16
 
     fun inspect(apk: File): UnityAssetInventory {
         val items = mutableListOf<UnityAssetInventoryItem>()
@@ -327,6 +331,10 @@ internal object UnityAssetInventoryScanner {
             notes += "تم التعرف على توقيع AssetBundle فقط؛ الضغط الداخلي وكتل البيانات وملفات CAB تحتاج محلل Archive مستقل."
         }
         notes += "كل ملفات الموارد الثنائية وDLL تظل للقراءة فقط وتُحفظ كما هي في مسار التعريب الحالي."
+        val bundleCandidates = items.filter { it.kind == UnityAssetKind.UNITY_ARCHIVE }
+        if (bundleCandidates.size > MAX_DEEP_INSPECTION_BUNDLE_CANDIDATES) {
+            notes += "فهرس فحص UnityFS يحتفظ بأول $MAX_DEEP_INSPECTION_BUNDLE_CANDIDATES حزمة فقط؛ بقية الحزم لم تدخل قائمة الفحص العميق."
+        }
         return UnityAssetInventory(
             totalUnityFiles = items.size,
             streamingTextCandidates = items.count { it.kind == UnityAssetKind.STREAMING_TEXT },
@@ -335,7 +343,8 @@ internal object UnityAssetInventoryScanner {
             externalStreams = items.count { it.kind == UnityAssetKind.EXTERNAL_BINARY_STREAM },
             preservedUnsupported = items.count { it.support == UnityAssetSupport.PRESERVE_UNSUPPORTED },
             items = items.take(100),
-            notes = notes.toList()
+            notes = notes.toList(),
+            bundleCandidates = bundleCandidates.take(MAX_DEEP_INSPECTION_BUNDLE_CANDIDATES)
         )
     }
 }

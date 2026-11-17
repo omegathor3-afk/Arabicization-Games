@@ -52,9 +52,14 @@ class UnityBundleDeepInspectorTest {
         return header(totalSize) + info + payload
     }
 
-    private fun createApk(bundle: ByteArray): File {
+    private fun createApk(bundle: ByteArray, precedingTextEntries: Int = 0): File {
         val apk = File.createTempFile("arabify-unity-deep-", ".apk")
         ZipOutputStream(FileOutputStream(apk)).use { zip ->
+            repeat(precedingTextEntries) { index ->
+                zip.putNextEntry(ZipEntry("assets/bin/Data/StreamingAssets/text-$index.json"))
+                zip.write("{\"text\":\"sample\"}".toByteArray(Charsets.UTF_8))
+                zip.closeEntry()
+            }
             zip.putNextEntry(ZipEntry("assets/bin/Data/StreamingAssets/fixture.bundle"))
             zip.write(bundle)
             zip.closeEntry()
@@ -79,6 +84,33 @@ class UnityBundleDeepInspectorTest {
             assertEquals(0, report.serializedFilesParsed)
             assertTrue(report.items.single().status.contains("استخراج CAB"))
             assertArrayEquals(original, apk.readBytes())
+            assertTrue(scratch.listFiles()!!.isEmpty())
+        } finally {
+            apk.delete()
+            scratch.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun deepInspectionFindsBundleBeyondVisibleInventoryPreviewLimit() {
+        val apk = createApk(
+            makeUnityFs("late bundle payload".toByteArray(Charsets.UTF_8)),
+            precedingTextEntries = 100
+        )
+        val scratch = kotlin.io.path.createTempDirectory("arabify-deep-late-bundle-").toFile()
+        try {
+            val inventory = UnityAssetInventoryScanner.inspect(apk)
+
+            assertEquals(100, inventory.items.size)
+            assertEquals(1, inventory.bundleFiles)
+            assertEquals("assets/bin/Data/StreamingAssets/fixture.bundle", inventory.bundleCandidates.single().path)
+
+            val report = UnityBundleDeepInspector.inspect(apk, inventory, scratch)
+
+            assertEquals(1, report.bundlesFound)
+            assertEquals(1, report.bundlesInspected)
+            assertEquals(1, report.nodesExtracted)
+            assertTrue(report.notes.isEmpty())
             assertTrue(scratch.listFiles()!!.isEmpty())
         } finally {
             apk.delete()

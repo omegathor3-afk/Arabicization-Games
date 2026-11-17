@@ -63,11 +63,18 @@ internal object UnityBundleDeepInspector {
             !Files.isSymbolicLink(scratchPath)
         ) { "مجلد الفحص المؤقت غير آمن." }
 
-        val candidates = inventory.items
-            .filter { it.kind == UnityAssetKind.UNITY_ARCHIVE }
-            .take(limits.maxBundles)
+        // The visible inventory is intentionally capped at 100 rows. Use the
+        // scanner's separate bounded bundle index so later ZIP entries are not
+        // silently omitted from deep inspection.
+        val indexedCandidates = inventory.bundleCandidates.ifEmpty {
+            inventory.items.filter { it.kind == UnityAssetKind.UNITY_ARCHIVE }
+        }
+        val candidates = indexedCandidates.take(limits.maxBundles)
         val notes = mutableListOf<String>()
-        if (inventory.items.count { it.kind == UnityAssetKind.UNITY_ARCHIVE } > candidates.size) {
+        if (inventory.bundleFiles > indexedCandidates.size) {
+            notes += "فهرس الحزم محدود؛ بعض UnityFS bundles لم تدخل قائمة المرشحين."
+        }
+        if (indexedCandidates.size > candidates.size) {
             notes += "تم الوصول إلى حد عدد UnityFS bundles في هذه الجولة؛ بقية الحزم لم تُفك."
         }
         if (candidates.isEmpty()) {
