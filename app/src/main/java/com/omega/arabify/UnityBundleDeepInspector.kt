@@ -71,6 +71,9 @@ internal object UnityBundleDeepInspector {
         }
         val candidates = indexedCandidates.take(limits.maxBundles)
         val notes = mutableListOf<String>()
+        if (inventory.scanTruncated) {
+            notes += "الجرد توقف عند حد إدخالات ZIP؛ عدد الحزم المكتشفة يخص الجزء المفحوص فقط."
+        }
         if (inventory.bundleFiles > indexedCandidates.size) {
             notes += "فهرس الحزم محدود؛ بعض UnityFS bundles لم تدخل قائمة المرشحين."
         }
@@ -80,7 +83,7 @@ internal object UnityBundleDeepInspector {
         if (candidates.isEmpty()) {
             return UnityBundleDeepInspectionReport(
                 inventory.bundleFiles, 0, 0, 0, 0, emptyList(),
-                listOf("لم يُعثر على Unity Archive ضمن العناصر المعروضة في الجرد.")
+                notes + "لم يُعثر على Unity Archive ضمن الجزء المفحوص من الجرد."
             )
         }
 

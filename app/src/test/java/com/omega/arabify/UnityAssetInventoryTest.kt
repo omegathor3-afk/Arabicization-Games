@@ -266,6 +266,64 @@ class UnityAssetInventoryTest {
         }
     }
 
+
+    @Test fun inventoryBoundsRetainedPreviewsAndBundleCandidatesWhileCountingAllScannedAssets() {
+        val directory = createTempDir(prefix = "arabify-unity-bounded-inventory-")
+        try {
+            val apk = File(directory, "many-unity-entries.apk")
+            ZipOutputStream(apk.outputStream()).use { zip ->
+                repeat(120) { index ->
+                    zip.putNextEntry(ZipEntry("assets/bin/Data/StreamingAssets/text-$index.json"))
+                    zip.write("""{"text":"sample"}""".toByteArray(Charsets.UTF_8))
+                    zip.closeEntry()
+                }
+                repeat(17) { index ->
+                    zip.putNextEntry(ZipEntry("assets/bin/Data/content-$index.bundle"))
+                    zip.write("UnityFS\u0000".toByteArray(Charsets.UTF_8))
+                    zip.closeEntry()
+                }
+            }
+
+            val inventory = UnityAssetInventoryScanner.inspect(apk)
+
+            assertEquals(137, inventory.totalUnityFiles)
+            assertEquals(120, inventory.streamingTextCandidates)
+            assertEquals(17, inventory.bundleFiles)
+            assertEquals(100, inventory.items.size)
+            assertEquals(16, inventory.bundleCandidates.size)
+            assertTrue(inventory.notes.any { it.contains("أول 16 حزمة") })
+            assertEquals(137, inventory.entriesScanned)
+            assertTrue(!inventory.scanTruncated)
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test fun inventoryStopsAtZipEntryBudgetAndExplicitlyMarksPartialResults() {
+        val directory = createTempDir(prefix = "arabify-unity-inventory-budget-")
+        try {
+            val apk = File(directory, "entry-budget.apk")
+            ZipOutputStream(apk.outputStream()).use { zip ->
+                repeat(8) { index ->
+                    zip.putNextEntry(ZipEntry("assets/bin/Data/StreamingAssets/text-$index.txt"))
+                    zip.write("sample".toByteArray(Charsets.UTF_8))
+                    zip.closeEntry()
+                }
+            }
+
+            val inventory = UnityAssetInventoryScanner.inspect(apk, maxEntriesToScan = 5)
+
+            assertEquals(5, inventory.entriesScanned)
+            assertEquals(5, inventory.totalUnityFiles)
+            assertEquals(5, inventory.streamingTextCandidates)
+            assertTrue(inventory.scanTruncated)
+            assertTrue(inventory.notes.any { it.contains("النتيجة جزئية") })
+            assertTrue(inventory.report.contains("الجرد جزئي"))
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
     @Test fun parsesDecompressedUnityBlockInfoWithBoundedMetadata() {
         val output = java.io.ByteArrayOutputStream()
         java.io.DataOutputStream(output).use { data ->

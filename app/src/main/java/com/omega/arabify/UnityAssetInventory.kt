@@ -189,10 +189,13 @@ internal data class UnityAssetInventory(
     val notes: List<String>,
     // Keep a bounded bundle index separate from the 100-row UI inventory preview.
     // Deep inspection must still find bundles that appear after the preview limit.
-    val bundleCandidates: List<UnityAssetInventoryItem> = emptyList()
+    val bundleCandidates: List<UnityAssetInventoryItem> = emptyList(),
+    val entriesScanned: Int = 0,
+    val scanTruncated: Boolean = false
 ) {
     val report: String
-        get() = "Unity assets: $totalUnityFiles • نصوص StreamingAssets: $streamingTextCandidates • SerializedFiles: $serializedFiles • Bundles: $bundleFiles • ملفات جانبية: $externalStreams • غير مدعوم/محفوظ: $preservedUnsupported"
+        get() = "Unity assets: $totalUnityFiles • نصوص StreamingAssets: $streamingTextCandidates • SerializedFiles: $serializedFiles • Bundles: $bundleFiles • ملفات جانبية: $externalStreams • غير مدعوم/محفوظ: $preservedUnsupported • ZIP entries: $entriesScanned" +
+            if (scanTruncated) " • الجرد جزئي بسبب حد الإدخالات" else ""
 }
 
 /**
@@ -201,15 +204,38 @@ internal data class UnityAssetInventory(
  */
 internal object UnityAssetInventoryScanner {
     private const val MAX_PREFIX_BYTES = 512
+    private const val MAX_VISIBLE_INVENTORY_ITEMS = 100
     private const val MAX_DEEP_INSPECTION_BUNDLE_CANDIDATES = 16
+    private const val MAX_ZIP_ENTRIES_SCANNED = 100_000
+    private val levelFilePattern = Regex("(^|/)level[0-9]+$")
 
-    fun inspect(apk: File): UnityAssetInventory {
+    fun inspect(
+        apk: File,
+        maxEntriesToScan: Int = MAX_ZIP_ENTRIES_SCANNED
+    ): UnityAssetInventory {
+        require(maxEntriesToScan in 1..MAX_ZIP_ENTRIES_SCANNED) {
+            "Unity inventory ZIP entry limit is invalid"
+        }
         val items = mutableListOf<UnityAssetInventoryItem>()
+        val bundleCandidates = mutableListOf<UnityAssetInventoryItem>()
         val notes = linkedSetOf<String>()
+        var entriesScanned = 0
+        var scanTruncated = false
+        var totalUnityFiles = 0
+        var streamingTextCandidates = 0
+        var serializedFiles = 0
+        var bundleFiles = 0
+        var externalStreams = 0
+        var preservedUnsupported = 0
         ZipFile(apk).use { zip ->
             val entries = zip.entries()
             while (entries.hasMoreElements()) {
+                if (entriesScanned >= maxEntriesToScan) {
+                    scanTruncated = true
+                    break
+                }
                 val entry = entries.nextElement()
+                entriesScanned++
                 if (entry.isDirectory) continue
                 val path = entry.name.replace('\\', '/')
                 val lower = path.lowercase()
@@ -218,7 +244,7 @@ internal object UnityAssetInventoryScanner {
                 val isStreaming = lower.startsWith("assets/bin/data/streamingassets/")
                 val isSerializedName = extension in setOf("assets", "sharedassets") ||
                     lower.endsWith("/globalgamemanagers") ||
-                    Regex("(^|/)level[0-9]+$").containsMatchIn(lower)
+                    levelFilePattern.containsMatchIn(lower)
                 val isExternal = extension in setOf("ress", "resource")
                 val isManaged = lower.endsWith(".dll") &&
                     lower.startsWith("assets/bin/data/managed/")
@@ -321,30 +347,52 @@ internal object UnityAssetInventoryScanner {
                         "محتوى Unity غير معروف؛ محفوظ دون تعديل"
                     )
                 }
-                items += item
+                totalUnityFiles++
+                when (item.kind) {
+                    UnityAssetKind.STREAMING_TEXT -> streamingTextCandidates++
+                    UnityAssetKind.SERIALIZED_FILE -> serializedFiles++
+                    UnityAssetKind.UNITY_ARCHIVE -> bundleFiles++
+                    UnityAssetKind.EXTERNAL_BINARY_STREAM -> externalStreams++
+                    else -> Unit
+                }
+                if (item.support == UnityAssetSupport.PRESERVE_UNSUPPORTED) {
+                    preservedUnsupported++
+                }
+                if (items.size < MAX_VISIBLE_INVENTORY_ITEMS) {
+                    items += item
+                }
+                if (item.kind == UnityAssetKind.UNITY_ARCHIVE &&
+                    bundleCandidates.size < MAX_DEEP_INSPECTION_BUNDLE_CANDIDATES
+                ) {
+                    bundleCandidates += item
+                }
             }
         }
-        if (items.any { it.kind == UnityAssetKind.SERIALIZED_FILE }) {
+        if (serializedFiles > 0) {
             notes += "يتم تحليل Metadata وObject Table ضمن حدود ذاكرة محددة عند دعم الإصدار؛ تظل بيانات الكائنات نفسها للقراءة فقط ولا تُعدّل."
         }
-        if (items.any { it.kind == UnityAssetKind.UNITY_ARCHIVE }) {
+        if (bundleFiles > 0) {
             notes += "تم التعرف على توقيع AssetBundle فقط؛ الضغط الداخلي وكتل البيانات وملفات CAB تحتاج محلل Archive مستقل."
         }
+        if (scanTruncated) {
+            notes += "توقف جرد ZIP عند حد $maxEntriesToScan إدخال؛ قد توجد موارد Unity إضافية لم تُفحص، والنتيجة جزئية."
+        }
         notes += "كل ملفات الموارد الثنائية وDLL تظل للقراءة فقط وتُحفظ كما هي في مسار التعريب الحالي."
-        val bundleCandidates = items.filter { it.kind == UnityAssetKind.UNITY_ARCHIVE }
-        if (bundleCandidates.size > MAX_DEEP_INSPECTION_BUNDLE_CANDIDATES) {
+        if (bundleFiles > bundleCandidates.size) {
             notes += "فهرس فحص UnityFS يحتفظ بأول $MAX_DEEP_INSPECTION_BUNDLE_CANDIDATES حزمة فقط؛ بقية الحزم لم تدخل قائمة الفحص العميق."
         }
         return UnityAssetInventory(
-            totalUnityFiles = items.size,
-            streamingTextCandidates = items.count { it.kind == UnityAssetKind.STREAMING_TEXT },
-            serializedFiles = items.count { it.kind == UnityAssetKind.SERIALIZED_FILE },
-            bundleFiles = items.count { it.kind == UnityAssetKind.UNITY_ARCHIVE },
-            externalStreams = items.count { it.kind == UnityAssetKind.EXTERNAL_BINARY_STREAM },
-            preservedUnsupported = items.count { it.support == UnityAssetSupport.PRESERVE_UNSUPPORTED },
-            items = items.take(100),
+            totalUnityFiles = totalUnityFiles,
+            streamingTextCandidates = streamingTextCandidates,
+            serializedFiles = serializedFiles,
+            bundleFiles = bundleFiles,
+            externalStreams = externalStreams,
+            preservedUnsupported = preservedUnsupported,
+            items = items.toList(),
             notes = notes.toList(),
-            bundleCandidates = bundleCandidates.take(MAX_DEEP_INSPECTION_BUNDLE_CANDIDATES)
+            bundleCandidates = bundleCandidates.toList(),
+            entriesScanned = entriesScanned,
+            scanTruncated = scanTruncated
         )
     }
 }

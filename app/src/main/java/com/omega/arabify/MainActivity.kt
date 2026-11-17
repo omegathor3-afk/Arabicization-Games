@@ -540,6 +540,9 @@ private fun ArabifyApp(context: Context) {
          Text("جرد موارد Unity — قراءة فقط",color=ArabifyPalette.accent,fontWeight=FontWeight.Bold,fontSize=17.sp)
          Text(inventory.report,color=ArabifyPalette.textBody,fontSize=12.sp)
          Text("الفحص الحالي يقرأ بيانات SerializedFile الوصفية وجداول الأنواع والكائنات ضمن حدود ذاكرة، ويظل للقراءة فقط. لم يتم تعديل object payloads أو AssetBundles أو DLL.",color=ArabifyPalette.warningText,fontSize=12.sp)
+         inventory.notes.forEach { note ->
+          Text("• " + note,color=ArabifyPalette.warningText,fontSize=10.sp)
+         }
          if (inventory.bundleFiles > 0) {
           Text("فحص UnityFS العميق اختياري: يفك ضغط الحزم المدعومة، ويستخرج CAB nodes إلى مجلد مؤقت، ثم يفهرس SerializedFile metadata فقط. لا يكتب داخل APK ولا يغيّر ملفات اللعبة.",color=ArabifyPalette.textSecondary,fontSize=11.sp)
           Button(
@@ -597,7 +600,10 @@ private fun ArabifyApp(context: Context) {
           }
           Text("• ${asset.path} (${asset.sizeBytes} bytes)\n$status\n${asset.detail}",color=ArabifyPalette.textBody,fontSize=10.sp)
          }
-         if(inventory.items.size > 12) Text("يتم عرض أول 12 عنصرًا من أصل ${inventory.items.size}.",color=Color(0xFF9CA5B1),fontSize=10.sp)
+         if(inventory.totalUnityFiles > 12 || inventory.scanTruncated) {
+          val shown=minOf(12,inventory.items.size)
+          Text("عدد عناصر Unity المكتشفة: ${inventory.totalUnityFiles}؛ المعروض: أول ${shown}." + if(inventory.scanTruncated) " الجرد جزئي؛ لم تُفحص بقية إدخالات ZIP." else "",color=Color(0xFF9CA5B1),fontSize=10.sp)
+         }
         }
        }
       }
