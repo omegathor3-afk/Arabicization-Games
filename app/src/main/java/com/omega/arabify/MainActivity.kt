@@ -89,6 +89,10 @@ private fun ArabifyApp(context: Context) {
  var assetProgress by remember { mutableStateOf(0 to 0) }
  var assetReport by remember { mutableStateOf<AssetLocalizationReport?>(null) }
  var assetError by remember { mutableStateOf<String?>(null) }
+ var unityDeepBusy by remember { mutableStateOf(false) }
+ var unityDeepProgress by remember { mutableStateOf(0 to 0) }
+ var unityDeepReport by remember { mutableStateOf<UnityBundleDeepInspectionReport?>(null) }
+ var unityDeepError by remember { mutableStateOf<String?>(null) }
  var backupBusy by remember { mutableStateOf(false) }
  var backupMessage by remember { mutableStateOf<String?>(null) }
  var backupError by remember { mutableStateOf<String?>(null) }
@@ -109,7 +113,7 @@ private fun ArabifyApp(context: Context) {
  }
  val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri:Uri? ->
   if(uri!=null) {
-   selectedUri=uri;selectedInstalledApp=null;busy=true;error=null;result=null;localizationReport=null;generatedApk=null
+   selectedUri=uri;selectedInstalledApp=null;busy=true;error=null;result=null;localizationReport=null;generatedApk=null;unityDeepReport=null;unityDeepError=null
    scope.launch {
     try { result=withContext(Dispatchers.IO){ApkInspector.inspect(context,uri)} }
     catch(e:Exception){error=e.message ?: "حدث خطأ أثناء فحص الملف."}
@@ -222,6 +226,15 @@ private fun ArabifyApp(context: Context) {
    appendLine("ملاحظات الفحص:")
    scan.notes.forEach { appendLine(it) }
    scan.unityAssetInventory?.let { appendLine(it.report) }
+   unityDeepReport?.let { deep ->
+    appendLine(deep.summary)
+    deep.items.forEach { item ->
+     appendLine(item.path + " — " + item.status)
+     item.details.forEach { appendLine("  " + it) }
+    }
+    deep.notes.forEach { appendLine("ملاحظة فحص UnityFS: " + it) }
+   }
+   unityDeepError?.let { appendLine("خطأ فحص UnityFS: " + it) }
   }
   appendLine("النموذج: ${if(modelReady) "جاهز" else "لم يتم تجهيزه"}")
   translatedText?.let { appendLine("الترجمة التجريبية: $it") }
@@ -288,6 +301,7 @@ private fun ArabifyApp(context: Context) {
          }
          Button(onClick={
           selectedInstalledApp=app
+          unityDeepReport=null;unityDeepError=null
           selectedUri=Uri.fromFile(File(app.apkPath))
           busy=true;inspectionProgress=0 to (1+app.splitCount);error=null;result=null;localizationReport=null;generatedApk=null
           scope.launch {
@@ -526,6 +540,53 @@ private fun ArabifyApp(context: Context) {
          Text("جرد موارد Unity — قراءة فقط",color=ArabifyPalette.accent,fontWeight=FontWeight.Bold,fontSize=17.sp)
          Text(inventory.report,color=ArabifyPalette.textBody,fontSize=12.sp)
          Text("الفحص الحالي يقرأ بيانات SerializedFile الوصفية وجداول الأنواع والكائنات ضمن حدود ذاكرة، ويظل للقراءة فقط. لم يتم تعديل object payloads أو AssetBundles أو DLL.",color=ArabifyPalette.warningText,fontSize=12.sp)
+         if (inventory.bundleFiles > 0) {
+          Text("فحص UnityFS العميق اختياري: يفك ضغط الحزم المدعومة، ويستخرج CAB nodes إلى مجلد مؤقت، ثم يفهرس SerializedFile metadata فقط. لا يكتب داخل APK ولا يغيّر ملفات اللعبة.",color=ArabifyPalette.textSecondary,fontSize=11.sp)
+          Button(
+           onClick={
+            val uri=selectedUri
+            if(uri!=null) {
+             unityDeepBusy=true;unityDeepError=null;unityDeepReport=null;unityDeepProgress=0 to inventory.bundleFiles
+             scope.launch {
+              try {
+               val report=withContext(Dispatchers.IO) {
+                val input=copyUriToCache(context,uri)
+                try {
+                 UnityBundleDeepInspector.inspect(input,inventory,context.cacheDir) { done,total ->
+                  scope.launch { unityDeepProgress=done to total }
+                 }
+                } finally { input.delete() }
+               }
+               unityDeepReport=report
+              } catch(e:Exception) {
+               unityDeepError=e.message ?: "تعذر فحص UnityFS بأمان."
+              } finally {
+               unityDeepBusy=false
+              }
+             }
+            }
+           },
+           enabled=!unityDeepBusy&&!busy&&selectedUri!=null&&(selectedInstalledApp?.splitCount ?: 0)==0,
+           modifier=Modifier.fillMaxWidth()
+          ) { Text(if(unityDeepBusy) "جارٍ فحص UnityFS واستخراج CAB..." else "فحص UnityFS واستخراج CAB — قراءة فقط") }
+          if(unityDeepBusy) {
+           val fraction=if(unityDeepProgress.second>0) unityDeepProgress.first.toFloat()/unityDeepProgress.second else 0f
+           LinearProgressIndicator(progress={fraction.coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth())
+           Text("فحص الحزم: " + unityDeepProgress.first + " من " + unityDeepProgress.second,color=ArabifyPalette.info,fontSize=11.sp)
+          }
+          unityDeepReport?.let { deep ->
+           Text(deep.summary,color=ArabifyPalette.success,fontSize=12.sp)
+           deep.items.forEach { item ->
+            Text(item.path + "\n" + item.status,color=ArabifyPalette.textBody,fontSize=10.sp)
+            item.details.forEach { detail -> Text("• " + detail,color=ArabifyPalette.textSecondary,fontSize=10.sp) }
+           }
+           deep.notes.forEach { note -> Text("• " + note,color=ArabifyPalette.warningText,fontSize=10.sp) }
+          }
+          unityDeepError?.let { Text(it,color=ArabifyPalette.danger,fontSize=11.sp) }
+          if((selectedInstalledApp?.splitCount ?: 0)>0) {
+           Text("فحص UnityFS العميق لملفات Split غير مفعّل بعد؛ لم يتم فك أي ملف.",color=ArabifyPalette.warningText,fontSize=10.sp)
+          }
+         }
          inventory.items.take(12).forEach { asset ->
           val status = when(asset.support) {
            UnityAssetSupport.TEXT_CANDIDATE_READ_ONLY -> "مرشح نصي — غير معدل"
