@@ -156,6 +156,39 @@ class UnitySerializedObjectTableParserTest {
         ))
     }
 
+
+    @Test fun enforcesConfiguredObjectRecordBudgetBeforeAllocatingTable() {
+        val valid = fixture()
+        assertEquals(
+            2,
+            UnitySerializedObjectTableParser.declaredObjectCount(
+                valid.header, valid.typeTable, valid.metadata
+            )
+        )
+        assertNull(
+            UnitySerializedObjectTableParser.parse(
+                valid.header, valid.typeTable, valid.metadata, maxObjectRecords = 1
+            )
+        )
+
+        // A count just above the production cap must be rejected before any
+        // object list or PathID set is allocated, even when records are absent.
+        val excessive = valid.metadata.copyOf()
+        ByteBuffer.wrap(excessive).order(ByteOrder.LITTLE_ENDIAN)
+            .putInt(valid.typeTable.bytesConsumed, 100_001)
+        assertEquals(
+            100_001,
+            UnitySerializedObjectTableParser.declaredObjectCount(
+                valid.header, valid.typeTable, excessive
+            )
+        )
+        assertNull(
+            UnitySerializedObjectTableParser.parse(
+                valid.header, valid.typeTable, excessive, maxObjectRecords = 100_000
+            )
+        )
+    }
+
     @Test fun rejectsInvalidTypeIndicesAndExcessiveObjectCounts() {
         val valid = fixture()
         val badType = valid.metadata.copyOf()

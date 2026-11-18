@@ -30,14 +30,45 @@ internal data class UnitySerializedObjectTable(
  */
 internal object UnitySerializedObjectTableParser {
     private const val MAX_METADATA_BYTES = 64 * 1024 * 1024
-    private const val MAX_OBJECTS = 500_000
+    private const val MAX_OBJECTS = 100_000
+
+    fun declaredObjectCount(
+        header: UnitySerializedHeader,
+        typeTable: UnitySerializedTypeTable,
+        metadata: ByteArray
+    ): Int? {
+        if (header.formatVersion !in 9..100 ||
+            metadata.size.toLong() != header.metadataSize ||
+            metadata.size > MAX_METADATA_BYTES ||
+            typeTable.bytesConsumed !in 0..metadata.size
+        ) return null
+
+        val order = when (header.endian) {
+            "little" -> ByteOrder.LITTLE_ENDIAN
+            "big" -> ByteOrder.BIG_ENDIAN
+            else -> return null
+        }
+
+        return runCatching {
+            val input = ByteBuffer.wrap(metadata).order(order)
+            input.position(typeTable.bytesConsumed)
+            if (header.formatVersion in 7..13) {
+                require(input.remaining() >= 4)
+                input.int
+            }
+            require(input.remaining() >= 4)
+            input.int.also { require(it >= 0) }
+        }.getOrNull()
+    }
 
     fun parse(
         header: UnitySerializedHeader,
         typeTable: UnitySerializedTypeTable,
-        metadata: ByteArray
+        metadata: ByteArray,
+        maxObjectRecords: Int = MAX_OBJECTS
     ): UnitySerializedObjectTable? {
-        if (header.formatVersion !in 9..100 ||
+        if (maxObjectRecords !in 1..MAX_OBJECTS ||
+            header.formatVersion !in 9..100 ||
             metadata.size.toLong() != header.metadataSize ||
             metadata.size > MAX_METADATA_BYTES ||
             typeTable.bytesConsumed !in 0..metadata.size ||
@@ -75,7 +106,7 @@ internal object UnitySerializedObjectTableParser {
 
             require(input.remaining() >= 4)
             val objectCount = input.int
-            require(objectCount in 0..MAX_OBJECTS)
+            require(objectCount in 0..maxObjectRecords)
             val minimumObjectBytes = when {
                 header.formatVersion >= 22 -> 24L
                 header.formatVersion >= 14 -> 19L

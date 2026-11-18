@@ -16,7 +16,8 @@ internal data class UnityBundleDeepInspectionLimits(
     val maxTotalExtractedBytes: Long = 256L * 1024L * 1024L,
     val maxSerializedMetadataBytes: Long = 64L * 1024L * 1024L,
     val maxZipEntriesToVerify: Int = 100_000,
-    val scratchReserveBytes: Long = 16L * 1024L * 1024L
+    val scratchReserveBytes: Long = 16L * 1024L * 1024L,
+    val maxObjectRecordsPerFile: Int = 100_000
 )
 
 internal data class UnityBundleDeepInspectionItem(
@@ -311,18 +312,27 @@ internal object UnityBundleDeepInspector {
                                 return@forEach
                             }
                             val inspection = FileInputStream(extracted).use { input ->
-                                UnitySerializedFileInspector.inspect(input, size)
+                                UnitySerializedFileInspector.inspect(
+                                    input, size, limits.maxObjectRecordsPerFile
+                                )
                             } ?: return@forEach
                             parsedInBundle++
                             val objectCount = inspection.objectTable?.objects?.size ?: 0
                             objectsInBundle += objectCount
+                            val objectSummary = if (inspection.objectTableLimitExceeded) {
+                                "objects=limit-exceeded (declared=" +
+                                    inspection.declaredObjectCount + ", max=" +
+                                    limits.maxObjectRecordsPerFile + ")"
+                            } else {
+                                "objects=" + objectCount
+                            }
                             val relativePath = outputDirectory.toPath()
                                 .relativize(extracted.toPath()).toString()
                             details += relativePath + ": SerializedFile v" +
                                 inspection.header.formatVersion + ", stage=" +
                                 inspection.stage.name + ", types=" +
                                 (inspection.metadataPrefix?.typeCount ?: 0) +
-                                ", objects=" + objectCount + " (read-only)"
+                                ", " + objectSummary + " (read-only)"
                         }
                         serializedFilesParsed += parsedInBundle
                         objectRecordsIndexed += objectsInBundle
@@ -377,7 +387,8 @@ internal object UnityBundleDeepInspector {
             limits.maxTotalExtractedBytes <= 1024L * 1024L * 1024L &&
             limits.maxSerializedMetadataBytes in 1..(64L * 1024L * 1024L) &&
             limits.maxZipEntriesToVerify in 1..100_000 &&
-            limits.scratchReserveBytes in 0L..(256L * 1024L * 1024L)
+            limits.scratchReserveBytes in 0L..(256L * 1024L * 1024L) &&
+            limits.maxObjectRecordsPerFile in 1..100_000
 }
 
 internal fun requiredUnityScratchSpaceBytes(

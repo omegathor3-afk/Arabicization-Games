@@ -16,7 +16,9 @@ internal data class UnitySerializedFileInspection(
     val metadataPrefix: UnitySerializedMetadataPrefix?,
     val typeTable: UnitySerializedTypeTable?,
     val objectTable: UnitySerializedObjectTable?,
-    val stage: UnitySerializedInspectionStage
+    val stage: UnitySerializedInspectionStage,
+    val declaredObjectCount: Int? = null,
+    val objectTableLimitExceeded: Boolean = false
 )
 
 /**
@@ -26,8 +28,12 @@ internal data class UnitySerializedFileInspection(
 internal object UnitySerializedFileInspector {
     private const val MAX_METADATA_BYTES = 64 * 1024 * 1024
 
-    fun inspect(input: InputStream, actualLength: Long): UnitySerializedFileInspection? {
-        if (actualLength < 20L) return null
+    fun inspect(
+        input: InputStream,
+        actualLength: Long,
+        maxObjectRecords: Int = 100_000
+    ): UnitySerializedFileInspection? {
+        if (actualLength < 20L || maxObjectRecords !in 1..100_000) return null
         return runCatching {
             val first16 = readExactly(input, 16)
             val version = ByteBuffer.wrap(first16).order(ByteOrder.BIG_ENDIAN).getInt(8)
@@ -48,14 +54,23 @@ internal object UnitySerializedFileInspector {
                 ?: return@runCatching UnitySerializedFileInspection(
                     header, prefix, null, null, UnitySerializedInspectionStage.METADATA_PREFIX_PARSED
                 )
-            val objects = UnitySerializedObjectTableParser.parse(header, types, metadata)
+            val declaredObjectCount = UnitySerializedObjectTableParser.declaredObjectCount(
+                header, types, metadata
+            )
+            val objectTableLimitExceeded = declaredObjectCount != null &&
+                declaredObjectCount > maxObjectRecords
+            val objects = UnitySerializedObjectTableParser.parse(
+                header, types, metadata, maxObjectRecords
+            )
             UnitySerializedFileInspection(
                 header,
                 prefix,
                 types,
                 objects,
                 if (objects != null) UnitySerializedInspectionStage.OBJECT_TABLE_PARSED
-                else UnitySerializedInspectionStage.TYPE_TABLE_PARSED
+                else UnitySerializedInspectionStage.TYPE_TABLE_PARSED,
+                declaredObjectCount,
+                objectTableLimitExceeded
             )
         }.getOrNull()
     }

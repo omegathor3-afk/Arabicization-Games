@@ -3,6 +3,7 @@ package com.omega.arabify
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.nio.ByteBuffer
@@ -78,6 +79,21 @@ class UnitySerializedFileInspectorTest {
         // The inspector should consume only the 48-byte header and bounded metadata,
         // never the object payload region that follows it.
         assertEquals(48 + metadataSize, bytesRead)
+    }
+
+
+    @Test fun reportsObjectTableLimitInsteadOfShowingZeroObjectsAsACompleteIndex() {
+        val bytes = fileBytes()
+
+        val result = UnitySerializedFileInspector.inspect(
+            ByteArrayInputStream(bytes), bytes.size.toLong(), maxObjectRecords = 1
+        )
+
+        assertNotNull(result)
+        assertEquals(UnitySerializedInspectionStage.TYPE_TABLE_PARSED, result!!.stage)
+        assertEquals(2, result.declaredObjectCount)
+        assertTrue(result.objectTableLimitExceeded)
+        assertNull(result.objectTable)
     }
 
     @Test fun rejectsTruncatedHeadersAndMetadata() {
