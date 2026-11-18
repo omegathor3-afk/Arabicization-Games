@@ -15,26 +15,27 @@ import java.util.zip.ZipOutputStream
 
 class UnityAssetInventoryTest {
     @Test fun parsesLegacySerializedFileHeaderWithoutEditingPayload() {
-        val bytes = ByteBuffer.allocate(32).order(ByteOrder.BIG_ENDIAN).apply {
+        val bytes = ByteBuffer.allocate(44).order(ByteOrder.BIG_ENDIAN).apply {
             putInt(12)
-            putInt(32)
+            putInt(44)
             putInt(17)
-            putInt(20)
+            putInt(32)
             put(0)
             put(byteArrayOf(0, 0, 0))
             put(ByteArray(12) { it.toByte() })
+            put(ByteArray(12) { (it + 12).toByte() })
         }.array()
 
         val header = UnitySerializedFileHeaderParser.parse(bytes.copyOf(20), bytes.size.toLong())
         assertNotNull(header)
         assertEquals(17, header!!.formatVersion)
         assertEquals("little", header.endian)
-        assertEquals(20L, header.dataOffset)
+        assertEquals(32L, header.dataOffset)
         assertArrayEquals(bytes, UnitySerializedFileHeaderParser.preserveUnmodified(bytes))
     }
 
     @Test fun parsesExtendedVersion22HeaderAndKeepsUnknownFields() {
-        val bytes = ByteBuffer.allocate(64).order(ByteOrder.BIG_ENDIAN).apply {
+        val bytes = ByteBuffer.allocate(80).order(ByteOrder.BIG_ENDIAN).apply {
             putInt(0)
             putInt(0)
             putInt(22)
@@ -42,17 +43,18 @@ class UnityAssetInventoryTest {
             put(1)
             put(byteArrayOf(0, 0, 0))
             putInt(16)
+            putLong(80)
             putLong(64)
-            putLong(48)
             putLong(0x1122334455667788L)
             put(ByteArray(16) { (it + 1).toByte() })
+            put(ByteArray(16) { (it + 17).toByte() })
         }.array()
 
         val header = UnitySerializedFileHeaderParser.parse(bytes.copyOf(48), bytes.size.toLong())
         assertNotNull(header)
         assertEquals(22, header!!.formatVersion)
-        assertEquals(64L, header.fileSize)
-        assertEquals(48L, header.dataOffset)
+        assertEquals(80L, header.fileSize)
+        assertEquals(64L, header.dataOffset)
         assertEquals("big", header.endian)
         assertArrayEquals(bytes, UnitySerializedFileHeaderParser.preserveUnmodified(bytes))
     }
@@ -67,6 +69,34 @@ class UnityAssetInventoryTest {
             put(0)
         }.array()
         assertNull(UnitySerializedFileHeaderParser.parse(impossible, impossible.size.toLong()))
+
+        // The data offset is in-bounds, but it points into the metadata bytes.
+        val metadataOverlap = ByteBuffer.allocate(44).order(ByteOrder.BIG_ENDIAN).apply {
+            putInt(12)
+            putInt(44)
+            putInt(17)
+            putInt(31)
+            put(0)
+            put(byteArrayOf(0, 0, 0))
+            put(ByteArray(24))
+        }.array()
+        assertNull(UnitySerializedFileHeaderParser.parse(metadataOverlap, metadataOverlap.size.toLong()))
+
+        // The extended header must enforce the same metadata/data separation.
+        val extendedOverlap = ByteBuffer.allocate(80).order(ByteOrder.BIG_ENDIAN).apply {
+            putInt(0)
+            putInt(0)
+            putInt(22)
+            putInt(0)
+            put(1)
+            put(byteArrayOf(0, 0, 0))
+            putInt(16)
+            putLong(80)
+            putLong(63)
+            putLong(0)
+            put(ByteArray(32))
+        }.array()
+        assertNull(UnitySerializedFileHeaderParser.parse(extendedOverlap, extendedOverlap.size.toLong()))
     }
 
     @Test fun recognizesUnityArchiveSignaturesWithoutUnpackingThem() {
