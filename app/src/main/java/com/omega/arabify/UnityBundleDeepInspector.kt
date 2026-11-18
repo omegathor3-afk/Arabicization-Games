@@ -14,7 +14,9 @@ internal data class UnityBundleDeepInspectionLimits(
     val maxNodes: Int = 10_000,
     val maxSingleNodeBytes: Long = 128L * 1024L * 1024L,
     val maxTotalExtractedBytes: Long = 256L * 1024L * 1024L,
-    val maxSerializedMetadataBytes: Long = 64L * 1024L * 1024L
+    val maxSerializedMetadataBytes: Long = 64L * 1024L * 1024L,
+    val maxZipEntriesToVerify: Int = 100_000,
+    val scratchReserveBytes: Long = 16L * 1024L * 1024L
 )
 
 internal data class UnityBundleDeepInspectionItem(
@@ -80,6 +82,23 @@ internal object UnityBundleDeepInspector {
         if (indexedCandidates.size > candidates.size) {
             notes += "تم الوصول إلى حد عدد UnityFS bundles في هذه الجولة؛ بقية الحزم لم تُفك."
         }
+        if (inventory.scanTruncated) {
+            notes += "تم إيقاف الفحص العميق لأن جرد APK جزئي ولا يمكن إثبات عدم وجود أسماء ZIP مكررة خارج الجزء المفحوص."
+            return UnityBundleDeepInspectionReport(
+                bundlesFound = inventory.bundleFiles,
+                bundlesInspected = 0,
+                nodesExtracted = 0,
+                serializedFilesParsed = 0,
+                objectRecordsIndexed = 0,
+                items = candidates.map {
+                    UnityBundleDeepInspectionItem(
+                        it.path,
+                        "تخطي: جرد APK جزئي؛ أعد الجرد بحد كامل قبل فحص UnityFS."
+                    )
+                },
+                notes = notes
+            )
+        }
         if (candidates.isEmpty()) {
             return UnityBundleDeepInspectionReport(
                 inventory.bundleFiles, 0, 0, 0, 0, emptyList(),
@@ -87,7 +106,6 @@ internal object UnityBundleDeepInspector {
             )
         }
 
-        val workDirectory = Files.createTempDirectory(scratchPath, "arabify-unity-deep-").toFile()
         val results = mutableListOf<UnityBundleDeepInspectionItem>()
         var totalBundleBytes = 0L
         var bundlesInspected = 0
@@ -95,18 +113,80 @@ internal object UnityBundleDeepInspector {
         var serializedFilesParsed = 0
         var objectRecordsIndexed = 0
 
-        try {
-            ZipFile(apk).use { zip ->
-                val candidatePaths = candidates.map { it.path }.toSet()
-                val pathCounts = mutableMapOf<String, Int>()
-                val allEntries = zip.entries()
-                while (allEntries.hasMoreElements()) {
-                    val entry = allEntries.nextElement()
-                    if (entry.name in candidatePaths) {
-                        pathCounts[entry.name] = (pathCounts[entry.name] ?: 0) + 1
+        ZipFile(apk).use { zip ->
+            val candidatePaths = candidates.map { it.path }.toSet()
+            val pathCounts = mutableMapOf<String, Int>()
+            val allEntries = zip.entries()
+            var entriesVerified = 0
+            var verificationTruncated = false
+            while (allEntries.hasMoreElements()) {
+                if (entriesVerified >= limits.maxZipEntriesToVerify) {
+                    verificationTruncated = true
+                    break
+                }
+                val entry = allEntries.nextElement()
+                entriesVerified++
+                if (entry.name in candidatePaths) {
+                    pathCounts[entry.name] = (pathCounts[entry.name] ?: 0) + 1
+                }
+            }
+
+            if (verificationTruncated) {
+                notes += "تم إيقاف الفحص العميق عند حد " + limits.maxZipEntriesToVerify +
+                    " إدخال ZIP؛ لم تُفحص الحزم لأن تفرد المسارات لم يُثبت."
+                candidates.forEach {
+                    results += UnityBundleDeepInspectionItem(
+                        it.path,
+                        "تخطي: تجاوز فحص تفرد أسماء ZIP الحد الآمن؛ لم تتم قراءة بيانات الحزمة."
+                    )
+                }
+                return@use
+            }
+
+            // Reserve enough cache space for the planned compressed bundle copies,
+            // the maximum decoded CAB output, and a small safety margin before
+            // creating any temporary files. This is deliberately conservative.
+            var plannedBundleBytes = 0L
+            candidates.forEach { candidate ->
+                val entry = zip.getEntry(candidate.path)
+                if (pathCounts[candidate.path] == 1 && entry != null &&
+                    !entry.isDirectory && entry.size in 1..limits.maxSingleBundleBytes
+                ) {
+                    val next = try {
+                        Math.addExact(plannedBundleBytes, entry.size)
+                    } catch (_: ArithmeticException) {
+                        Long.MAX_VALUE
+                    }
+                    if (next <= limits.maxTotalBundleBytes) {
+                        plannedBundleBytes = next
                     }
                 }
+            }
+            val requiredScratchBytes = requiredUnityScratchSpaceBytes(
+                plannedBundleBytes,
+                if (plannedBundleBytes > 0L) limits.maxTotalExtractedBytes else 0L,
+                limits.scratchReserveBytes
+            )
+            val availableScratchBytes = scratchDirectory.usableSpace
+            if (requiredScratchBytes == null || availableScratchBytes < requiredScratchBytes) {
+                notes += if (requiredScratchBytes == null) {
+                    "تعذر حساب مساحة الفحص المؤقت بأمان بسبب تجاوز عددي؛ لم تُنشأ ملفات مؤقتة."
+                } else {
+                    "المساحة الحرة غير كافية لفحص UnityFS بأمان؛ المطلوب تقريبًا " +
+                        ((requiredScratchBytes + 1_048_575L) / 1_048_576L) + " MB والمتاح " +
+                        (availableScratchBytes / 1_048_576L) + " MB. لم تُنشأ ملفات مؤقتة."
+                }
+                candidates.forEach {
+                    results += UnityBundleDeepInspectionItem(
+                        it.path,
+                        "تخطي: مساحة التخزين المؤقت غير كافية؛ لم تتم قراءة بيانات الحزمة."
+                    )
+                }
+                return@use
+            }
 
+            val workDirectory = Files.createTempDirectory(scratchPath, "arabify-unity-deep-").toFile()
+            try {
                 candidates.forEachIndexed { index, candidate ->
                     val entry = zip.getEntry(candidate.path)
                     if (pathCounts[candidate.path] != 1 || entry == null) {
@@ -270,9 +350,9 @@ internal object UnityBundleDeepInspector {
                     }
                     onProgress(index + 1, candidates.size)
                 }
+            } finally {
+                workDirectory.deleteRecursively()
             }
-        } finally {
-            workDirectory.deleteRecursively()
         }
 
         return UnityBundleDeepInspectionReport(
@@ -295,5 +375,32 @@ internal object UnityBundleDeepInspector {
             limits.maxSingleNodeBytes >= 1L &&
             limits.maxTotalExtractedBytes >= limits.maxSingleNodeBytes &&
             limits.maxTotalExtractedBytes <= 1024L * 1024L * 1024L &&
-            limits.maxSerializedMetadataBytes in 1..(64L * 1024L * 1024L)
+            limits.maxSerializedMetadataBytes in 1..(64L * 1024L * 1024L) &&
+            limits.maxZipEntriesToVerify in 1..100_000 &&
+            limits.scratchReserveBytes in 0L..(256L * 1024L * 1024L)
+}
+
+internal fun requiredUnityScratchSpaceBytes(
+    compressedBundleBytes: Long,
+    maxExtractedBytes: Long,
+    reserveBytes: Long
+): Long? {
+    if (compressedBundleBytes < 0L || maxExtractedBytes < 0L || reserveBytes < 0L) return null
+    return try {
+        Math.addExact(Math.addExact(compressedBundleBytes, maxExtractedBytes), reserveBytes)
+    } catch (_: ArithmeticException) {
+        null
+    }
+}
+
+internal fun hasEnoughUnityScratchSpace(
+    availableBytes: Long,
+    compressedBundleBytes: Long,
+    maxExtractedBytes: Long,
+    reserveBytes: Long
+): Boolean {
+    val required = requiredUnityScratchSpaceBytes(
+        compressedBundleBytes, maxExtractedBytes, reserveBytes
+    ) ?: return false
+    return availableBytes >= required
 }

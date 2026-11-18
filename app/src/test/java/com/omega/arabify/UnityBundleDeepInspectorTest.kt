@@ -52,7 +52,11 @@ class UnityBundleDeepInspectorTest {
         return header(totalSize) + info + payload
     }
 
-    private fun createApk(bundle: ByteArray, precedingTextEntries: Int = 0): File {
+    private fun createApk(
+        bundle: ByteArray,
+        precedingTextEntries: Int = 0,
+        trailingTextEntries: Int = 0
+    ): File {
         val apk = File.createTempFile("arabify-unity-deep-", ".apk")
         ZipOutputStream(FileOutputStream(apk)).use { zip ->
             repeat(precedingTextEntries) { index ->
@@ -63,6 +67,11 @@ class UnityBundleDeepInspectorTest {
             zip.putNextEntry(ZipEntry("assets/bin/Data/StreamingAssets/fixture.bundle"))
             zip.write(bundle)
             zip.closeEntry()
+            repeat(trailingTextEntries) { index ->
+                zip.putNextEntry(ZipEntry("assets/bin/Data/StreamingAssets/trailing-$index.txt"))
+                zip.write("sample".toByteArray(Charsets.UTF_8))
+                zip.closeEntry()
+            }
         }
         return apk
     }
@@ -142,4 +151,64 @@ class UnityBundleDeepInspectorTest {
             scratch.deleteRecursively()
         }
     }
+
+    @Test
+    fun refusesDeepInspectionWhenInventoryWasTruncated() {
+        val apk = createApk(
+            makeUnityFs("partial inventory".toByteArray(Charsets.UTF_8)),
+            trailingTextEntries = 2
+        )
+        val scratch = kotlin.io.path.createTempDirectory("arabify-deep-partial-").toFile()
+        try {
+            val inventory = UnityAssetInventoryScanner.inspect(apk, maxEntriesToScan = 1)
+            assertTrue(inventory.scanTruncated)
+            assertEquals(1, inventory.bundleCandidates.size)
+
+            val report = UnityBundleDeepInspector.inspect(apk, inventory, scratch)
+
+            assertEquals(0, report.bundlesInspected)
+            assertTrue(report.notes.any { it.contains("جرد APK جزئي") })
+            assertTrue(report.items.single().status.contains("تخطي"))
+            assertTrue(scratch.listFiles()!!.isEmpty())
+        } finally {
+            apk.delete()
+            scratch.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun boundsZipEntryUniquenessVerificationBeforeCreatingScratchFiles() {
+        val apk = createApk(
+            makeUnityFs("bounded verification".toByteArray(Charsets.UTF_8)),
+            precedingTextEntries = 5
+        )
+        val scratch = kotlin.io.path.createTempDirectory("arabify-deep-zip-budget-").toFile()
+        try {
+            val inventory = UnityAssetInventoryScanner.inspect(apk)
+            val report = UnityBundleDeepInspector.inspect(
+                apk,
+                inventory,
+                scratch,
+                UnityBundleDeepInspectionLimits(maxZipEntriesToVerify = 3)
+            )
+
+            assertEquals(0, report.bundlesInspected)
+            assertTrue(report.notes.any { it.contains("حد 3 إدخال ZIP") })
+            assertTrue(report.items.single().status.contains("تخطي"))
+            assertTrue(scratch.listFiles()!!.isEmpty())
+        } finally {
+            apk.delete()
+            scratch.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun scratchSpaceBudgetUsesOverflowSafeArithmeticAndRequiresFullReserve() {
+        assertEquals(180L, requiredUnityScratchSpaceBytes(100L, 50L, 30L))
+        assertTrue(hasEnoughUnityScratchSpace(180L, 100L, 50L, 30L))
+        assertTrue(!hasEnoughUnityScratchSpace(179L, 100L, 50L, 30L))
+        assertEquals(null, requiredUnityScratchSpaceBytes(Long.MAX_VALUE, 1L, 0L))
+        assertTrue(!hasEnoughUnityScratchSpace(Long.MAX_VALUE, Long.MAX_VALUE, 1L, 0L))
+    }
+
 }
