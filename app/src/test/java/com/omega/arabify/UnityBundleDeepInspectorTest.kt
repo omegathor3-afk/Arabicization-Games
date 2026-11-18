@@ -55,7 +55,8 @@ class UnityBundleDeepInspectorTest {
     private fun createApk(
         bundle: ByteArray,
         precedingTextEntries: Int = 0,
-        trailingTextEntries: Int = 0
+        trailingTextEntries: Int = 0,
+        additionalBundles: List<ByteArray> = emptyList()
     ): File {
         val apk = File.createTempFile("arabify-unity-deep-", ".apk")
         ZipOutputStream(FileOutputStream(apk)).use { zip ->
@@ -67,6 +68,11 @@ class UnityBundleDeepInspectorTest {
             zip.putNextEntry(ZipEntry("assets/bin/Data/StreamingAssets/fixture.bundle"))
             zip.write(bundle)
             zip.closeEntry()
+            additionalBundles.forEachIndexed { index, additional ->
+                zip.putNextEntry(ZipEntry("assets/bin/Data/StreamingAssets/fixture-$index.bundle"))
+                zip.write(additional)
+                zip.closeEntry()
+            }
             repeat(trailingTextEntries) { index ->
                 zip.putNextEntry(ZipEntry("assets/bin/Data/StreamingAssets/trailing-$index.txt"))
                 zip.write("sample".toByteArray(Charsets.UTF_8))
@@ -74,6 +80,46 @@ class UnityBundleDeepInspectorTest {
             }
         }
         return apk
+    }
+
+    private fun serializedFileBytes(): ByteArray {
+        val metadata = java.nio.ByteBuffer.allocate(128)
+            .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        metadata.put("2022.3.0f1".toByteArray(Charsets.UTF_8))
+        metadata.put(0)
+        metadata.putInt(13)
+        metadata.put(0)
+        metadata.putInt(1)
+        metadata.putInt(1)
+        metadata.put(0)
+        metadata.putShort(0)
+        metadata.put(ByteArray(16) { 0x44 })
+        metadata.putInt(2)
+        while ((48L + metadata.position()) % 4L != 0L) metadata.put(0x7f)
+        fun objectRecord(pathId: Long, offset: Long, size: Int) {
+            metadata.putLong(pathId)
+            metadata.putLong(offset)
+            metadata.putInt(size)
+            metadata.putInt(0)
+        }
+        objectRecord(11L, 0L, 16)
+        objectRecord(22L, 16L, 32)
+        val meta = metadata.array().copyOf(metadata.position())
+        val header = java.nio.ByteBuffer.allocate(48)
+            .order(java.nio.ByteOrder.BIG_ENDIAN)
+            .apply {
+                putInt(meta.size)
+                putInt(4096)
+                putInt(22)
+                putInt(2048)
+                put(0)
+                put(ByteArray(3))
+                putInt(meta.size)
+                putLong(4096L)
+                putLong(2048L)
+                putLong(0L)
+            }.array()
+        return header + meta + ByteArray(4096 - header.size - meta.size)
     }
 
     @Test
@@ -195,6 +241,73 @@ class UnityBundleDeepInspectorTest {
             assertEquals(0, report.bundlesInspected)
             assertTrue(report.notes.any { it.contains("حد 3 إدخال ZIP") })
             assertTrue(report.items.single().status.contains("تخطي"))
+            assertTrue(scratch.listFiles()!!.isEmpty())
+        } finally {
+            apk.delete()
+            scratch.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun enforcesAggregateObjectRecordBudgetAcrossSerializedFiles() {
+        val serialized = serializedFileBytes()
+        val apk = createApk(
+            makeUnityFs(serialized),
+            additionalBundles = listOf(makeUnityFs(serialized))
+        )
+        val scratch = kotlin.io.path.createTempDirectory("arabify-deep-object-total-").toFile()
+        try {
+            val original = apk.readBytes()
+            val inventory = UnityAssetInventoryScanner.inspect(apk)
+            val report = UnityBundleDeepInspector.inspect(
+                apk,
+                inventory,
+                scratch,
+                UnityBundleDeepInspectionLimits(maxTotalObjectRecords = 3)
+            )
+
+            assertEquals(2, report.bundlesInspected)
+            assertEquals(2, report.serializedFilesParsed)
+            // Object tables are atomic: the second file declares two records but
+            // only one aggregate slot remains, so neither record is indexed.
+            assertEquals(2, report.objectRecordsIndexed)
+            assertTrue(report.objectRecordsBudgetExhausted)
+            assertTrue(report.notes.any { it.contains("الحد الإجمالي 3") })
+            assertTrue(report.items.flatMap { it.details }
+                .any { it.contains("aggregate-limit-exceeded (declared=2, remaining=1)") })
+            assertArrayEquals(original, apk.readBytes())
+            assertTrue(scratch.listFiles()!!.isEmpty())
+        } finally {
+            apk.delete()
+            scratch.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun perFileObjectLimitDoesNotConsumeAggregateBudget() {
+        val serialized = serializedFileBytes()
+        val apk = createApk(
+            makeUnityFs(serialized),
+            additionalBundles = listOf(makeUnityFs(serialized))
+        )
+        val scratch = kotlin.io.path.createTempDirectory("arabify-deep-object-per-file-").toFile()
+        try {
+            val inventory = UnityAssetInventoryScanner.inspect(apk)
+            val report = UnityBundleDeepInspector.inspect(
+                apk,
+                inventory,
+                scratch,
+                UnityBundleDeepInspectionLimits(
+                    maxObjectRecordsPerFile = 1,
+                    maxTotalObjectRecords = 10
+                )
+            )
+
+            assertEquals(2, report.serializedFilesParsed)
+            assertEquals(0, report.objectRecordsIndexed)
+            assertTrue(!report.objectRecordsBudgetExhausted)
+            assertTrue(report.items.flatMap { it.details }
+                .count { it.contains("per-file-limit-exceeded") } == 2)
             assertTrue(scratch.listFiles()!!.isEmpty())
         } finally {
             apk.delete()

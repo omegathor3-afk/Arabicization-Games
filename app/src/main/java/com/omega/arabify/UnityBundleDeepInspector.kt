@@ -17,7 +17,8 @@ internal data class UnityBundleDeepInspectionLimits(
     val maxSerializedMetadataBytes: Long = 64L * 1024L * 1024L,
     val maxZipEntriesToVerify: Int = 100_000,
     val scratchReserveBytes: Long = 16L * 1024L * 1024L,
-    val maxObjectRecordsPerFile: Int = 100_000
+    val maxObjectRecordsPerFile: Int = 100_000,
+    val maxTotalObjectRecords: Int = 250_000
 )
 
 internal data class UnityBundleDeepInspectionItem(
@@ -36,13 +37,15 @@ internal data class UnityBundleDeepInspectionReport(
     val serializedFilesParsed: Int,
     val objectRecordsIndexed: Int,
     val items: List<UnityBundleDeepInspectionItem>,
-    val notes: List<String>
+    val notes: List<String>,
+    val objectRecordsBudgetExhausted: Boolean = false
 ) {
     val summary: String
         get() = "UnityFS: " + bundlesInspected + "/" + bundlesFound +
             " • CAB nodes: " + nodesExtracted +
             " • SerializedFiles: " + serializedFilesParsed +
             " • object records indexed: " + objectRecordsIndexed +
+            (if (objectRecordsBudgetExhausted) " • تم بلوغ حد فهرسة الكائنات" else "") +
             " • قراءة فقط"
 }
 
@@ -113,6 +116,8 @@ internal object UnityBundleDeepInspector {
         var nodesExtracted = 0
         var serializedFilesParsed = 0
         var objectRecordsIndexed = 0
+        var remainingObjectRecords = limits.maxTotalObjectRecords
+        var objectRecordsBudgetExhausted = false
 
         ZipFile(apk).use { zip ->
             val candidatePaths = candidates.map { it.path }.toSet()
@@ -311,23 +316,47 @@ internal object UnityBundleDeepInspector {
                             if (UnitySerializedFileHeaderParser.parse(prefix, size) == null) {
                                 return@forEach
                             }
+                            val relativePath = outputDirectory.toPath()
+                                .relativize(extracted.toPath()).toString()
+                            if (remainingObjectRecords <= 0) {
+                                objectRecordsBudgetExhausted = true
+                                details += relativePath +
+                                    ": SerializedFile detected; object index skipped (aggregate budget exhausted)"
+                                return@forEach
+                            }
+                            val allowedForFile = minOf(
+                                limits.maxObjectRecordsPerFile,
+                                remainingObjectRecords
+                            )
                             val inspection = FileInputStream(extracted).use { input ->
                                 UnitySerializedFileInspector.inspect(
-                                    input, size, limits.maxObjectRecordsPerFile
+                                    input, size, allowedForFile
                                 )
                             } ?: return@forEach
                             parsedInBundle++
                             val objectCount = inspection.objectTable?.objects?.size ?: 0
                             objectsInBundle += objectCount
                             val objectSummary = if (inspection.objectTableLimitExceeded) {
-                                "objects=limit-exceeded (declared=" +
-                                    inspection.declaredObjectCount + ", max=" +
-                                    limits.maxObjectRecordsPerFile + ")"
+                                val declared = inspection.declaredObjectCount
+                                val aggregateLimitIsActive =
+                                    remainingObjectRecords <= limits.maxObjectRecordsPerFile
+                                if (aggregateLimitIsActive &&
+                                    declared != null && declared > remainingObjectRecords
+                                ) {
+                                    val remaining = remainingObjectRecords
+                                    remainingObjectRecords = 0
+                                    objectRecordsBudgetExhausted = true
+                                    "objects=aggregate-limit-exceeded (declared=" +
+                                        declared + ", remaining=" + remaining + ")"
+                                } else {
+                                    "objects=per-file-limit-exceeded (declared=" +
+                                        declared + ", max=" +
+                                        limits.maxObjectRecordsPerFile + ")"
+                                }
                             } else {
+                                remainingObjectRecords -= objectCount
                                 "objects=" + objectCount
                             }
-                            val relativePath = outputDirectory.toPath()
-                                .relativize(extracted.toPath()).toString()
                             details += relativePath + ": SerializedFile v" +
                                 inspection.header.formatVersion + ", stage=" +
                                 inspection.stage.name + ", types=" +
@@ -365,6 +394,10 @@ internal object UnityBundleDeepInspector {
             }
         }
 
+        if (objectRecordsBudgetExhausted) {
+            notes += "تم بلوغ الحد الإجمالي " + limits.maxTotalObjectRecords +
+                " لسجلات الكائنات؛ لم تُفهرس جداول الكائنات المتبقية، وبقيت جميع الأصول للقراءة فقط."
+        }
         return UnityBundleDeepInspectionReport(
             bundlesFound = inventory.bundleFiles,
             bundlesInspected = bundlesInspected,
@@ -372,7 +405,8 @@ internal object UnityBundleDeepInspector {
             serializedFilesParsed = serializedFilesParsed,
             objectRecordsIndexed = objectRecordsIndexed,
             items = results,
-            notes = notes
+            notes = notes,
+            objectRecordsBudgetExhausted = objectRecordsBudgetExhausted
         )
     }
 
@@ -388,7 +422,8 @@ internal object UnityBundleDeepInspector {
             limits.maxSerializedMetadataBytes in 1..(64L * 1024L * 1024L) &&
             limits.maxZipEntriesToVerify in 1..100_000 &&
             limits.scratchReserveBytes in 0L..(256L * 1024L * 1024L) &&
-            limits.maxObjectRecordsPerFile in 1..100_000
+            limits.maxObjectRecordsPerFile in 1..100_000 &&
+            limits.maxTotalObjectRecords in 1..1_000_000
 }
 
 internal fun requiredUnityScratchSpaceBytes(
