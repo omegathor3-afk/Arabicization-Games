@@ -83,12 +83,18 @@ internal object UnitySerializedFileHeaderParser {
         actualLength: Long,
         headerSize: Int
     ): Boolean {
-        return metadataSize > 0 &&
-            fileSize >= headerSize &&
-            fileSize <= actualLength &&
-            dataOffset >= headerSize &&
-            dataOffset < fileSize &&
-            metadataSize <= fileSize - headerSize
+        if (metadataSize <= 0L ||
+            fileSize < headerSize.toLong() ||
+            fileSize > actualLength
+        ) return false
+
+        // Serialized metadata immediately follows the header. The data section
+        // must not begin inside that metadata range, even when every individual
+        // header field is otherwise within the file's bounds.
+        val bytesAvailableAfterHeader = fileSize - headerSize.toLong()
+        if (metadataSize > bytesAvailableAfterHeader) return false
+        val metadataEnd = headerSize.toLong() + metadataSize
+        return dataOffset >= metadataEnd && dataOffset < fileSize
     }
 
     /** Read-only round-trip contract: unknown serialized bytes are returned unchanged. */
