@@ -303,7 +303,11 @@ internal object UnityAssetInventoryScanner {
                             val typeCount = metadata?.typeCount?.toString() ?: "unknown"
                             val objectCount = inspection.objectTable?.objects?.size?.toString() ?: "not parsed"
                             val stage = inspection.stage.name
-                            val detail = "SerializedFile v${inspection.header.formatVersion}, endian=${inspection.header.endian}; Unity=${metadata?.unityVersion ?: "unknown"}; platform=${metadata?.targetPlatform ?: -1}; TypeTree=${metadata?.typeTreeEnabled ?: "default"}; types=$typeCount; objects=$objectCount; stage=$stage؛ فحص قراءة فقط، بيانات الكائنات لم تُقرأ أو تُعدّل"
+                            val trailing = inspection.trailingMetadata
+                            val trailingSummary = trailing?.let {
+                                "; scripts=${it.scriptReferences.size}; externals=${it.externals.size}; referenceTypes=${it.referenceTypes.size}; sharedTypeTrees=${it.sharedSubtreeHandlers.size}; unknownTailBytes=${it.unknownTailBytes}"
+                            } ?: ""
+                            val detail = "SerializedFile v${inspection.header.formatVersion}, endian=${inspection.header.endian}; Unity=${metadata?.unityVersion ?: "unknown"}; platform=${metadata?.targetPlatform ?: -1}; TypeTree=${metadata?.typeTreeEnabled ?: "default"}; types=$typeCount; objects=$objectCount; stage=$stage$trailingSummary؛ فحص قراءة فقط، بيانات الكائنات لم تُقرأ أو تُعدّل"
                             UnityAssetInventoryItem(
                                 path, size, UnityAssetKind.SERIALIZED_FILE,
                                 UnityAssetSupport.HEADER_PARSED_READ_ONLY,

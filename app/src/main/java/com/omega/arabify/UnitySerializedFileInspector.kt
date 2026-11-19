@@ -8,7 +8,8 @@ internal enum class UnitySerializedInspectionStage {
     HEADER_ONLY,
     METADATA_PREFIX_PARSED,
     TYPE_TABLE_PARSED,
-    OBJECT_TABLE_PARSED
+    OBJECT_TABLE_PARSED,
+    TRAILING_METADATA_PARSED
 }
 
 internal data class UnitySerializedFileInspection(
@@ -18,7 +19,8 @@ internal data class UnitySerializedFileInspection(
     val objectTable: UnitySerializedObjectTable?,
     val stage: UnitySerializedInspectionStage,
     val declaredObjectCount: Int? = null,
-    val objectTableLimitExceeded: Boolean = false
+    val objectTableLimitExceeded: Boolean = false,
+    val trailingMetadata: UnitySerializedTrailingMetadata? = null
 )
 
 /**
@@ -62,15 +64,23 @@ internal object UnitySerializedFileInspector {
             val objects = UnitySerializedObjectTableParser.parse(
                 header, types, metadata, maxObjectRecords
             )
+            val trailing = if (objects != null) {
+                UnitySerializedTrailingMetadataParser.parse(header, prefix, metadata, objects)
+            } else null
+            val stage = when {
+                objects == null -> UnitySerializedInspectionStage.TYPE_TABLE_PARSED
+                trailing != null -> UnitySerializedInspectionStage.TRAILING_METADATA_PARSED
+                else -> UnitySerializedInspectionStage.OBJECT_TABLE_PARSED
+            }
             UnitySerializedFileInspection(
                 header,
                 prefix,
                 types,
                 objects,
-                if (objects != null) UnitySerializedInspectionStage.OBJECT_TABLE_PARSED
-                else UnitySerializedInspectionStage.TYPE_TABLE_PARSED,
+                stage,
                 declaredObjectCount,
-                objectTableLimitExceeded
+                objectTableLimitExceeded,
+                trailing
             )
         }.getOrNull()
     }

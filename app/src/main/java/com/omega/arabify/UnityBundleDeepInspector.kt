@@ -379,11 +379,18 @@ internal object UnityBundleDeepInspector {
                                 remainingObjectRecords -= objectCount
                                 "objects=" + objectCount
                             }
+                            val trailingSummary = inspection.trailingMetadata?.let {
+                                ", scripts=" + it.scriptReferences.size +
+                                    ", externals=" + it.externals.size +
+                                    ", referenceTypes=" + it.referenceTypes.size +
+                                    ", sharedTypeTrees=" + it.sharedSubtreeHandlers.size +
+                                    ", unknownTailBytes=" + it.unknownTailBytes
+                            } ?: ", trailingMetadata=not-parsed"
                             details += relativePath + ": SerializedFile v" +
                                 inspection.header.formatVersion + ", stage=" +
                                 inspection.stage.name + ", types=" +
                                 (inspection.metadataPrefix?.typeCount ?: 0) +
-                                ", " + objectSummary + " (read-only)"
+                                ", " + objectSummary + trailingSummary + " (read-only)"
                         }
                         serializedFilesParsed += parsedInBundle
                         objectRecordsIndexed += objectsInBundle

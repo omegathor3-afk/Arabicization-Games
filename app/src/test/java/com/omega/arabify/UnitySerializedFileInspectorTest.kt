@@ -10,8 +10,8 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 class UnitySerializedFileInspectorTest {
-    private fun fileBytes(): ByteArray {
-        val metadata = ByteBuffer.allocate(128).order(ByteOrder.LITTLE_ENDIAN)
+    private fun fileBytes(includeTrailingMetadata: Boolean = false): ByteArray {
+        val metadata = ByteBuffer.allocate(512).order(ByteOrder.LITTLE_ENDIAN)
         metadata.put("2022.3.0f1".toByteArray(Charsets.UTF_8))
         metadata.put(0)
         metadata.putInt(13)
@@ -31,6 +31,26 @@ class UnitySerializedFileInspectorTest {
         }
         obj(11, 0, 16)
         obj(22, 16, 32)
+        if (includeTrailingMetadata) {
+            // Script references
+            metadata.putInt(1)
+            metadata.putInt(0)
+            while ((48L + metadata.position()) % 4L != 0L) metadata.put(0x7f)
+            metadata.putLong(777L)
+
+            // External file references
+            metadata.putInt(1)
+            metadata.put(0)
+            metadata.put(ByteArray(16) { (it + 1).toByte() })
+            metadata.putInt(2)
+            metadata.put("archive:/CAB-123/resource.assets".toByteArray(Charsets.UTF_8))
+            metadata.put(0)
+
+            // Reference types and user information
+            metadata.putInt(0)
+            metadata.put("inspector-fixture".toByteArray(Charsets.UTF_8))
+            metadata.put(0)
+        }
         val meta = metadata.array().copyOf(metadata.position())
         val header = ByteBuffer.allocate(48).order(ByteOrder.BIG_ENDIAN).apply {
             putInt(meta.size)
@@ -60,8 +80,25 @@ class UnitySerializedFileInspectorTest {
         assertEquals(2048L, result.objectTable!!.objects.first().absoluteDataOffset)
     }
 
+    @Test fun inspectorParsesTrailingMetadataSectionsReadOnly() {
+        val bytes = fileBytes(includeTrailingMetadata = true)
+        val result = UnitySerializedFileInspector.inspect(
+            ByteArrayInputStream(bytes), bytes.size.toLong()
+        )
+
+        assertNotNull(result)
+        assertEquals(UnitySerializedInspectionStage.TRAILING_METADATA_PARSED, result!!.stage)
+        val trailing = result.trailingMetadata!!
+        assertEquals(1, trailing.scriptReferences.size)
+        assertEquals(777L, trailing.scriptReferences.single().localIdentifierInFile)
+        assertEquals(1, trailing.externals.size)
+        assertEquals("archive:/CAB-123/resource.assets", trailing.externals.single().path)
+        assertEquals("inspector-fixture", trailing.userInformation)
+        assertEquals(0, trailing.unknownTailBytes)
+    }
+
     @Test fun readsMetadataAcrossShortInputReadsWithoutTouchingObjectPayloads() {
-        val bytes = fileBytes()
+        val bytes = fileBytes(includeTrailingMetadata = true)
         val metadataSize = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN).int
         var bytesRead = 0
         val chunked = object : ByteArrayInputStream(bytes) {
@@ -75,7 +112,7 @@ class UnitySerializedFileInspectorTest {
         val result = UnitySerializedFileInspector.inspect(chunked, bytes.size.toLong())
 
         assertNotNull(result)
-        assertEquals(UnitySerializedInspectionStage.OBJECT_TABLE_PARSED, result!!.stage)
+        assertEquals(UnitySerializedInspectionStage.TRAILING_METADATA_PARSED, result!!.stage)
         // The inspector should consume only the 48-byte header and bounded metadata,
         // never the object payload region that follows it.
         assertEquals(48 + metadataSize, bytesRead)

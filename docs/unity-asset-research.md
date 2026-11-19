@@ -54,13 +54,14 @@ License statements are based on upstream repository license files/readmes at the
 - The TypeTree/type-record parser's CI compile failure in run #155 was traced to two block-bodied local helpers missing explicit `return` statements; both were fixed in commit `6472731`. Run #155 did not reach tests or APK packaging, so it produced no valid APK for that revision.
 - Object records are rejected for duplicate PathIDs, invalid type indices, negative offsets, truncated metadata, excessive counts, or ranges outside the declared file/data section. Alignment is calculated against the absolute file position and padding bytes are skipped without assuming a particular fill value.
 - The object-table parser is wired into the bounded inspector and APK inventory. It returns offsets and IDs only; it does not dereference or load object payload bytes and cannot authorize edits.
-- This remains a metadata/index-only parser. The inspector does not yet parse the script-reference list, external-reference records, the v20+ serialized-reference type table as a complete section, the v26 shared-subtree table, or any object payload. No asset writer or automatic Unity resource mutation is enabled.
+- The trailing-metadata parser is now wired into the same streaming inspector. It reports script identifiers, external file references (including GUID/type/path), v20+ reference type records, v26+ shared TypeTree handlers, user information, and any unconsumed tail-byte count. The inventory and deep-inspection details expose counts without resolving or modifying references.
+- External paths are not yet resolved to APK entries or sidecar .resS/.resource byte ranges, and object payloads remain unread. This is still metadata-only, read-only inspection; no asset writer or automatic Unity resource mutation is enabled.
 - Synthetic tests cover versions 18/19, local strings, unresolved common-string references, malformed counts, hierarchy, offsets, and trailing data. Real Unity fixtures and differential comparison against UnityPy/UnityDataTools remain required.
 
 ## Required gate before any asset edit
 
 1. Validate CAB-node extraction against legally redistributable real UnityFS bundles across engine versions; compare extracted paths, byte ranges and hashes with UnityPy/UnityDataTools. Keep extraction read-only.
-2. Complete the remaining SerializedFile sections needed by a writer: script references, external references, v20+ reference types and v26 shared-subtree metadata for explicitly supported versions.
+2. Validate the newly connected trailing-metadata sections against legally redistributable real fixtures, resolve external references to sidecar resource streams without modifying them, and document any version-specific layouts that remain unsupported.
 3. Preserve original object bytes and all unrecognized fields; do not normalize or reorder unknown records.
 4. Build read -> write -> read round-trip tests against legally redistributable real Unity samples, comparing object IDs, type IDs, external references, TypeTrees, offsets, sizes and hashes of unchanged payloads.
 5. Test a modified copy against the Unity runtime or an actual game supplied by its owner. A parser round-trip alone does not prove runtime compatibility.
