@@ -316,6 +316,56 @@ class UnityBundleDeepInspectorTest {
     }
 
     @Test
+    fun reportsMalformedObjectTableAsUnavailableInsteadOfEmpty() {
+        val validSerialized = serializedFileBytes()
+        val validInspection = checkNotNull(
+            UnitySerializedFileInspector.inspect(
+                java.io.ByteArrayInputStream(validSerialized),
+                validSerialized.size.toLong()
+            )
+        )
+        val typeTableBytesConsumed = checkNotNull(validInspection.typeTable).bytesConsumed
+        val malformedSerialized = validSerialized.copyOf()
+        // Duplicate the first PathID in the second object record. The declared count
+        // remains valid, but the complete object table must be rejected atomically.
+        val secondPathIdOffset = 48 + typeTableBytesConsumed + 4 + 24
+        java.nio.ByteBuffer.wrap(malformedSerialized)
+            .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            .putLong(secondPathIdOffset, 11L)
+
+        val malformedInspection = checkNotNull(
+            UnitySerializedFileInspector.inspect(
+                java.io.ByteArrayInputStream(malformedSerialized),
+                malformedSerialized.size.toLong()
+            )
+        )
+        assertTrue(malformedInspection.objectTable == null)
+        assertEquals(2, malformedInspection.declaredObjectCount)
+        assertTrue(!malformedInspection.objectTableLimitExceeded)
+
+        val apk = createApk(makeUnityFs(malformedSerialized))
+        val scratch = kotlin.io.path.createTempDirectory("arabify-deep-invalid-object-table-").toFile()
+        try {
+            val original = apk.readBytes()
+            val inventory = UnityAssetInventoryScanner.inspect(apk)
+            val report = UnityBundleDeepInspector.inspect(apk, inventory, scratch)
+            val details = report.items.flatMap { it.details }
+
+            assertEquals(1, report.serializedFilesParsed)
+            assertEquals(0, report.objectRecordsIndexed)
+            assertTrue(details.any {
+                it.contains("objects=unavailable (declared=2)")
+            })
+            assertTrue(details.none { it.contains("objects=0") })
+            assertArrayEquals(original, apk.readBytes())
+            assertTrue(scratch.listFiles()!!.isEmpty())
+        } finally {
+            apk.delete()
+            scratch.deleteRecursively()
+        }
+    }
+
+    @Test
     fun enforcesAggregateCabOutputBudgetAcrossBundles() {
         val payload = ByteArray(80) { it.toByte() }
         val apk = createApk(

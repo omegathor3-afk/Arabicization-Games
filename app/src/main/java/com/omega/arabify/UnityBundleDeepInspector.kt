@@ -375,6 +375,11 @@ internal object UnityBundleDeepInspector {
                                         declared + ", max=" +
                                         limits.maxObjectRecordsPerFile + ")"
                                 }
+                            } else if (inspection.objectTable == null) {
+                                // A failed/unsupported object-table parse is not an empty table.
+                                // Keep the aggregate budget untouched and report the uncertainty.
+                                "objects=unavailable (declared=" +
+                                    (inspection.declaredObjectCount?.toString() ?: "unknown") + ")"
                             } else {
                                 remainingObjectRecords -= objectCount
                                 "objects=" + objectCount
