@@ -14,6 +14,8 @@ internal data class UnityBundleDeepInspectionLimits(
     val maxNodes: Int = 10_000,
     val maxSingleNodeBytes: Long = 128L * 1024L * 1024L,
     val maxTotalExtractedBytes: Long = 256L * 1024L * 1024L,
+    val maxTotalDecodedBytes: Long = 256L * 1024L * 1024L,
+    val maxAggregateExtractedBytes: Long = 256L * 1024L * 1024L,
     val maxSerializedMetadataBytes: Long = 64L * 1024L * 1024L,
     val maxZipEntriesToVerify: Int = 100_000,
     val scratchReserveBytes: Long = 16L * 1024L * 1024L,
@@ -38,13 +40,15 @@ internal data class UnityBundleDeepInspectionReport(
     val objectRecordsIndexed: Int,
     val items: List<UnityBundleDeepInspectionItem>,
     val notes: List<String>,
-    val objectRecordsBudgetExhausted: Boolean = false
+    val objectRecordsBudgetExhausted: Boolean = false,
+    val bytesExtracted: Long = 0L
 ) {
     val summary: String
         get() = "UnityFS: " + bundlesInspected + "/" + bundlesFound +
             " • CAB nodes: " + nodesExtracted +
             " • SerializedFiles: " + serializedFilesParsed +
             " • object records indexed: " + objectRecordsIndexed +
+            " • CAB bytes: " + bytesExtracted +
             (if (objectRecordsBudgetExhausted) " • تم بلوغ حد فهرسة الكائنات" else "") +
             " • قراءة فقط"
 }
@@ -112,6 +116,8 @@ internal object UnityBundleDeepInspector {
 
         val results = mutableListOf<UnityBundleDeepInspectionItem>()
         var totalBundleBytes = 0L
+        var totalExtractedBytes = 0L
+        var remainingAggregateExtractedBytes = limits.maxAggregateExtractedBytes
         var bundlesInspected = 0
         var nodesExtracted = 0
         var serializedFilesParsed = 0
@@ -152,25 +158,22 @@ internal object UnityBundleDeepInspector {
             // Reserve enough cache space for the planned compressed bundle copies,
             // the maximum decoded CAB output, and a small safety margin before
             // creating any temporary files. This is deliberately conservative.
-            var plannedBundleBytes = 0L
+            // A single candidate is copied and extracted at a time. Its bundle
+            // copy, decoded storage intermediate and CAB staging tree coexist,
+            // then are deleted before the next candidate starts.
+            var maxPlannedBundleCopyBytes = 0L
             candidates.forEach { candidate ->
                 val entry = zip.getEntry(candidate.path)
                 if (pathCounts[candidate.path] == 1 && entry != null &&
                     !entry.isDirectory && entry.size in 1..limits.maxSingleBundleBytes
                 ) {
-                    val next = try {
-                        Math.addExact(plannedBundleBytes, entry.size)
-                    } catch (_: ArithmeticException) {
-                        Long.MAX_VALUE
-                    }
-                    if (next <= limits.maxTotalBundleBytes) {
-                        plannedBundleBytes = next
-                    }
+                    maxPlannedBundleCopyBytes = maxOf(maxPlannedBundleCopyBytes, entry.size)
                 }
             }
             val requiredScratchBytes = requiredUnityScratchSpaceBytes(
-                plannedBundleBytes,
-                if (plannedBundleBytes > 0L) limits.maxTotalExtractedBytes else 0L,
+                maxPlannedBundleCopyBytes,
+                if (maxPlannedBundleCopyBytes > 0L) limits.maxTotalDecodedBytes else 0L,
+                if (maxPlannedBundleCopyBytes > 0L) limits.maxTotalExtractedBytes else 0L,
                 limits.scratchReserveBytes
             )
             val availableScratchBytes = scratchDirectory.usableSpace
@@ -225,6 +228,15 @@ internal object UnityBundleDeepInspector {
                         return@forEachIndexed
                     }
 
+                    if (remainingAggregateExtractedBytes <= 0L) {
+                        results += UnityBundleDeepInspectionItem(
+                            candidate.path,
+                            "تخطي: تم بلوغ الحد الإجمالي لبيانات CAB المستخرجة؛ لم تُقرأ الحزمة."
+                        )
+                        onProgress(index + 1, candidates.size)
+                        return@forEachIndexed
+                    }
+
                     val bundleFile = File(workDirectory, "bundle-" + index + ".bin")
                     val outputDirectory = File(workDirectory, "cab-" + index)
                     try {
@@ -265,7 +277,7 @@ internal object UnityBundleDeepInspector {
                             decodeLimits = UnityFsDecodeLimits(
                                 maxCompressedBlockBytes = 64L * 1024L * 1024L,
                                 maxDecodedBlockBytes = 64L * 1024L * 1024L,
-                                maxTotalDecodedBytes = limits.maxTotalExtractedBytes,
+                                maxTotalDecodedBytes = limits.maxTotalDecodedBytes,
                                 maxBlockInfoBytes = 32L * 1024L * 1024L,
                                 maxLzmaMemoryBytes = 64L * 1024L * 1024L,
                                 maxWorkingSetBytes = 192L * 1024L * 1024L
@@ -273,20 +285,33 @@ internal object UnityBundleDeepInspector {
                             extractionLimits = UnityBundleNodeExtractionLimits(
                                 maxNodes = limits.maxNodes,
                                 maxPathChars = 2_048,
-                                maxSingleNodeBytes = limits.maxSingleNodeBytes,
-                                maxTotalExtractedBytes = limits.maxTotalExtractedBytes,
+                                maxSingleNodeBytes = minOf(
+                                    limits.maxSingleNodeBytes,
+                                    limits.maxTotalExtractedBytes,
+                                    remainingAggregateExtractedBytes
+                                ),
+                                maxTotalExtractedBytes = minOf(
+                                    limits.maxTotalExtractedBytes,
+                                    remainingAggregateExtractedBytes
+                                ),
                                 bufferBytes = 64 * 1024
                             )
                         )
                         if (decoded == null) {
                             results += UnityBundleDeepInspectionItem(
                                 candidate.path,
-                                "تعذر فك UnityFS أو استخراج CAB ضمن الحدود؛ الحزمة الأصلية محفوظة."
+                                "تعذر فك UnityFS أو استخراج CAB ضمن الحدود؛ المتبقي من ميزانية CAB الإجمالية " +
+                                    remainingAggregateExtractedBytes + " bytes؛ الحزمة الأصلية محفوظة."
                             )
                             onProgress(index + 1, candidates.size)
                             return@forEachIndexed
                         }
 
+                        require(decoded.bytesExtracted in 0L..remainingAggregateExtractedBytes) {
+                            "UnityFS extraction exceeded the aggregate CAB output budget"
+                        }
+                        totalExtractedBytes = Math.addExact(totalExtractedBytes, decoded.bytesExtracted)
+                        remainingAggregateExtractedBytes -= decoded.bytesExtracted
                         bundlesInspected++
                         nodesExtracted += decoded.filesExtracted
                         val details = mutableListOf<String>()
@@ -406,7 +431,8 @@ internal object UnityBundleDeepInspector {
             objectRecordsIndexed = objectRecordsIndexed,
             items = results,
             notes = notes,
-            objectRecordsBudgetExhausted = objectRecordsBudgetExhausted
+            objectRecordsBudgetExhausted = objectRecordsBudgetExhausted,
+            bytesExtracted = totalExtractedBytes
         )
     }
 
@@ -419,6 +445,8 @@ internal object UnityBundleDeepInspector {
             limits.maxSingleNodeBytes >= 1L &&
             limits.maxTotalExtractedBytes >= limits.maxSingleNodeBytes &&
             limits.maxTotalExtractedBytes <= 1024L * 1024L * 1024L &&
+            limits.maxTotalDecodedBytes in 1L..(1024L * 1024L * 1024L) &&
+            limits.maxAggregateExtractedBytes in 1L..(1024L * 1024L * 1024L) &&
             limits.maxSerializedMetadataBytes in 1..(64L * 1024L * 1024L) &&
             limits.maxZipEntriesToVerify in 1..100_000 &&
             limits.scratchReserveBytes in 0L..(256L * 1024L * 1024L) &&
@@ -428,12 +456,21 @@ internal object UnityBundleDeepInspector {
 
 internal fun requiredUnityScratchSpaceBytes(
     compressedBundleBytes: Long,
-    maxExtractedBytes: Long,
+    decodedStorageBytes: Long,
+    extractedCabBytes: Long,
     reserveBytes: Long
 ): Long? {
-    if (compressedBundleBytes < 0L || maxExtractedBytes < 0L || reserveBytes < 0L) return null
+    if (compressedBundleBytes < 0L || decodedStorageBytes < 0L ||
+        extractedCabBytes < 0L || reserveBytes < 0L
+    ) return null
     return try {
-        Math.addExact(Math.addExact(compressedBundleBytes, maxExtractedBytes), reserveBytes)
+        Math.addExact(
+            Math.addExact(
+                Math.addExact(compressedBundleBytes, decodedStorageBytes),
+                extractedCabBytes
+            ),
+            reserveBytes
+        )
     } catch (_: ArithmeticException) {
         null
     }
@@ -442,11 +479,12 @@ internal fun requiredUnityScratchSpaceBytes(
 internal fun hasEnoughUnityScratchSpace(
     availableBytes: Long,
     compressedBundleBytes: Long,
-    maxExtractedBytes: Long,
+    decodedStorageBytes: Long,
+    extractedCabBytes: Long,
     reserveBytes: Long
 ): Boolean {
     val required = requiredUnityScratchSpaceBytes(
-        compressedBundleBytes, maxExtractedBytes, reserveBytes
+        compressedBundleBytes, decodedStorageBytes, extractedCabBytes, reserveBytes
     ) ?: return false
     return availableBytes >= required
 }

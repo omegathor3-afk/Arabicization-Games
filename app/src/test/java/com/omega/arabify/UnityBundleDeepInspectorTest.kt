@@ -316,12 +316,51 @@ class UnityBundleDeepInspectorTest {
     }
 
     @Test
-    fun scratchSpaceBudgetUsesOverflowSafeArithmeticAndRequiresFullReserve() {
-        assertEquals(180L, requiredUnityScratchSpaceBytes(100L, 50L, 30L))
-        assertTrue(hasEnoughUnityScratchSpace(180L, 100L, 50L, 30L))
-        assertTrue(!hasEnoughUnityScratchSpace(179L, 100L, 50L, 30L))
-        assertEquals(null, requiredUnityScratchSpaceBytes(Long.MAX_VALUE, 1L, 0L))
-        assertTrue(!hasEnoughUnityScratchSpace(Long.MAX_VALUE, Long.MAX_VALUE, 1L, 0L))
+    fun enforcesAggregateCabOutputBudgetAcrossBundles() {
+        val payload = ByteArray(80) { it.toByte() }
+        val apk = createApk(
+            makeUnityFs(payload),
+            additionalBundles = listOf(makeUnityFs(payload))
+        )
+        val scratch = kotlin.io.path.createTempDirectory("arabify-deep-cab-total-").toFile()
+        try {
+            val original = apk.readBytes()
+            val inventory = UnityAssetInventoryScanner.inspect(apk)
+            val report = UnityBundleDeepInspector.inspect(
+                apk,
+                inventory,
+                scratch,
+                UnityBundleDeepInspectionLimits(
+                    maxTotalExtractedBytes = 256L,
+                    maxTotalDecodedBytes = 256L,
+                    maxAggregateExtractedBytes = 100L,
+                    scratchReserveBytes = 0L
+                )
+            )
+
+            assertEquals(1, report.bundlesInspected)
+            assertEquals(1, report.nodesExtracted)
+            assertEquals(80L, report.bytesExtracted)
+            assertTrue(report.items.any {
+                it.status.contains("المتبقي من ميزانية CAB الإجمالية 20 bytes")
+            })
+            assertArrayEquals(original, apk.readBytes())
+            assertTrue(scratch.listFiles()!!.isEmpty())
+        } finally {
+            apk.delete()
+            scratch.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun scratchSpaceBudgetIncludesCompressedDecodedAndExtractedWorkingFiles() {
+        assertEquals(280L, requiredUnityScratchSpaceBytes(100L, 50L, 100L, 30L))
+        assertTrue(hasEnoughUnityScratchSpace(280L, 100L, 50L, 100L, 30L))
+        assertTrue(!hasEnoughUnityScratchSpace(279L, 100L, 50L, 100L, 30L))
+        assertEquals(null, requiredUnityScratchSpaceBytes(Long.MAX_VALUE, 1L, 1L, 0L))
+        assertTrue(!hasEnoughUnityScratchSpace(
+            Long.MAX_VALUE, Long.MAX_VALUE, 1L, 1L, 0L
+        ))
     }
 
 }
