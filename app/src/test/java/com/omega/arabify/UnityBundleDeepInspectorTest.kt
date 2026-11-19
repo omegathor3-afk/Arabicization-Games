@@ -331,6 +331,7 @@ class UnityBundleDeepInspectorTest {
                 inventory,
                 scratch,
                 UnityBundleDeepInspectionLimits(
+                    maxSingleNodeBytes = 100L,
                     maxTotalExtractedBytes = 256L,
                     maxTotalDecodedBytes = 256L,
                     maxAggregateExtractedBytes = 100L,

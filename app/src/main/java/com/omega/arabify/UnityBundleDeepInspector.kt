@@ -155,12 +155,9 @@ internal object UnityBundleDeepInspector {
                 return@use
             }
 
-            // Reserve enough cache space for the planned compressed bundle copies,
-            // the maximum decoded CAB output, and a small safety margin before
-            // creating any temporary files. This is deliberately conservative.
-            // A single candidate is copied and extracted at a time. Its bundle
-            // copy, decoded storage intermediate and CAB staging tree coexist,
-            // then are deleted before the next candidate starts.
+            // Preflight the peak temporary working set: one compressed bundle
+            // copy, its decoded-storage intermediate, the CAB staging tree, and
+            // the safety reserve. These temporary files are removed per candidate.
             var maxPlannedBundleCopyBytes = 0L
             candidates.forEach { candidate ->
                 val entry = zip.getEntry(candidate.path)
