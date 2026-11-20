@@ -53,7 +53,7 @@ def write_properties(path: Path, values: dict[str, object]) -> None:
 
 def main() -> None:
     if len(sys.argv) != 4:
-        raise SystemExit("usage: create-unitypy-oracle.py BUNDLE PROPERTIES_JSON PROPERTIES_FILE")
+        raise SystemExit("usage: create-unitypy-oracle.py BUNDLE PROPERTIES_FILE JSON_FILE")
 
     bundle_path = Path(sys.argv[1])
     properties_path = Path(sys.argv[2])
@@ -77,6 +77,8 @@ def main() -> None:
         "engineVersion": str(bundle.version_engine),
         "unityPyVersion": str(getattr(UnityPy, "__version__", "unknown")),
     }
+    if bundle_info["unityPyVersion"] != "1.24.2":
+        raise RuntimeError(f"Unexpected UnityPy oracle version: {bundle_info['unityPyVersion']}")
     if bundle_info["formatVersion"] != 6 or bundle_info["engineVersion"] != "2018.4.11f1":
         raise RuntimeError(f"Unexpected pinned fixture header: {bundle_info}")
 
