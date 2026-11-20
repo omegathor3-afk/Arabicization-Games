@@ -1,6 +1,7 @@
 package com.omega.arabify
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -67,15 +68,17 @@ class UnitySerializedFileInspectorTest {
         return header + meta + ByteArray(4096 - header.size - meta.size)
     }
 
-    @Test fun inspectsHeaderTypesAndObjectIndexWithoutReadingPayloads() {
+    @Test fun indexesObjectTableWhenPlayerTypeTreesAreStrippedWithoutReadingPayloads() {
         val bytes = fileBytes()
         val result = UnitySerializedFileInspector.inspect(
             ByteArrayInputStream(bytes), bytes.size.toLong()
         )
         assertNotNull(result)
         assertEquals(UnitySerializedInspectionStage.OBJECT_TABLE_PARSED, result!!.stage)
-        assertEquals(1, result.metadataPrefix!!.typeCount)
+        assertFalse(result.metadataPrefix!!.typeTreeEnabled!!)
+        assertEquals(1, result.metadataPrefix.typeCount)
         assertEquals(1, result.typeTable!!.records.size)
+        assertNull(result.typeTable!!.records.single().typeTree)
         assertEquals(2, result.objectTable!!.objects.size)
         assertEquals(2048L, result.objectTable!!.objects.first().absoluteDataOffset)
     }
