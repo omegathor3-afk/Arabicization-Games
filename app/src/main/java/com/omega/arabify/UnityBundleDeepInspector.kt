@@ -360,10 +360,14 @@ internal object UnityBundleDeepInspector {
                             objectsInBundle += objectCount
                             val objectSummary = if (inspection.objectTableLimitExceeded) {
                                 val declared = inspection.declaredObjectCount
+                                // Prefer the per-file diagnosis when that limit alone
+                                // already rejects the complete table. Do not consume the
+                                // aggregate budget for records that were never eligible.
                                 val aggregateLimitIsActive =
-                                    remainingObjectRecords <= limits.maxObjectRecordsPerFile
+                                    declared != null &&
+                                        declared <= limits.maxObjectRecordsPerFile
                                 if (aggregateLimitIsActive &&
-                                    declared != null && declared > remainingObjectRecords
+                                    declared > remainingObjectRecords
                                 ) {
                                     val remaining = remainingObjectRecords
                                     remainingObjectRecords = 0
