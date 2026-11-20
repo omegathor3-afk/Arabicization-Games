@@ -24,4 +24,12 @@ class TranslationQualityGateTest {
     @Test fun allowsShortProperNames() {
         assertTrue(TranslationQualityGate.review("Darkwood", "Darkwood").accepted)
     }
+
+    @Test fun rejectsDuplicatedPlaceholders() {
+        val token = "__ARABIFY_TOKEN_0__"
+        assertEquals(
+            "placeholder_duplicated",
+            TranslationQualityGate.review("Hello {player}", "مرحبا $token $token", listOf(token)).reason
+        )
+    }
 }

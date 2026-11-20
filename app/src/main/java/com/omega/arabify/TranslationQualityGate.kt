@@ -15,8 +15,11 @@ internal object TranslationQualityGate {
 
     fun review(source: String, translated: String, expectedTokens: List<String> = emptyList()): TranslationQualityResult {
         if (translated.isBlank()) return TranslationQualityResult(false, "empty_translation")
-        if (expectedTokens.any { it !in translated }) {
+        if (expectedTokens.any { PlaceholderProtector.countOccurrences(translated, it) == 0 }) {
             return TranslationQualityResult(false, "placeholder_lost")
+        }
+        if (expectedTokens.any { PlaceholderProtector.countOccurrences(translated, it) > 1 }) {
+            return TranslationQualityResult(false, "placeholder_duplicated")
         }
         val sourceHasLatinWords = Regex("[A-Za-z]{3,}").containsMatchIn(source)
         val sourceLooksLikeSentence = source.trim().length >= 12 && source.any(Char::isWhitespace)

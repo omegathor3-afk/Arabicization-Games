@@ -48,6 +48,15 @@ class AssetTextTransformerTest {
   assertEquals(0,result.translated)
   assertEquals(1,result.skipped)
  }
+ @Test fun duplicatedPlaceholderRejectsTranslation()=runBlocking {
+  val source = "Hello {player}"
+  val token = "__ARABIFY_TOKEN_0__"
+  val result = AssetTextTransformer.transform("assets/dialogue.txt",source) { "مرحبا $token $token" }
+  assertEquals(source,result.text)
+  assertEquals(0,result.translated)
+  assertEquals(1,result.skipped)
+ }
+
  @Test fun nulCharactersArePreservedAndNeverSentToTranslator()=runBlocking {
   val source="Start\u0000Game"
   var translatorCalled=false
