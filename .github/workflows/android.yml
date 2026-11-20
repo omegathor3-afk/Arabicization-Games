@@ -23,6 +23,20 @@ jobs:
    - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
      with:
       gradle-version: "8.13"
+   - name: Prepare pinned UnityPy differential fixture
+     shell: bash
+     run: |
+      set -euo pipefail
+      VENV="$RUNNER_TEMP/unitypy-venv"
+      python3 -m venv "$VENV"
+      "$VENV/bin/python" -m pip install --disable-pip-version-check --prefer-binary "UnityPy==1.24.2"
+      mkdir -p build/unitypy
+      FIXTURE_URL="https://media.githubusercontent.com/media/K0lb3/UnityPy/417d59522a998fdee9a9c2b29fe35f3063222457/tests/samples/atlas_test"
+      curl --fail --location --retry 3 --retry-all-errors "$FIXTURE_URL" --output build/unitypy/atlas_test
+      printf '%s  %s\n' '61ee5afb5f5c64f0a4f65f039d09b2509198363e713423289c895067ac215177' 'build/unitypy/atlas_test' | sha256sum --check -
+      "$VENV/bin/python" .github/scripts/create-unitypy-oracle.py build/unitypy/atlas_test build/unitypy/oracle.properties build/unitypy/oracle.json
+      echo "ARABIFY_UNITYFS_FIXTURE=$GITHUB_WORKSPACE/build/unitypy/atlas_test" >> "$GITHUB_ENV"
+      echo "ARABIFY_UNITYPY_ORACLE=$GITHUB_WORKSPACE/build/unitypy/oracle.properties" >> "$GITHUB_ENV"
    - name: Unit tests
      run: gradle testDebugUnitTest
    - name: Upload unit test reports
@@ -30,7 +44,10 @@ jobs:
      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
      with:
       name: arabify-unit-test-results
-      path: app/build/test-results/testDebugUnitTest/
+      path: |
+       app/build/test-results/testDebugUnitTest/
+       build/unitypy/oracle.json
+       build/unitypy/oracle.properties
       if-no-files-found: ignore
       retention-days: 7
    - name: Build debug APK

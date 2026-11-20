@@ -88,3 +88,12 @@ The current regression fixture deliberately has `typeTreeEnabled=false`; it veri
 ## Test provenance
 
 The current unit tests use generated minimal binary headers, synthetic UnityFS bundles and synthetic ZIP fixtures. They are useful for parser invariants and regression checks, but **they are not real game samples**. No third-party game APK or real game resource file has been claimed as tested. A legally redistributable sample set is still required before declaring real-file compatibility.
+
+## Independent UnityFS differential fixture
+
+The Android CI downloads the public UnityPy `atlas_test` LFS fixture from the pinned UnityPy repository commit `417d59522a998fdee9a9c2b29fe35f3063222457`. Its expected LFS object is 76,771 bytes with SHA-256 `61ee5afb5f5c64f0a4f65f039d09b2509198363e713423289c895067ac215177`. The fixture identifies itself as UnityFS format 6 from Unity `2018.4.11f1`.
+
+CI uses UnityPy 1.24.2 in read-only mode to produce an oracle manifest. The Kotlin test must match every extracted member path, byte count and SHA-256, then agree with UnityPy on each inner SerializedFile's header, Unity version, target platform, TypeTree flag, type count/class IDs, object count and external-reference paths. The fixture bytes are downloaded only for CI and are not committed or bundled in the APK.
+
+UnityPy is an independent parser/oracle here, not a production writer: ARABIFY does not use UnityPy to rewrite game files. UnityDataTools remains a useful official format reference, but its repository is under the Unity Companion License; ARABIFY does not bundle it or make it an app dependency. A passing fixture proves this exact UnityFS sample and its contained SerializedFiles, not universal compatibility with every Unity version or game.
+
