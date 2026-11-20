@@ -316,6 +316,39 @@ class UnityBundleDeepInspectorTest {
     }
 
     @Test
+    fun perFileLimitTakesPrecedenceWhenBothObjectBudgetsWouldRejectTable() {
+        val serialized = serializedFileBytes()
+        val apk = createApk(
+            makeUnityFs(serialized),
+            additionalBundles = listOf(makeUnityFs(serialized))
+        )
+        val scratch = kotlin.io.path.createTempDirectory("arabify-deep-object-dual-limit-").toFile()
+        try {
+            val inventory = UnityAssetInventoryScanner.inspect(apk)
+            val report = UnityBundleDeepInspector.inspect(
+                apk,
+                inventory,
+                scratch,
+                UnityBundleDeepInspectionLimits(
+                    maxObjectRecordsPerFile = 1,
+                    maxTotalObjectRecords = 1
+                )
+            )
+            val details = report.items.flatMap { it.details }
+
+            assertEquals(2, report.serializedFilesParsed)
+            assertEquals(0, report.objectRecordsIndexed)
+            assertTrue(!report.objectRecordsBudgetExhausted)
+            assertEquals(2, details.count { it.contains("per-file-limit-exceeded") })
+            assertTrue(details.none { it.contains("aggregate-limit-exceeded") })
+            assertTrue(scratch.listFiles()!!.isEmpty())
+        } finally {
+            apk.delete()
+            scratch.deleteRecursively()
+        }
+    }
+
+    @Test
     fun reportsMalformedObjectTableAsUnavailableInsteadOfEmpty() {
         val validSerialized = serializedFileBytes()
         val validInspection = checkNotNull(
