@@ -367,7 +367,7 @@ internal object UnityBundleDeepInspector {
                                     declared != null &&
                                         declared <= limits.maxObjectRecordsPerFile
                                 if (aggregateLimitIsActive &&
-                                    declared > remainingObjectRecords
+                                    declared != null && declared > remainingObjectRecords
                                 ) {
                                     val remaining = remainingObjectRecords
                                     remainingObjectRecords = 0
