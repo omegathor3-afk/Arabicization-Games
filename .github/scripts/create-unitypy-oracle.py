@@ -99,6 +99,27 @@ def main() -> None:
             header = member.header
             class_ids = [int(item.class_id) for item in member.types]
             external_paths = [str(item.path) for item in member.externals]
+            type_trees = []
+            for type_record in member.types:
+                root = getattr(type_record, "node", None)
+                nodes = list(root.traverse()) if root is not None else []
+                type_trees.append([
+                    {
+                        "version": int(node.m_Version),
+                        "level": int(node.m_Level),
+                        "typeFlags": int(getattr(node, "m_TypeFlags", 0) or 0),
+                        "typeName": str(node.m_Type),
+                        "fieldName": str(node.m_Name),
+                        "byteSize": int(node.m_ByteSize),
+                        "index": int(node.m_Index),
+                        "metaFlags": int(getattr(node, "m_MetaFlag", 0) or 0),
+                        "refTypeHash": (
+                            "" if getattr(node, "m_RefTypeHash", None) is None
+                            else int(node.m_RefTypeHash)
+                        ),
+                    }
+                    for node in nodes
+                ])
             serialized_files.append({
                 "path": path,
                 "headerVersion": int(header.version),
@@ -111,6 +132,7 @@ def main() -> None:
                 "typeTreeEnabled": bool(member._enable_type_tree),
                 "typeCount": len(member.types),
                 "classIds": class_ids,
+                "typeTrees": type_trees,
                 "objectCount": len(member.objects),
                 "externalPaths": external_paths,
             })
@@ -156,6 +178,18 @@ def main() -> None:
         properties[f"{prefix}.classCount"] = len(class_ids)
         for class_index, class_id in enumerate(class_ids):
             properties[f"{prefix}.class.{class_index}"] = class_id
+        type_trees = item["typeTrees"]
+        properties[f"{prefix}.typeTreeCount"] = len(type_trees)
+        for type_index, nodes in enumerate(type_trees):
+            type_prefix = f"{prefix}.type.{type_index}"
+            properties[f"{type_prefix}.treeNodeCount"] = len(nodes)
+            for node_index, node in enumerate(nodes):
+                node_prefix = f"{type_prefix}.node.{node_index}"
+                for key in (
+                    "version", "level", "typeFlags", "typeName", "fieldName",
+                    "byteSize", "index", "metaFlags", "refTypeHash",
+                ):
+                    properties[f"{node_prefix}.{key}"] = node[key]
         external_paths = item["externalPaths"]
         properties[f"{prefix}.externalCount"] = len(external_paths)
         for external_index, external_path in enumerate(external_paths):

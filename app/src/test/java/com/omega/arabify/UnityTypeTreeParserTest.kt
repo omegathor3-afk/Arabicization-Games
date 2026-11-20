@@ -50,14 +50,43 @@ class UnityTypeTreeParserTest {
         assertEquals(0x1020304050607080L, tree!!.nodes[0].refTypeHash)
     }
 
-    @Test fun preservesUnresolvedCommonStringOffsetsWithoutGuessingNames() {
-        val bytes = fixture(19)
-        // Type string offset on the root uses the common-string high bit.
-        ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).putInt(12, 0x80000001.toInt())
-        val tree = UnityTypeTreeParser.parse(bytes, 19)
+    private fun commonStringFixture(typeOffset: Int, nameOffset: Int): ByteArray {
+        return ByteBuffer.allocate(8 + 24).order(ByteOrder.LITTLE_ENDIAN).apply {
+            putInt(1)
+            putInt(0)
+            putShort(1)
+            put(0)
+            put(0)
+            putInt(typeOffset)
+            putInt(nameOffset)
+            putInt(-1)
+            putInt(0)
+            putInt(0)
+        }.array()
+    }
+
+    @Test fun resolvesKnownCommonStringOffsets() {
+        val bytes = commonStringFixture(
+            typeOffset = 0x80000000.toInt(), // AABB, offset 0
+            nameOffset = 0x8000034f.toInt() // TextAsset, byte offset 847
+        )
+        val tree = UnityTypeTreeParser.parse(bytes, 17)
         assertNotNull(tree)
-        assertEquals(null, tree!!.nodes[0].typeName)
-        assertTrue(tree.unresolvedCommonStringReferences >= 1)
+        assertEquals("AABB", tree!!.nodes.single().typeName)
+        assertEquals("TextAsset", tree.nodes.single().fieldName)
+        assertEquals(0, tree.unresolvedCommonStringReferences)
+    }
+
+    @Test fun leavesUnknownCommonStringOffsetsUnresolvedWithoutGuessingNames() {
+        val bytes = commonStringFixture(
+            typeOffset = 0x80007fff.toInt(),
+            nameOffset = 0x80000000.toInt()
+        )
+        val tree = UnityTypeTreeParser.parse(bytes, 17)
+        assertNotNull(tree)
+        assertEquals(null, tree!!.nodes.single().typeName)
+        assertEquals("AABB", tree.nodes.single().fieldName)
+        assertEquals(1, tree.unresolvedCommonStringReferences)
     }
 
     @Test fun rejectsInvalidCountsLevelsOffsetsAndTrailingData() {

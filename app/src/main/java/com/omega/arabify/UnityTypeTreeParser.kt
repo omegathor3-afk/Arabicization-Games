@@ -88,7 +88,9 @@ internal object UnityTypeTreeParser {
             require(!input.hasRemaining())
 
             fun resolve(offset: Long): String? {
-                if ((offset and COMMON_STRING_FLAG) != 0L) return null
+                if ((offset and COMMON_STRING_FLAG) != 0L) {
+                    return UnityCommonStringTable.resolve(offset and 0x7fffffffL)
+                }
                 require(offset < strings.size.toLong()) { "TypeTree local string offset is out of range" }
                 val start = offset.toInt()
                 var end = start

@@ -97,3 +97,9 @@ CI uses UnityPy 1.24.2 in read-only mode to produce an oracle manifest. The Kotl
 
 UnityPy is an independent parser/oracle here, not a production writer: ARABIFY does not use UnityPy to rewrite game files. UnityDataTools remains a useful official format reference, but its repository is under the Unity Companion License; ARABIFY does not bundle it or make it an app dependency. A passing fixture proves this exact UnityFS sample and its contained SerializedFiles, not universal compatibility with every Unity version or game.
 
+### TypeTree common-string resolution
+
+Known common-string offsets are resolved through a bounded table adapted from AssetsTools.NET's MIT-licensed `TypeTreeType.COMMON_STRING_TABLE` (upstream commit `2d66992b60d583d6d82dd6e278d3946cf5827286`; attribution and license text are in `licenses/AssetsTools.NET-MIT.txt`). The current table contains 114 NUL-terminated UTF-8 entries. Unknown offsets are never guessed and remain explicitly unresolved.
+
+The UnityPy 1.24.2 differential fixture now compares every TypeTree node for the Unity 2018.4.11f1 SerializedFile: node count, version, level, flags, type/field names, byte size, index, metadata flags and reference hash. A pass validates the common-string table and TypeTree decoding for this fixture version only; new Unity version families still require their own fixtures before broader support is claimed.
+

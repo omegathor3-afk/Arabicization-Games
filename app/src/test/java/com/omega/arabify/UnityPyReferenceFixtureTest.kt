@@ -119,6 +119,43 @@ class UnityPyReferenceFixtureTest {
                     .map { oracle.required("$prefix.class.$it").toInt() }
                 assertEquals(expectedClassIds, typeTable!!.records.map { it.classId })
 
+                val expectedTypeTreeCount = oracle.required("$prefix.typeTreeCount").toInt()
+                assertEquals(expectedTypeTreeCount, typeTable.records.size)
+                for (typeIndex in 0 until expectedTypeTreeCount) {
+                    val typeRecord = typeTable.records[typeIndex]
+                    val tree = typeRecord.typeTree ?: typeRecord.typeTreeInfoHandler?.info?.tree
+                    val expectedNodeCount = oracle.required(
+                        "$prefix.type.$typeIndex.treeNodeCount"
+                    ).toInt()
+                    if (expectedNodeCount == 0) {
+                        assertEquals(null, tree)
+                        continue
+                    }
+                    assertNotNull("TypeTree missing for type index $typeIndex", tree)
+                    val parsedTree = tree!!
+                    assertEquals(expectedNodeCount, parsedTree.nodes.size)
+                    assertEquals(
+                        "Unresolved common strings in type index $typeIndex",
+                        0,
+                        parsedTree.unresolvedCommonStringReferences
+                    )
+                    for (nodeIndex in 0 until expectedNodeCount) {
+                        val nodePrefix = "$prefix.type.$typeIndex.node.$nodeIndex"
+                        val actualNode = parsedTree.nodes[nodeIndex]
+                        assertEquals(oracle.required("$nodePrefix.version").toInt(), actualNode.version)
+                        assertEquals(oracle.required("$nodePrefix.level").toInt(), actualNode.level)
+                        assertEquals(oracle.required("$nodePrefix.typeFlags").toInt(), actualNode.typeFlags)
+                        assertEquals(oracle.required("$nodePrefix.typeName"), actualNode.typeName)
+                        assertEquals(oracle.required("$nodePrefix.fieldName"), actualNode.fieldName)
+                        assertEquals(oracle.required("$nodePrefix.byteSize").toInt(), actualNode.byteSize)
+                        assertEquals(oracle.required("$nodePrefix.index").toInt(), actualNode.index)
+                        assertEquals(oracle.required("$nodePrefix.metaFlags").toInt(), actualNode.metaFlags)
+                        val expectedRefHash = oracle.required("$nodePrefix.refTypeHash")
+                            .takeIf { it.isNotEmpty() }?.toLong()
+                        assertEquals(expectedRefHash, actualNode.refTypeHash)
+                    }
+                }
+
                 val objectTable = parsed.objectTable
                 assertNotNull("SerializedFile object table missing: $relativePath", objectTable)
                 assertEquals(
