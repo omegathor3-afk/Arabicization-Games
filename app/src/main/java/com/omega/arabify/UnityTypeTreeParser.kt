@@ -39,14 +39,19 @@ internal object UnityTypeTreeParser {
     fun parse(
         bytes: ByteArray,
         typeTreeFormatVersion: Int,
-        byteOrder: ByteOrder = ByteOrder.LITTLE_ENDIAN
+        byteOrder: ByteOrder = ByteOrder.LITTLE_ENDIAN,
+        maxNodes: Int = MAX_NODES
     ): UnityTypeTree? {
-        if (typeTreeFormatVersion !in 12..100 || bytes.size < 8) return null
+        if (typeTreeFormatVersion !in 12..100 ||
+            bytes.size < 8 ||
+            maxNodes !in 1..MAX_NODES
+        ) return null
         return runCatching {
             val input = ByteBuffer.wrap(bytes).order(byteOrder)
             val nodeCount = input.int
             val stringBufferSize = input.int
             require(nodeCount in 1..MAX_NODES)
+            require(nodeCount <= maxNodes)
             require(stringBufferSize in 0..MAX_STRING_BUFFER_BYTES)
             val nodeBytes = if (typeTreeFormatVersion >= 19) REF_NODE_BYTES else BASE_NODE_BYTES
             val requiredNodeBytes = Math.multiplyExact(nodeCount.toLong(), nodeBytes.toLong())

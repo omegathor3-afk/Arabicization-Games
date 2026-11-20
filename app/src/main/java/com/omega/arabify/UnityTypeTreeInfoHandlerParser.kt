@@ -22,10 +22,18 @@ internal data class UnityTypeTreeInfoHandler(
 internal object UnityTypeTreeInfoHandlerParser {
     private const val HASH_BYTES = 16
     private const val MAX_INFO_BYTES = 64 * 1024 * 1024
+    private const val MAX_TYPE_TREE_NODES = 250_000
     private const val MAX_REFERENCE_HASHES = 100_000
 
-    fun parse(bytes: ByteArray, byteOrder: ByteOrder = ByteOrder.LITTLE_ENDIAN): UnityTypeTreeInfoHandler? {
-        if (bytes.size < HASH_BYTES + 4 || bytes.size > MAX_INFO_BYTES + HASH_BYTES + 4) return null
+    fun parse(
+        bytes: ByteArray,
+        byteOrder: ByteOrder = ByteOrder.LITTLE_ENDIAN,
+        maxTypeTreeNodes: Int = MAX_TYPE_TREE_NODES
+    ): UnityTypeTreeInfoHandler? {
+        if (bytes.size < HASH_BYTES + 4 ||
+            bytes.size > MAX_INFO_BYTES + HASH_BYTES + 4 ||
+            maxTypeTreeNodes !in 0..MAX_TYPE_TREE_NODES
+        ) return null
         return runCatching {
             val input = ByteBuffer.wrap(bytes).order(byteOrder)
             val contentHash = ByteArray(HASH_BYTES).also(input::get)
@@ -49,7 +57,8 @@ internal object UnityTypeTreeInfoHandlerParser {
             require(infoInput.remaining() >= 8)
             val nodeCount = infoInput.int
             val stringBufferSize = infoInput.int
-            require(nodeCount in 1..250_000)
+            require(nodeCount in 1..MAX_TYPE_TREE_NODES)
+            require(nodeCount <= maxTypeTreeNodes)
             require(stringBufferSize in 0..(16 * 1024 * 1024))
             val nodeSize = if (typeTreeFormatVersion >= 19) 32L else 24L
             val nodeDataBytes = Math.multiplyExact(nodeCount.toLong(), nodeSize)
@@ -57,8 +66,9 @@ internal object UnityTypeTreeInfoHandlerParser {
             require(treeBlobSize <= infoInput.limit().toLong() - treeStart)
             val treeBlobEnd = Math.addExact(treeStart, treeBlobSize.toInt())
             val treeBlob = infoBytes.copyOfRange(treeStart, treeBlobEnd)
-            val tree = UnityTypeTreeParser.parse(treeBlob, typeTreeFormatVersion, byteOrder)
-                ?: error("Invalid TypeTree node/string-buffer blob")
+            val tree = UnityTypeTreeParser.parse(
+                treeBlob, typeTreeFormatVersion, byteOrder, maxNodes = maxTypeTreeNodes
+            ) ?: error("Invalid TypeTree node/string-buffer blob")
             infoInput.position(treeBlobEnd)
             require(infoInput.remaining() >= 4)
             val referenceHashCount = infoInput.int.toLong() and 0xffffffffL

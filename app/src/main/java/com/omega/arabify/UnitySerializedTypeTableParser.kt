@@ -33,6 +33,8 @@ internal object UnitySerializedTypeTableParser {
     private const val MAX_TYPE_DEPENDENCIES = 100_000
     private const val MAX_CSTRING_BYTES = 4096
     private const val MAX_TYPE_TREE_NODES = 250_000
+    // Prevent many individually-valid TypeTrees from multiplying heap usage.
+    private const val MAX_TOTAL_TYPE_TREE_NODES = 250_000
     private const val MAX_TYPE_TREE_STRINGS = 16 * 1024 * 1024
 
     fun parse(
@@ -59,6 +61,7 @@ internal object UnitySerializedTypeTableParser {
         return runCatching {
             val input = ByteBuffer.wrap(metadata).order(order)
             input.position(startOffset)
+            var totalTypeTreeNodes = 0
 
             fun readBoolean(): Boolean = when (input.get().toInt() and 0xff) {
                 0 -> false
@@ -91,7 +94,9 @@ internal object UnitySerializedTypeTableParser {
                 val start = input.position()
                 val nodeCount = input.int
                 val stringSize = input.int
+                val remainingNodeBudget = MAX_TOTAL_TYPE_TREE_NODES - totalTypeTreeNodes
                 require(nodeCount in 1..MAX_TYPE_TREE_NODES)
+                require(nodeCount <= remainingNodeBudget)
                 require(stringSize in 0..MAX_TYPE_TREE_STRINGS)
                 val nodeSize = if (formatVersion >= 19) 32L else 24L
                 val nodeBytes = Math.multiplyExact(nodeCount.toLong(), nodeSize)
@@ -99,8 +104,10 @@ internal object UnitySerializedTypeTableParser {
                 require(blobSize <= input.limit().toLong() - start)
                 val end = Math.addExact(start, blobSize.toInt())
                 val blob = metadata.copyOfRange(start, end)
-                val parsed = UnityTypeTreeParser.parse(blob, formatVersion, order)
-                    ?: error("Invalid SerializedType TypeTree blob")
+                val parsed = UnityTypeTreeParser.parse(
+                    blob, formatVersion, order, maxNodes = remainingNodeBudget
+                ) ?: error("Invalid SerializedType TypeTree blob")
+                totalTypeTreeNodes = Math.addExact(totalTypeTreeNodes, parsed.nodes.size)
                 input.position(end)
                 return parsed
             }
@@ -114,9 +121,15 @@ internal object UnitySerializedTypeTableParser {
                 val payloadBytes = if (serializedSize >= 8L) serializedSize.toInt() else 0
                 require(payloadBytes <= input.remaining())
                 val end = Math.addExact(input.position(), payloadBytes)
+                val remainingNodeBudget = MAX_TOTAL_TYPE_TREE_NODES - totalTypeTreeNodes
                 val handler = UnityTypeTreeInfoHandlerParser.parse(
-                    metadata.copyOfRange(start, end), order
+                    metadata.copyOfRange(start, end),
+                    order,
+                    maxTypeTreeNodes = remainingNodeBudget
                 ) ?: error("Invalid SerializedType TypeTree info handler")
+                totalTypeTreeNodes = Math.addExact(
+                    totalTypeTreeNodes, handler.info?.tree?.nodes?.size ?: 0
+                )
                 input.position(end)
                 return handler
             }

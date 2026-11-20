@@ -72,6 +72,8 @@ UnityDataTools exposes this distinction explicitly: `enableTypeTree` may be fals
 - **TextAsset candidates:** decode only after a schema has been established and the payload's length, encoding, and expected fields validate. Preserve binary `.bytes` data and invalid/unknown encodings unchanged.
 - **Write gate:** no object writer is enabled until read -> write -> read tests prove unchanged round trips, preserved PathIDs/references and unchanged hashes for all unrelated payloads, followed by a Unity Player smoke test on a legally redistributable fixture.
 
+The SerializedType reader also enforces a **250,000-node aggregate TypeTree budget per type table**, in addition to the per-tree limit. This is a defensive memory policy, not a Unity format maximum. A table whose individual trees fit but whose combined node count exceeds the budget is rejected at the type-table stage before object indexing; it is never partially decoded. Regression tests cover both inline format-22 trees and format-23 `mhtt` handlers.
+
 The current regression fixture deliberately has `typeTreeEnabled=false`; it verifies that metadata and the object index can still be read without claiming that the payload is decodable. This distinction is now an explicit test requirement.
 
 ## Required gate before any asset edit

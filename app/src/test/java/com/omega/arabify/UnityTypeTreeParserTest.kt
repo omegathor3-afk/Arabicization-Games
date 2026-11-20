@@ -138,8 +138,14 @@ class UnitySerializedTypeTableParserTest {
     }
 
     private fun parse(version: Int, bytes: ByteArray): UnitySerializedTypeTable? {
+        val headerSize = if (version >= 22) 48 else 20
         val header = UnitySerializedHeader(
-            bytes.size.toLong(), 4096, version, 2048, "little", if (version >= 22) 48 else 20
+            bytes.size.toLong(),
+            bytes.size.toLong() + headerSize + 4096L,
+            version,
+            bytes.size.toLong() + headerSize,
+            "little",
+            headerSize
         )
         val prefix = UnitySerializedMetadataPrefixParser.parse(header, bytes) ?: return null
         return UnitySerializedTypeTableParser.parse(header, prefix, bytes)
@@ -171,6 +177,80 @@ class UnitySerializedTypeTableParserTest {
         assertNotNull(parsed)
         assertEquals(null, parsed!!.records.single().typeTree)
         assertTrue(parsed.records.single().typeDependencies.isEmpty())
+    }
+
+    private fun largeTreeBlob(formatVersion: Int, nodeCount: Int): ByteArray {
+        val nodeSize = if (formatVersion >= 19) 32 else 24
+        val output = ByteBuffer.allocate(8 + nodeSize * nodeCount).order(ByteOrder.LITTLE_ENDIAN)
+        output.putInt(nodeCount)
+        output.putInt(0)
+        repeat(nodeCount) { index ->
+            output.putShort(1)
+            output.put(if (index == 0) 0 else 1)
+            output.put(0)
+            output.putInt(0x80000001.toInt())
+            output.putInt(0x80000001.toInt())
+            output.putInt(-1)
+            output.putInt(index)
+            output.putInt(0)
+            if (formatVersion >= 19) output.putLong(0L)
+        }
+        return output.array()
+    }
+
+    private fun largeInfoHandler(formatVersion: Int, nodeCount: Int): ByteArray {
+        val tree = largeTreeBlob(formatVersion, nodeCount)
+        val info = ByteBuffer.allocate(8 + tree.size + 4).order(ByteOrder.LITTLE_ENDIAN)
+        info.put("mhtt".toByteArray(Charsets.US_ASCII))
+        info.putInt(formatVersion)
+        info.put(tree)
+        info.putInt(0)
+        val payload = info.array()
+        return ByteBuffer.allocate(20 + payload.size).order(ByteOrder.LITTLE_ENDIAN).apply {
+            put(ByteArray(16) { 0x33 })
+            putInt(payload.size)
+            put(payload)
+        }.array()
+    }
+
+    private fun metadataWithLargeTrees(formatVersion: Int, nodeCount: Int): ByteArray {
+        val records = List(2) { index ->
+            val tree = if (formatVersion >= 23) {
+                largeInfoHandler(formatVersion, nodeCount)
+            } else {
+                largeTreeBlob(formatVersion, nodeCount)
+            }
+            ByteBuffer.allocate(4 + 1 + 2 + 16 + tree.size + 4)
+                .order(ByteOrder.LITTLE_ENDIAN).apply {
+                    putInt(index + 1)
+                    put(0)
+                    putShort(0)
+                    put(ByteArray(16))
+                    put(tree)
+                    putInt(0)
+                }.array()
+        }
+        val metadataSize = 20 + records.sumOf { it.size }
+        return ByteBuffer.allocate(metadataSize).order(ByteOrder.LITTLE_ENDIAN).apply {
+            put("2022.3.0f1".toByteArray(Charsets.UTF_8))
+            put(0)
+            putInt(13)
+            put(1)
+            putInt(2)
+            records.forEach { put(it) }
+        }.array()
+    }
+
+    @Test fun acceptsMultipleSmallTreesWithinTheAggregateBudget() {
+        assertEquals(2, parse(22, metadataWithLargeTrees(22, 2))!!.records.size)
+        assertEquals(2, parse(23, metadataWithLargeTrees(23, 2))!!.records.size)
+    }
+
+    @Test fun rejectsAggregateTypeTreeNodeBudgetAcrossInlineAndMhttRecords() {
+        // Each tree is below the per-tree 250k cap, but the two together exceed
+        // the per-table budget. The second tree must be rejected before allocation.
+        assertNull(parse(22, metadataWithLargeTrees(22, 125_001)))
+        assertNull(parse(23, metadataWithLargeTrees(23, 125_001)))
     }
 
     @Test fun rejectsTruncatedTypeRecordsAndMalformedTreePayloads() {
