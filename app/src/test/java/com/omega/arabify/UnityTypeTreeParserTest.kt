@@ -50,6 +50,14 @@ class UnityTypeTreeParserTest {
         assertEquals(0x1020304050607080L, tree!!.nodes[0].refTypeHash)
     }
 
+    @Test fun commonStringTableHasExpectedInitialEntries() {
+        assertEquals("AABB", UnityCommonStringTable.resolve(0L))
+        assertEquals("m_Name", UnityCommonStringTable.resolve(427L))
+        assertEquals("TextAsset", UnityCommonStringTable.resolve(847L))
+        assertEquals(114, UnityCommonStringTable.entries().size)
+        assertNull(UnityCommonStringTable.resolve(0x7fffffffL))
+    }
+
     private fun commonStringFixture(typeOffset: Int, nameOffset: Int): ByteArray {
         return ByteBuffer.allocate(8 + 24).order(ByteOrder.LITTLE_ENDIAN).apply {
             putInt(1)

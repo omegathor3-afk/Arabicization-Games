@@ -8,7 +8,7 @@ package com.omega.arabify
  * the NUL-terminated UTF-8 table. Unknown offsets deliberately remain unresolved.
  */
 internal object UnityCommonStringTable {
-    private val values = listOf(
+    private val commonStringValues = listOf(
         "AABB",
         "AnimationClip",
         "AnimationCurve",
@@ -128,7 +128,7 @@ internal object UnityCommonStringTable {
     private val byOffset: Map<Long, String> by lazy {
         buildMap {
             var offset = 0L
-            values.forEach { value ->
+            commonStringValues.forEach { value ->
                 put(offset, value)
                 offset += value.toByteArray(Charsets.UTF_8).size + 1L
             }
