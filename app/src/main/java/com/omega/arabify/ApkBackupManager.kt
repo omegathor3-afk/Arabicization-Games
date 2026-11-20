@@ -5,6 +5,9 @@ import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
@@ -45,6 +48,16 @@ internal object ApkBackupManager {
         require(apkFiles.all { it.isFile && it.length() in 1..MAX_APK_BYTES }) { "ملف APK مفقود أو يتجاوز الحد المسموح." }
         val total = apkFiles.sumOf { it.length() }
         require(total <= MAX_TOTAL_BYTES) { "الحجم الإجمالي للنسخة الاحتياطية يتجاوز 3GB." }
+        val outputPath = output.toPath().toAbsolutePath().normalize()
+        val outputParent = outputPath.parent ?: error("مسار النسخة الاحتياطية غير صالح.")
+        requireNoSymbolicLinks(outputParent, "مسار النسخة الاحتياطية يحتوي على رابط رمزي غير آمن.")
+        Files.createDirectories(outputParent)
+        requireNoSymbolicLinks(outputPath, "ملف النسخة الاحتياطية هدفه رابط رمزي غير آمن.")
+        val canonicalOutput = output.absoluteFile.canonicalFile
+        require(apkFiles.none { it.absoluteFile.canonicalFile == canonicalOutput }) {
+            "لا يمكن حفظ النسخة الاحتياطية فوق ملف APK الأصلي."
+        }
+
         val entries = apkFiles.mapIndexed { index, file ->
             val name = if (index == 0) "base.apk" else "splits/split-%02d.apk".format(index)
             BackupApk(name, file, sha256(file), file.length())
@@ -64,23 +77,37 @@ internal object ApkBackupManager {
                         .put("sha256", item.sha256))
                 }
             })
-        output.parentFile?.mkdirs()
-        ZipOutputStream(FileOutputStream(output)).use { zip ->
-            zip.putNextEntry(ZipEntry(MANIFEST))
-            zip.write(manifest.toString().toByteArray(Charsets.UTF_8))
-            zip.closeEntry()
-            entries.forEach { item ->
-                zip.putNextEntry(ZipEntry(item.name))
-                FileInputStream(item.file).use { input -> input.copyTo(zip) }
-                zip.closeEntry()
-            }
-        }
-        // Verify the completed archive before reporting success.
-        val verificationDir = File(output.parentFile ?: output.absoluteFile.parentFile, "verify-${output.nameWithoutExtension}")
+
+        // Build and verify in private, unique siblings. The selected backup is
+        // replaced only after the complete archive passes its manifest/hash checks.
+        val verificationDir = Files.createTempDirectory(outputParent, ".arabify-verify-").toFile()
         try {
-            val verified = extractAndVerify(output, verificationDir)
-            check(verified.packageName == packageName && verified.apks.size == apkFiles.size) {
-                "فشل التحقق النهائي من النسخة الاحتياطية."
+            val temporaryArchive = Files.createTempFile(outputParent, ".arabify-backup-", ".tmp").toFile()
+            try {
+                ZipOutputStream(FileOutputStream(temporaryArchive)).use { zip ->
+                    zip.putNextEntry(ZipEntry(MANIFEST))
+                    zip.write(manifest.toString().toByteArray(Charsets.UTF_8))
+                    zip.closeEntry()
+                    entries.forEach { item ->
+                        zip.putNextEntry(ZipEntry(item.name))
+                        FileInputStream(item.file).use { input -> input.copyTo(zip) }
+                        zip.closeEntry()
+                    }
+                }
+
+                val verified = extractAndVerify(temporaryArchive, verificationDir)
+                check(verified.packageName == packageName && verified.apks.size == apkFiles.size) {
+                    "فشل التحقق النهائي من النسخة الاحتياطية."
+                }
+                requireNoSymbolicLinks(outputPath, "ملف النسخة الاحتياطية هدفه رابط رمزي غير آمن.")
+                Files.move(
+                    temporaryArchive.toPath(),
+                    outputPath,
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING
+                )
+            } finally {
+                temporaryArchive.delete()
             }
         } finally {
             verificationDir.deleteRecursively()
@@ -89,7 +116,10 @@ internal object ApkBackupManager {
 
     fun extractAndVerify(archive: File, destination: File): VerifiedApkBackup {
         require(archive.isFile) { "ملف النسخة الاحتياطية غير موجود." }
-        require(!destination.exists() || (destination.isDirectory && destination.list()?.isEmpty() == true)) {
+        val destinationPath = destination.toPath().toAbsolutePath().normalize()
+        requireNoSymbolicLinks(destinationPath, "مجلد الاستعادة يحتوي على رابط رمزي غير آمن.")
+        val destinationExisted = destination.exists()
+        require(!destinationExisted || (destination.isDirectory && destination.list()?.isEmpty() == true)) {
             "مجلد الاستعادة موجود وغير فارغ."
         }
         require(destination.mkdirs() || destination.isDirectory) { "تعذر تجهيز مجلد الاستعادة." }
@@ -163,8 +193,21 @@ internal object ApkBackupManager {
                 )
             }
         } catch (error: Exception) {
-            destination.deleteRecursively()
+            if (destinationExisted) {
+                destination.listFiles()?.forEach { it.deleteRecursively() }
+            } else {
+                destination.deleteRecursively()
+            }
             throw error
+        }
+    }
+
+    private fun requireNoSymbolicLinks(path: Path, message: String) {
+        val absolute = path.toAbsolutePath().normalize()
+        var current = absolute.root ?: error(message)
+        for (segment in absolute) {
+            current = current.resolve(segment)
+            require(!Files.isSymbolicLink(current)) { message }
         }
     }
 }
