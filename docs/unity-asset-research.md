@@ -59,6 +59,21 @@ License statements are based on upstream repository license files/readmes at the
 - External paths are not yet resolved to APK entries or sidecar .resS/.resource byte ranges, and object payloads remain unread. This is still metadata-only, read-only inspection; no asset writer or automatic Unity resource mutation is enabled.
 - Synthetic tests cover versions 18/19, local strings, unresolved common-string references, malformed counts, hierarchy, offsets, and trailing data. Real Unity fixtures and differential comparison against UnityPy/UnityDataTools remain required.
 
+## Player builds with stripped TypeTrees — verified constraint
+
+Unity's current documentation states that the `binary2text` inspection tool is only useful for SerializedFiles containing TypeTrees and that **Player data does not include TypeTrees by default** ([Unity: Analyze built assets](https://docs.unity.com/en-us/engine/6000.6/manual/assets-and-media/assets-optimizing/assets-analyze-built-assets)). Unity's TextAsset documentation also makes clear that imported `.bytes` assets can contain arbitrary binary data, so the class name alone is not permission to treat every TextAsset payload as UTF-8 ([Unity: Text assets](https://docs.unity.com/en-us/engine/6000.6/manual/assets-and-media/asset-types/class-text-asset)).
+
+UnityDataTools exposes this distinction explicitly: `enableTypeTree` may be false while the type-entry count is still present; its documentation notes that TypeTrees are required for object-list and external-reference subcommands to show type names ([UnityDataTools SerializedFile command](https://github.com/Unity-Technologies/UnityDataTools/blob/main/Documentation/command-serialized-file.md)). Therefore, an absent TypeTree is a normal Player-build condition, not proof of a corrupt file. ARABIFY may continue to report numeric type IDs, object ranges and references where their metadata is valid, but it must not run a generic object decoder without a trusted schema.
+
+### Safe fallback strategy (not yet implemented)
+
+- **Built-in Unity classes:** evaluate a versioned, hash-pinned TypeTree schema database. UnityPy's upstream implementation uses its TPK data blob and resolves a class's versioned schema by class ID and Unity version ([UnityPy TPK helper](https://github.com/K0lb3/UnityPy/blob/master/UnityPy/helpers/Tpk.py)). This is a reference for a possible offline schema catalog, not approval to bundle the TPK resource: its provenance, redistribution terms, size, and version coverage must be audited first.
+- **MonoBehaviour scripts:** require a resolved MonoScript reference and matching managed assembly/class identity. A script name, class ID 114, or a nearby string is not sufficient to infer a serialized layout. Assembly stripping, missing dependencies, generic types, and version drift must produce an unsupported result.
+- **TextAsset candidates:** decode only after a schema has been established and the payload's length, encoding, and expected fields validate. Preserve binary `.bytes` data and invalid/unknown encodings unchanged.
+- **Write gate:** no object writer is enabled until read -> write -> read tests prove unchanged round trips, preserved PathIDs/references and unchanged hashes for all unrelated payloads, followed by a Unity Player smoke test on a legally redistributable fixture.
+
+The current regression fixture deliberately has `typeTreeEnabled=false`; it verifies that metadata and the object index can still be read without claiming that the payload is decodable. This distinction is now an explicit test requirement.
+
 ## Required gate before any asset edit
 
 1. Validate CAB-node extraction against legally redistributable real UnityFS bundles across engine versions; compare extracted paths, byte ranges and hashes with UnityPy/UnityDataTools. Keep extraction read-only.
