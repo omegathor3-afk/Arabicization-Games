@@ -1,0 +1,40 @@
+name: UnityDataTools Format Oracle
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/unity-mono-streamingassets
+    paths:
+      - "app/src/main/java/com/omega/arabify/Unity*.kt"
+      - ".github/workflows/unitydatatools-oracle.yml"
+      - ".github/scripts/run-unitydatatools-oracle.sh"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unitydatatools-oracle-${ github.ref }
+  cancel-in-progress: true
+
+jobs:
+  oracle:
+    name: Official Unity format fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout ARABIFY
+        uses: actions/checkout@v4
+
+      - name: Run pinned UnityDataTool against official format fixtures
+        shell: bash
+        run: bash .github/scripts/run-unitydatatools-oracle.sh
+
+      - name: Upload metadata-only oracle reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unitydatatools-oracle-reports
+          path: build/unitydatatool/reports/
+          if-no-files-found: warn
+          retention-days: 7
