@@ -186,4 +186,39 @@ class ApkBackupManagerTest {
         } finally { root.deleteRecursively() }
     }
 
+
+    @Test fun restoreRejectsArchivesWithTooManyZipEntriesBeforeCreatingOutput() {
+        val root = createTempDir(prefix = "arabify-entry-count-limit-test")
+        try {
+            val base = File(root, "base.apk").apply { writeText("valid-apk") }
+            val archive = File(root, "game.backup")
+            ApkBackupManager.createBackup("com.example.game", "Game", null, listOf(base), archive)
+            val oversized = File(root, "too-many-entries.backup")
+            ZipFile(archive).use { source ->
+                java.util.zip.ZipOutputStream(oversized.outputStream()).use { target ->
+                    val entries = source.entries()
+                    while (entries.hasMoreElements()) {
+                        val entry = entries.nextElement()
+                        target.putNextEntry(java.util.zip.ZipEntry(entry.name))
+                        source.getInputStream(entry).use { it.copyTo(target) }
+                        target.closeEntry()
+                    }
+                    repeat(64) { index ->
+                        target.putNextEntry(java.util.zip.ZipEntry("unlisted/extra-$index.bin"))
+                        target.closeEntry()
+                    }
+                }
+            }
+
+            val destination = File(root, "restore")
+            try {
+                ApkBackupManager.extractAndVerify(oversized, destination)
+                fail("Expected ZIP entry-count rejection")
+            } catch (expected: IllegalArgumentException) {
+                assertTrue(expected.message.orEmpty().contains("عدد المدخلات"))
+            }
+            assertFalse("Rejected archive must not leave an output directory", destination.exists())
+        } finally { root.deleteRecursively() }
+    }
+
 }

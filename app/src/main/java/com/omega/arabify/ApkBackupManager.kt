@@ -22,6 +22,7 @@ internal object ApkBackupManager {
     private const val MAX_TOTAL_BYTES = 3L * 1024L * 1024L * 1024L
     private const val MAX_APK_COUNT = 64
     private const val MAX_MANIFEST_BYTES = 1024L * 1024L
+    private const val MAX_ZIP_ENTRIES = MAX_APK_COUNT + 1
 
     fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
@@ -125,7 +126,10 @@ internal object ApkBackupManager {
         require(destination.mkdirs() || destination.isDirectory) { "تعذر تجهيز مجلد الاستعادة." }
         try {
             return ZipFile(archive).use { zip ->
-                val zipNames = HashSet<String>()
+                require(zip.size() in 2..MAX_ZIP_ENTRIES) {
+                    "عدد المدخلات داخل النسخة الاحتياطية يتجاوز الحد المسموح."
+                }
+                val zipNames = HashSet<String>(zip.size())
                 val entries = zip.entries()
                 while (entries.hasMoreElements()) {
                     val entry = entries.nextElement()
