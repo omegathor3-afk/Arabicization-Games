@@ -274,4 +274,59 @@ class ApkBackupManagerTest {
             assertFalse("Preflight rejection must happen before output creation", destination.exists())
         } finally { root.deleteRecursively() }
     }
+
+
+    @Test fun restoreAcceptsMaximumLengthZipComment() {
+        val root = createTempDir(prefix = "arabify-max-zip-comment-test")
+        try {
+            val base = File(root, "base.apk").apply { writeText("valid-apk") }
+            val archive = File(root, "game.backup")
+            ApkBackupManager.createBackup("com.example.game", "Game", null, listOf(base), archive)
+            val commented = File(root, "commented.backup")
+
+            ZipFile(archive).use { source ->
+                java.util.zip.ZipOutputStream(commented.outputStream()).use { target ->
+                    // ZIP permits a 65,535-byte EOCD comment; the EOCD then sits
+                    // at the first byte of the maximum backwards-search window.
+                    target.setComment("x".repeat(65_535))
+                    val entries = source.entries()
+                    while (entries.hasMoreElements()) {
+                        val entry = entries.nextElement()
+                        target.putNextEntry(java.util.zip.ZipEntry(entry.name))
+                        source.getInputStream(entry).use { it.copyTo(target) }
+                        target.closeEntry()
+                    }
+                }
+            }
+
+            val restored = ApkBackupManager.extractAndVerify(commented, File(root, "restore"))
+            assertEquals("com.example.game", restored.packageName)
+            assertEquals(1, restored.apks.size)
+            assertEquals(ApkBackupManager.sha256(base), restored.apks.single().sha256)
+        } finally { root.deleteRecursively() }
+    }
+
+    @Test fun restoreRejectsMultiDiskZipBeforeCreatingOutput() {
+        val root = createTempDir(prefix = "arabify-multidisk-zip-test")
+        try {
+            val base = File(root, "base.apk").apply { writeText("valid-apk") }
+            val archive = File(root, "game.backup")
+            ApkBackupManager.createBackup("com.example.game", "Game", null, listOf(base), archive)
+            RandomAccessFile(archive, "rw").use { file ->
+                // EOCD disk number is the little-endian 16-bit field at +4.
+                file.seek(file.length() - 22 + 4)
+                file.write(1)
+                file.write(0)
+            }
+
+            val destination = File(root, "restore")
+            try {
+                ApkBackupManager.extractAndVerify(archive, destination)
+                fail("Expected multi-disk ZIP rejection")
+            } catch (expected: IllegalArgumentException) {
+                assertTrue(expected.message.orEmpty().contains("متعددة الأقراص"))
+            }
+            assertFalse("Preflight rejection must happen before output creation", destination.exists())
+        } finally { root.deleteRecursively() }
+    }
 }
