@@ -1,8 +1,10 @@
 package com.omega.arabify
 
 import org.junit.Assert.*
+import org.junit.Assume.assumeNoException
 import org.junit.Test
 import java.io.File
+import java.nio.file.Files
 import java.util.zip.ZipFile
 
 class ApkBackupManagerTest {
@@ -104,6 +106,83 @@ class ApkBackupManagerTest {
                 assertTrue(expected.message.orEmpty().contains("غير فارغ"))
             }
             assertEquals("keep", keep.readText())
+        } finally { root.deleteRecursively() }
+    }
+
+    @Test fun createBackupDoesNotDeleteAnUnrelatedVerificationNamedDirectory() {
+        val root = createTempDir(prefix = "arabify-backup-collision-test")
+        try {
+            val base = File(root, "base.apk").apply { writeBytes("base-apk-content".toByteArray()) }
+            val archive = File(root, "game.backup")
+            val unrelated = File(root, "verify-game").apply { mkdirs() }
+            val keep = File(unrelated, "keep.txt").apply { writeText("preserve") }
+
+            ApkBackupManager.createBackup("com.example.game", "Game", null, listOf(base), archive)
+
+            assertTrue(archive.isFile)
+            assertEquals("preserve", keep.readText())
+        } finally { root.deleteRecursively() }
+    }
+
+    @Test fun createBackupRefusesToOverwriteItsSourceApk() {
+        val root = createTempDir(prefix = "arabify-backup-source-test")
+        try {
+            val source = File(root, "game.apk").apply { writeText("original-apk-bytes") }
+            val original = source.readBytes()
+
+            try {
+                ApkBackupManager.createBackup("com.example.game", "Game", null, listOf(source), source)
+                fail("Expected source/output alias rejection")
+            } catch (expected: IllegalArgumentException) {
+                assertTrue(expected.message.orEmpty().contains("APK الأصلي"))
+            }
+
+            assertArrayEquals(original, source.readBytes())
+        } finally { root.deleteRecursively() }
+    }
+
+    @Test fun restoreRejectsSymbolicLinkDestinationWithoutWritingThroughIt() {
+        val root = createTempDir(prefix = "arabify-symlink-destination-test")
+        try {
+            val base = File(root, "base.apk").apply { writeText("base-apk-content") }
+            val archive = File(root, "game.backup")
+            ApkBackupManager.createBackup("com.example.game", "Game", null, listOf(base), archive)
+
+            val target = File(root, "outside").apply { mkdirs() }
+            val destination = File(root, "restore-link")
+            try {
+                Files.createSymbolicLink(destination.toPath(), target.toPath())
+            } catch (error: Exception) {
+                assumeNoException(error)
+            }
+
+            try {
+                ApkBackupManager.extractAndVerify(archive, destination)
+                fail("Expected symbolic-link destination rejection")
+            } catch (expected: IllegalArgumentException) {
+                assertTrue(expected.message.orEmpty().contains("رابط رمزي"))
+            }
+
+            assertTrue(Files.isSymbolicLink(destination.toPath()))
+            assertFalse(File(target, "base.apk").exists())
+        } finally { root.deleteRecursively() }
+    }
+
+    @Test fun failedRestorePreservesAnExistingEmptyDestinationDirectory() {
+        val root = createTempDir(prefix = "arabify-empty-destination-test")
+        try {
+            val brokenArchive = File(root, "broken.backup").apply { writeText("not a zip archive") }
+            val destination = File(root, "restore").apply { mkdirs() }
+
+            try {
+                ApkBackupManager.extractAndVerify(brokenArchive, destination)
+                fail("Expected invalid archive rejection")
+            } catch (_: Exception) {
+                // The caller's pre-existing empty directory must remain in place.
+            }
+
+            assertTrue(destination.isDirectory)
+            assertEquals(0, destination.list()?.size ?: -1)
         } finally { root.deleteRecursively() }
     }
 
