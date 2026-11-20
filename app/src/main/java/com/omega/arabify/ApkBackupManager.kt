@@ -5,6 +5,9 @@ import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.RandomAccessFile
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -23,6 +26,11 @@ internal object ApkBackupManager {
     private const val MAX_APK_COUNT = 64
     private const val MAX_MANIFEST_BYTES = 1024L * 1024L
     private const val MAX_ZIP_ENTRIES = MAX_APK_COUNT + 1
+    const val MAX_ARCHIVE_BYTES = MAX_TOTAL_BYTES + 16L * 1024L * 1024L
+    private const val MAX_CENTRAL_DIRECTORY_BYTES = 256L * 1024L
+    private const val ZIP_EOCD_MIN_BYTES = 22
+    private const val ZIP_EOCD_MAX_SEARCH_BYTES = ZIP_EOCD_MIN_BYTES + 65_535
+    private const val ZIP_EOCD_SIGNATURE = 0x06054b50
 
     fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
@@ -117,6 +125,7 @@ internal object ApkBackupManager {
 
     fun extractAndVerify(archive: File, destination: File): VerifiedApkBackup {
         require(archive.isFile) { "ملف النسخة الاحتياطية غير موجود." }
+        validateArchiveEnvelope(archive)
         val destinationPath = destination.toPath().toAbsolutePath().normalize()
         requireNoSymbolicLinks(destinationPath, "مجلد الاستعادة يحتوي على رابط رمزي غير آمن.")
         val destinationExisted = destination.exists()
@@ -203,6 +212,60 @@ internal object ApkBackupManager {
                 destination.deleteRecursively()
             }
             throw error
+        }
+    }
+
+    /**
+     * Validate the ZIP envelope before ZipFile parses its central directory.
+     * This prevents attacker-controlled entry counts or directory sizes from
+     * causing large allocations before our normal per-entry limits run.
+     */
+    private fun validateArchiveEnvelope(archive: File) {
+        val archiveLength = archive.length()
+        require(archiveLength in ZIP_EOCD_MIN_BYTES.toLong()..MAX_ARCHIVE_BYTES) {
+            "حجم ملف النسخة الاحتياطية يتجاوز الحد المسموح."
+        }
+        RandomAccessFile(archive, "r").use { input ->
+            val tailSize = minOf(archiveLength, ZIP_EOCD_MAX_SEARCH_BYTES.toLong()).toInt()
+            val tail = ByteArray(tailSize)
+            input.seek(archiveLength - tailSize)
+            input.readFully(tail)
+            val buffer = ByteBuffer.wrap(tail).order(ByteOrder.LITTLE_ENDIAN)
+
+            var eocdIndex = -1
+            for (index in tail.size - ZIP_EOCD_MIN_BYTES downTo 0) {
+                if (buffer.getInt(index) != ZIP_EOCD_SIGNATURE) continue
+                val commentLength = buffer.getShort(index + 20).toInt() and 0xffff
+                if (index + ZIP_EOCD_MIN_BYTES + commentLength == tail.size) {
+                    eocdIndex = index
+                    break
+                }
+            }
+            require(eocdIndex >= 0) { "نهاية ملف ZIP غير صالحة." }
+
+            val diskNumber = buffer.getShort(eocdIndex + 4).toInt() and 0xffff
+            val centralDirectoryDisk = buffer.getShort(eocdIndex + 6).toInt() and 0xffff
+            val entriesOnDisk = buffer.getShort(eocdIndex + 8).toInt() and 0xffff
+            val totalEntries = buffer.getShort(eocdIndex + 10).toInt() and 0xffff
+            val centralDirectorySize =
+                buffer.getInt(eocdIndex + 12).toLong() and 0xffff_ffffL
+            val centralDirectoryOffset =
+                buffer.getInt(eocdIndex + 16).toLong() and 0xffff_ffffL
+
+            require(totalEntries in 2..MAX_ZIP_ENTRIES) {
+                "عدد المدخلات داخل النسخة الاحتياطية يتجاوز الحد المسموح."
+            }
+            require(diskNumber == 0 && centralDirectoryDisk == 0 && entriesOnDisk == totalEntries) {
+                "ملفات ZIP متعددة الأقراص أو غير مدعومة."
+            }
+            require(centralDirectorySize in 1..MAX_CENTRAL_DIRECTORY_BYTES) {
+                "حجم فهرس ZIP داخل النسخة الاحتياطية يتجاوز الحد المسموح."
+            }
+
+            val eocdOffset = archiveLength - tailSize + eocdIndex
+            require(centralDirectoryOffset + centralDirectorySize == eocdOffset) {
+                "حدود فهرس ZIP داخل النسخة الاحتياطية غير صالحة."
+            }
         }
     }
 

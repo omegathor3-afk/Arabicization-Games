@@ -51,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -146,10 +147,13 @@ private fun ArabifyApp(context: Context) {
       val packageInfo=context.packageManager.getPackageInfo(app.packageName,0)
       val files=listOf(app.apkPath)+app.splitApkPaths
       val archive=File(context.cacheDir,"arabify-backup-${System.currentTimeMillis()}.zip")
-      ApkBackupManager.createBackup(app.packageName,app.label,packageInfo.versionName,files.map(::File),archive)
-      context.contentResolver.openOutputStream(targetUri,"wt")?.use { output -> archive.inputStream().use { it.copyTo(output) } }
-       ?: error("تعذر حفظ ملف النسخة الاحتياطية.")
-      archive.delete()
+      try {
+       ApkBackupManager.createBackup(app.packageName,app.label,packageInfo.versionName,files.map(::File),archive)
+       context.contentResolver.openOutputStream(targetUri,"wt")?.use { output -> archive.inputStream().use { it.copyTo(output) } }
+        ?: error("تعذر حفظ ملف النسخة الاحتياطية.")
+      } finally {
+       archive.delete()
+      }
      }
      backupMessage="تم إنشاء النسخة الاحتياطية والتحقق من SHA-256 لكل ملفات APK."
     } catch(e:Exception) { backupError=e.message ?: "تعذر إنشاء النسخة الاحتياطية." }
@@ -161,16 +165,22 @@ private fun ArabifyApp(context: Context) {
   if(uri!=null) {
    restoreBusy=true;restoreError=null;restoreMessage=null
    scope.launch {
+    val restoreDirectory=File(context.cacheDir,"arabify-restore-${System.currentTimeMillis()}")
     try {
      val backup=withContext(Dispatchers.IO) {
-      val archive=copyUriToCache(context,uri,MAX_BACKUP_ARCHIVE_BYTES)
-      try { ApkBackupManager.extractAndVerify(archive,File(context.cacheDir,"arabify-restore-${System.currentTimeMillis()}")) }
+      val archive=copyUriToCache(context,uri,ApkBackupManager.MAX_ARCHIVE_BYTES)
+      try { ApkBackupManager.extractAndVerify(archive,restoreDirectory) }
       finally { archive.delete() }
      }
      withContext(Dispatchers.Main) { ApkRestoreInstaller.install(context,backup) }
      restoreMessage="تم التحقق من الملفات وإرسال مجموعة APK إلى مُثبّت Android. أكّد التثبيت في نافذة النظام."
     } catch(e:Exception) { restoreError=e.message ?: "تعذرت استعادة النسخة الاحتياطية." }
-    finally { restoreBusy=false }
+    finally {
+     withContext(NonCancellable + Dispatchers.IO) {
+      runCatching { restoreDirectory.deleteRecursively() }
+     }
+     restoreBusy=false
+    }
    }
   }
  }
@@ -641,7 +651,6 @@ private fun ArabifyApp(context: Context) {
 private fun SectionTitle(value:String){Text(value,color=ArabifyPalette.primary,fontWeight=FontWeight.Bold,fontSize=16.sp)}
 
 private const val MAX_APK_IMPORT_BYTES = 1_500L * 1024L * 1024L
-private const val MAX_BACKUP_ARCHIVE_BYTES = 3L * 1024L * 1024L * 1024L + 1024L * 1024L
 private const val CACHE_RESERVE_BYTES = 16L * 1024L * 1024L
 
 private fun copyUriToCache(

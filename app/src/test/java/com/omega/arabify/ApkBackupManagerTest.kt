@@ -4,6 +4,7 @@ import org.junit.Assert.*
 import org.junit.Assume.assumeNoException
 import org.junit.Test
 import java.io.File
+import java.io.RandomAccessFile
 import java.nio.file.Files
 import java.util.zip.ZipFile
 
@@ -221,4 +222,56 @@ class ApkBackupManagerTest {
         } finally { root.deleteRecursively() }
     }
 
+    @Test fun restoreRejectsDeclaredExcessiveEntryCountBeforeCreatingOutput() {
+        val root = createTempDir(prefix = "arabify-eocd-entry-limit-test")
+        try {
+            val base = File(root, "base.apk").apply { writeText("valid-apk") }
+            val archive = File(root, "game.backup")
+            ApkBackupManager.createBackup("com.example.game", "Game", null, listOf(base), archive)
+            RandomAccessFile(archive, "rw").use { file ->
+                // EOCD entry counts are little-endian 16-bit fields at +8 and +10.
+                file.seek(file.length() - 22 + 8)
+                file.write(0xff)
+                file.write(0xff)
+                file.seek(file.length() - 22 + 10)
+                file.write(0xff)
+                file.write(0xff)
+            }
+
+            val destination = File(root, "restore")
+            try {
+                ApkBackupManager.extractAndVerify(archive, destination)
+                fail("Expected preflight entry-count rejection")
+            } catch (expected: IllegalArgumentException) {
+                assertTrue(expected.message.orEmpty().contains("عدد المدخلات"))
+            }
+            assertFalse("Preflight rejection must happen before output creation", destination.exists())
+        } finally { root.deleteRecursively() }
+    }
+
+    @Test fun restoreRejectsOversizedCentralDirectoryBeforeCreatingOutput() {
+        val root = createTempDir(prefix = "arabify-eocd-directory-limit-test")
+        try {
+            val base = File(root, "base.apk").apply { writeText("valid-apk") }
+            val archive = File(root, "game.backup")
+            ApkBackupManager.createBackup("com.example.game", "Game", null, listOf(base), archive)
+            RandomAccessFile(archive, "rw").use { file ->
+                // Declare 256 KiB + 1 bytes; the actual directory remains tiny.
+                val oversized = 256 * 1024 + 1
+                file.seek(file.length() - 22 + 12)
+                repeat(4) { index ->
+                    file.write((oversized ushr (index * 8)) and 0xff)
+                }
+            }
+
+            val destination = File(root, "restore")
+            try {
+                ApkBackupManager.extractAndVerify(archive, destination)
+                fail("Expected preflight central-directory rejection")
+            } catch (expected: IllegalArgumentException) {
+                assertTrue(expected.message.orEmpty().contains("فهرس ZIP"))
+            }
+            assertFalse("Preflight rejection must happen before output creation", destination.exists())
+        } finally { root.deleteRecursively() }
+    }
 }
