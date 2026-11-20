@@ -98,4 +98,46 @@ class UnitySerializedMetadataPrefixParserTest {
         assertNull(UnitySerializedMetadataPrefixParser.parse(header(empty, 13, "little"), empty + byteArrayOf(1)))
         assertNull(UnitySerializedMetadataPrefixParser.parse(header(empty, 8, "little"), empty))
     }
+
+    private fun metadataWithUnityVersion(versionBytes: ByteArray, terminate: Boolean = true): ByteArray {
+        val output = ByteBuffer.allocate(versionBytes.size + 16).order(ByteOrder.LITTLE_ENDIAN)
+        output.put(versionBytes)
+        if (terminate) output.put(0)
+        output.putInt(13)
+        output.put(1)
+        output.putInt(0)
+        return output.array().copyOf(output.position())
+    }
+
+    @Test fun enforcesUnityVersionStringByteLimitAtExactBoundary() {
+        val accepted = metadataWithUnityVersion(ByteArray(1024) { 'v'.code.toByte() })
+        val rejected = metadataWithUnityVersion(ByteArray(1025) { 'v'.code.toByte() })
+
+        assertNotNull(
+            UnitySerializedMetadataPrefixParser.parse(header(accepted, 13, "little"), accepted)
+        )
+        assertNull(
+            UnitySerializedMetadataPrefixParser.parse(header(rejected, 13, "little"), rejected)
+        )
+    }
+
+    @Test fun rejectsInvalidUtf8AndUnterminatedUnityVersionStrings() {
+        val invalidUtf8 = metadataWithUnityVersion(byteArrayOf(0xC3.toByte(), 0x28))
+        val unterminated = metadataWithUnityVersion(
+            ByteArray(1024) { 'x'.code.toByte() },
+            terminate = false
+        )
+
+        assertNull(
+            UnitySerializedMetadataPrefixParser.parse(
+                header(invalidUtf8, 13, "little"), invalidUtf8
+            )
+        )
+        assertNull(
+            UnitySerializedMetadataPrefixParser.parse(
+                header(unterminated, 13, "little"), unterminated
+            )
+        )
+    }
+
 }
