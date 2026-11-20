@@ -113,7 +113,7 @@ assert "ManagedReferencesRegistry" in (root / "v23-extracted-monobehaviour.txt")
 
 v26 = read("v26-metadata.json")
 assert v26["sharedSubtreeCount"] > 0, v26
-assert any(x.get("typeTreeFormatVersion") == 32 for x in v26["typeTrees"]), v26
+assert any(x.get("typeTreeFormatVersion") == 33 for x in v26["typeTrees"]), v26
 assert "ManagedReferencesRegistry" in (root / "v26-monobehaviour.txt").read_text()
 checks.append({
     "fixture": "v26",
