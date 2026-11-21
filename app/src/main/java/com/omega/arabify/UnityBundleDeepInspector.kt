@@ -20,7 +20,10 @@ internal data class UnityBundleDeepInspectionLimits(
     val maxZipEntriesToVerify: Int = 100_000,
     val scratchReserveBytes: Long = 16L * 1024L * 1024L,
     val maxObjectRecordsPerFile: Int = 100_000,
-    val maxTotalObjectRecords: Int = 250_000
+    val maxTotalObjectRecords: Int = 250_000,
+    val maxTextAssetsPerFile: Int = 100,
+    val maxTextAssetObjectBytes: Long = 1024L * 1024L,
+    val maxTotalTextAssetBytes: Long = 8L * 1024L * 1024L
 )
 
 internal data class UnityBundleDeepInspectionItem(
@@ -41,13 +44,17 @@ internal data class UnityBundleDeepInspectionReport(
     val items: List<UnityBundleDeepInspectionItem>,
     val notes: List<String>,
     val objectRecordsBudgetExhausted: Boolean = false,
-    val bytesExtracted: Long = 0L
+    val bytesExtracted: Long = 0L,
+    val textAssetsReadOnly: Int = 0,
+    val textAssetUtf8Candidates: Int = 0
 ) {
     val summary: String
         get() = "UnityFS: " + bundlesInspected + "/" + bundlesFound +
             " • CAB nodes: " + nodesExtracted +
             " • SerializedFiles: " + serializedFilesParsed +
             " • object records indexed: " + objectRecordsIndexed +
+            " • TextAssets read-only: " + textAssetsReadOnly +
+            " • UTF-8 text candidates: " + textAssetUtf8Candidates +
             " • CAB bytes: " + bytesExtracted +
             (if (objectRecordsBudgetExhausted) " • تم بلوغ حد فهرسة الكائنات" else "") +
             " • قراءة فقط"
@@ -123,6 +130,9 @@ internal object UnityBundleDeepInspector {
         var serializedFilesParsed = 0
         var objectRecordsIndexed = 0
         var remainingObjectRecords = limits.maxTotalObjectRecords
+        var remainingTextAssetBytes = limits.maxTotalTextAssetBytes
+        var textAssetsReadOnly = 0
+        var textAssetUtf8Candidates = 0
         var objectRecordsBudgetExhausted = false
 
         ZipFile(apk).use { zip ->
@@ -388,6 +398,48 @@ internal object UnityBundleDeepInspector {
                                 remainingObjectRecords -= objectCount
                                 "objects=" + objectCount
                             }
+                            var textAssetsInFile = 0
+                            var textCandidatesInFile = 0
+                            val typeTable = inspection.typeTable
+                            val objectTable = inspection.objectTable
+                            if (typeTable != null && objectTable != null &&
+                                remainingTextAssetBytes > 0L
+                            ) {
+                                objectTable.objects.asSequence()
+                                    .filter { UnityTextAssetReader.isTextAssetObject(
+                                        inspection.header, typeTable, it
+                                    ) }
+                                    .take(limits.maxTextAssetsPerFile)
+                                    .forEach { textObject ->
+                                        val objectBudget = minOf(
+                                            limits.maxTextAssetObjectBytes,
+                                            remainingTextAssetBytes
+                                        )
+                                        if (textObject.byteSize !in 1L..objectBudget) {
+                                            return@forEach
+                                        }
+                                        val textAsset = UnityTextAssetReader.read(
+                                            extracted,
+                                            inspection.header,
+                                            typeTable,
+                                            textObject,
+                                            maxObjectBytes = objectBudget
+                                        ) ?: return@forEach
+                                        remainingTextAssetBytes -= textObject.byteSize
+                                        textAssetsInFile++
+                                        if (textAsset.script.isNotBlank()) {
+                                            textCandidatesInFile++
+                                        }
+                                    }
+                            }
+                            textAssetsReadOnly += textAssetsInFile
+                            textAssetUtf8Candidates += textCandidatesInFile
+                            val textAssetSummary = if (textAssetsInFile > 0) {
+                                ", TextAssets read-only=" + textAssetsInFile +
+                                    ", non-empty UTF-8 scripts=" + textCandidatesInFile
+                            } else {
+                                ""
+                            }
                             val trailingSummary = inspection.trailingMetadata?.let {
                                 ", scripts=" + it.scriptReferences.size +
                                     ", externals=" + it.externals.size +
@@ -399,7 +451,7 @@ internal object UnityBundleDeepInspector {
                                 inspection.header.formatVersion + ", stage=" +
                                 inspection.stage.name + ", types=" +
                                 (inspection.metadataPrefix?.typeCount ?: 0) +
-                                ", " + objectSummary + trailingSummary + " (read-only)"
+                                ", " + objectSummary + textAssetSummary + trailingSummary + " (read-only)"
                         }
                         serializedFilesParsed += parsedInBundle
                         objectRecordsIndexed += objectsInBundle
@@ -445,7 +497,9 @@ internal object UnityBundleDeepInspector {
             items = results,
             notes = notes,
             objectRecordsBudgetExhausted = objectRecordsBudgetExhausted,
-            bytesExtracted = totalExtractedBytes
+            bytesExtracted = totalExtractedBytes,
+            textAssetsReadOnly = textAssetsReadOnly,
+            textAssetUtf8Candidates = textAssetUtf8Candidates
         )
     }
 
@@ -464,7 +518,10 @@ internal object UnityBundleDeepInspector {
             limits.maxZipEntriesToVerify in 1..100_000 &&
             limits.scratchReserveBytes in 0L..(256L * 1024L * 1024L) &&
             limits.maxObjectRecordsPerFile in 1..100_000 &&
-            limits.maxTotalObjectRecords in 1..1_000_000
+            limits.maxTotalObjectRecords in 1..1_000_000 &&
+            limits.maxTextAssetsPerFile in 1..1_000 &&
+            limits.maxTextAssetObjectBytes in 1L..(4L * 1024L * 1024L) &&
+            limits.maxTotalTextAssetBytes in 0L..(64L * 1024L * 1024L)
 }
 
 internal fun requiredUnityScratchSpaceBytes(

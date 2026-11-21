@@ -549,12 +549,12 @@ private fun ArabifyApp(context: Context) {
         Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
          Text("جرد موارد Unity — قراءة فقط",color=ArabifyPalette.accent,fontWeight=FontWeight.Bold,fontSize=17.sp)
          Text(inventory.report,color=ArabifyPalette.textBody,fontSize=12.sp)
-         Text("الفحص الحالي يقرأ بيانات SerializedFile الوصفية وجداول الأنواع والكائنات ضمن حدود ذاكرة، ويظل للقراءة فقط. لم يتم تعديل object payloads أو AssetBundles أو DLL.",color=ArabifyPalette.warningText,fontSize=12.sp)
+         Text("الفحص الحالي يقرأ SerializedFile metadata ويفحص TextAsset (class ID 49) فقط عندما يتوفر TypeTree كامل مطابق، لعدّ نصوص UTF-8 للعرض. لا يكتب داخل object payloads أو AssetBundles أو DLL.",color=ArabifyPalette.warningText,fontSize=12.sp)
          inventory.notes.forEach { note ->
           Text("• " + note,color=ArabifyPalette.warningText,fontSize=10.sp)
          }
          if (inventory.bundleFiles > 0) {
-          Text("فحص UnityFS العميق اختياري: يفك ضغط الحزم المدعومة، ويستخرج CAB nodes إلى مجلد مؤقت، ثم يفهرس SerializedFile metadata فقط. لا يكتب داخل APK ولا يغيّر ملفات اللعبة.",color=ArabifyPalette.textSecondary,fontSize=11.sp)
+          Text("فحص UnityFS العميق اختياري: يفك ضغط الحزم المدعومة، ويستخرج CAB nodes إلى مجلد مؤقت، ويفهرس metadata، ثم يتحقق قراءةً فقط من TextAsset ذات المخطط المعروف. لا يكتب داخل APK ولا يغيّر ملفات اللعبة.",color=ArabifyPalette.textSecondary,fontSize=11.sp)
           Button(
            onClick={
             val uri=selectedUri
