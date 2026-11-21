@@ -708,7 +708,8 @@ private fun drawableToBitmap(drawable:Drawable):Bitmap {
 private fun loadInstalledApps(context:Context):List<InstalledApp> {
  val pm=context.packageManager
  val launcherIntent=Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
- val candidates=pm.queryIntentActivities(launcherIntent,PackageManager.MATCH_DEFAULT_ONLY)
+ // Launcher filters commonly omit CATEGORY_DEFAULT, so MATCH_DEFAULT_ONLY would hide valid games.
+ val candidates=pm.queryIntentActivities(launcherIntent,0)
   .mapNotNull { resolved ->
    val info=resolved.activityInfo?.applicationInfo ?: return@mapNotNull null
    val packageName=info.packageName?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
