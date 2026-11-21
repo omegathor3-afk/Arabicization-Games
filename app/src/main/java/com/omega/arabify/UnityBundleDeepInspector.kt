@@ -410,22 +410,24 @@ internal object UnityBundleDeepInspector {
                                         inspection.header, typeTable, it
                                     ) }
                                     .take(limits.maxTextAssetsPerFile)
-                                    .forEach { textObject ->
+                                    .forEach textAssetLoop@ { textObject ->
                                         val objectBudget = minOf(
                                             limits.maxTextAssetObjectBytes,
                                             remainingTextAssetBytes
                                         )
                                         if (textObject.byteSize !in 1L..objectBudget) {
-                                            return@forEach
+                                            return@textAssetLoop
                                         }
+                                        // Charge the aggregate I/O budget before attempting to
+                                        // decode; malformed TextAssets must not be retried for free.
+                                        remainingTextAssetBytes -= textObject.byteSize
                                         val textAsset = UnityTextAssetReader.read(
                                             extracted,
                                             inspection.header,
                                             typeTable,
                                             textObject,
                                             maxObjectBytes = objectBudget
-                                        ) ?: return@forEach
-                                        remainingTextAssetBytes -= textObject.byteSize
+                                        ) ?: return@textAssetLoop
                                         textAssetsInFile++
                                         if (textAsset.script.isNotBlank()) {
                                             textCandidatesInFile++

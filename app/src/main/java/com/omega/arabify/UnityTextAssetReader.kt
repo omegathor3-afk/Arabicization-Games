@@ -50,7 +50,9 @@ internal object UnityTextAssetReader {
             require(maxObjectBytes in 1L..MAX_OBJECT_BYTES)
             require(maxStringBytes in 0..MAX_STRING_BYTES)
             require(header.endian == "little" || header.endian == "big")
+            require(header.formatVersion in 9..100)
             require(header.headerSize >= 16)
+            require(header.metadataSize > 0L)
             require(header.fileSize == file.length())
             require(header.dataOffset >= header.headerSize.toLong())
             require(header.dataOffset <= header.fileSize)
@@ -142,7 +144,7 @@ internal object UnityTextAssetReader {
         var index = 1
         while (index < nodes.size) {
             val field = nodes[index]
-            if (field.level != 1 || field.typeName != "string") return null
+            if (field.level != 1 || field.typeName != "string" || field.byteSize != -1) return null
             val end = index + 1
             var subtreeEnd = end
             while (subtreeEnd < nodes.size && nodes[subtreeEnd].level > field.level) {
@@ -154,7 +156,7 @@ internal object UnityTextAssetReader {
             val size = children[1]
             val data = children[2]
             if (array.level != 2 || array.typeName != "Array" ||
-                array.fieldName != "Array" || array.typeFlags != 1 ||
+                array.fieldName != "Array" || array.byteSize != -1 || array.typeFlags != 1 ||
                 (array.metaFlags and ALIGN_BYTES_FLAG) == 0
             ) return null
             if (size.level != 3 || size.typeName != "int" ||
