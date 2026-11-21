@@ -1,0 +1,231 @@
+name: Bergamot Android native CI
+
+on:
+  push:
+    branches: ["feat/unity-mono-streamingassets"]
+    paths:
+      - "native/bergamot/**"
+      - "app/src/main/java/com/omega/arabify/BergamotNative.kt"
+      - "app/src/androidTest/**"
+      - "app/build.gradle.kts"
+      - "app/src/main/AndroidManifest.xml"
+      - ".github/workflows/bergamot-native.yml"
+      - ".github/scripts/run-offline-bergamot-instrumentation.sh"
+  workflow_dispatch:
+
+concurrency:
+  group: arabify-bergamot-native-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-arm64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Install pinned Android NDK and CMake
+        run: |
+          ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          test -n "$SDKMANAGER" && test -x "$SDKMANAGER"
+          echo "Using SDK manager: $SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null
+          "$SDKMANAGER" --install "ndk;27.2.12479018" "cmake;3.31.6"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          CMAKE_BIN="$ANDROID_HOME/cmake/3.31.6/bin"
+          test -x "$CMAKE_BIN/cmake"
+          echo "$CMAKE_BIN" >> "$GITHUB_PATH"
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          "$CMAKE_BIN/cmake" --version | head -n 1 | grep -F "3.31.6"
+      - name: Install Ninja
+        run: |
+          NINJA="$ANDROID_HOME/cmake/3.31.6/bin/ninja"
+          if [[ ! -x "$NINJA" ]]; then sudo apt-get update && sudo apt-get install -y ninja-build; else echo "$(dirname "$NINJA")" >> "$GITHUB_PATH"; fi
+          ninja --version
+      - name: Build pinned Bergamot JNI library
+        run: bash native/bergamot/build-android.sh
+      - name: Build x86_64 JNI for API 35 emulator runtime test
+        run: ANDROID_ABI=x86_64 bash native/bergamot/build-android.sh
+      - name: Stage and verify CMake compile databases for both Android ABIs
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import shutil
+
+          root = pathlib.Path("build/bergamot-compile-databases")
+          root.mkdir(parents=True, exist_ok=True)
+          records = {}
+          missing = []
+          for abi in ("arm64-v8a", "x86_64"):
+              source = pathlib.Path(".build") / f"bergamot-android-{abi}" / "compile_commands.json"
+              if source.is_file() and source.stat().st_size:
+                  destination = root / f"{abi}-compile_commands.json"
+                  shutil.copy2(source, destination)
+                  digest = hashlib.sha256(destination.read_bytes()).hexdigest()
+                  records[abi] = {"file": destination.name, "bytes": destination.stat().st_size, "sha256": digest}
+              else:
+                  records[abi] = {"file": None, "bytes": 0, "sha256": None}
+                  missing.append(abi)
+          manifest = {
+              "commitSha": os.environ.get("GITHUB_SHA"),
+              "requiredAbis": ["arm64-v8a", "x86_64"],
+              "compileDatabases": records,
+              "missingAbis": missing
+          }
+          (root / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+          print(json.dumps(manifest, indent=2))
+          if missing:
+              raise SystemExit("Missing compile database(s): " + ", ".join(missing))
+          PY
+      - name: Upload CMake compile databases for both Android ABIs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: arabify-bergamot-compile-databases
+          path: build/bergamot-compile-databases/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Verify native library ABIs and dependencies
+        run: |
+          for abi in arm64-v8a x86_64; do
+            file "app/src/main/jniLibs/$abi/"*.so
+            readelf -h "app/src/main/jniLibs/$abi/libarabify_bergamot.so"
+            readelf -d "app/src/main/jniLibs/$abi/libarabify_bergamot.so"
+            sha256sum "app/src/main/jniLibs/$abi/"*.so
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: arabify-bergamot-arm64-jni
+          path: app/src/main/jniLibs/arm64-v8a/*.so
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: arabify-bergamot-x86_64-jni
+          path: app/src/main/jniLibs/x86_64/*.so
+          if-no-files-found: error
+          retention-days: 14
+
+  model-package-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Download and verify Mozilla Arabic base-memory Release packages
+        run: python3 native/bergamot/audit-mozilla-arabic-models.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: arabify-mozilla-arabic-model-lock
+          path: |
+            build/arabic-model-lock.json
+            build/moz-models/
+          if-no-files-found: error
+          retention-days: 30
+
+  instrumented-offline:
+    needs: [build-arm64, model-package-audit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+        with:
+          gradle-version: "8.13"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: arabify-bergamot-arm64-jni
+          path: app/src/main/jniLibs/arm64-v8a
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: arabify-mozilla-arabic-model-lock
+          path: build
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: arabify-bergamot-x86_64-jni
+          path: app/src/main/jniLibs/x86_64
+      - name: Stage verified offline model assets
+        run: |
+          test -s app/src/main/jniLibs/arm64-v8a/libarabify_bergamot.so
+          test -s build/moz-models/ar-en/config.yml
+          test -s build/moz-models/en-ar/config.yml
+          mkdir -p app/src/androidTest/assets
+          cp -a build/moz-models app/src/androidTest/assets/bergamot
+          # Only the decompressed model files referenced by config.yml belong in
+          # Android test assets. Keeping .gz alongside the uncompressed payload
+          # makes AAPT2 treat the pair as duplicate assets.
+          find app/src/androidTest/assets/bergamot -type f -name '*.gz' -delete
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path("app/src/androidTest/assets/bergamot")
+          for direction in ("ar-en", "en-ar"):
+              config = root / direction / "config.yml"
+              if not config.is_file():
+                  raise SystemExit(f"Missing model config: {config}")
+              active_section = False
+              referenced = []
+              for line in config.read_text(encoding="utf-8").splitlines():
+                  if line.strip() in {"models:", "vocabs:", "shortlist:"}:
+                      active_section = True
+                      continue
+                  if line and not line[0].isspace():
+                      active_section = False
+                  if active_section and line.lstrip().startswith("- "):
+                      value = line.split("-", 1)[1].strip()
+                      if value != "false":
+                          referenced.append(value)
+              for name in referenced:
+                  asset = root / direction / name
+                  if not asset.is_file() or asset.stat().st_size == 0:
+                      raise SystemExit(f"Missing/empty model asset: {asset}")
+          if any(root.rglob("*.gz")):
+              raise SystemExit("Compressed source copies must not be packaged into Android test assets")
+          print("Verified both directions: all config-referenced decompressed model assets are present.")
+          PY
+      - name: Enable KVM access
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Initialize offline metrics collection
+        run: |
+          mkdir -p build/bergamot-instrumented
+          printf '%s\n' '{"schemaVersion":1,"status":"not_run"}' > build/bergamot-instrumented/metrics.json
+      - name: Run offline Bergamot instrumentation on API 35 emulator
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          disable-linux-hw-accel: false
+          pre-emulator-launch-script: |
+            adb kill-server || true
+            adb start-server
+            adb devices
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          script: |
+            bash .github/scripts/run-offline-bergamot-instrumentation.sh
+      - name: Upload offline translation metrics and emulator state
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: arabify-bergamot-offline-metrics
+          path: |
+            build/bergamot-instrumented/
+            app/build/outputs/androidTest-results/connected/
+            app/build/reports/androidTests/connected/
+          if-no-files-found: error
+          retention-days: 30

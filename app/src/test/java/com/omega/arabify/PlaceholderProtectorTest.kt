@@ -16,4 +16,13 @@ class PlaceholderProtectorTest {
   assertEquals(source, protected.text)
   assertEquals(emptyList<String>(), protected.tokens)
  }
+
+ @Test fun protectsPrintfWidthPrecisionAndLiteralPercent() {
+  val dollar = 36.toChar()
+  val source = "Score %1" + dollar + "02d, accuracy %.2f, player %1" + dollar + "s, 100% complete, %% ready"
+  val protected = PlaceholderProtector.protect(source)
+  val expected = listOf("%1" + dollar + "02d", "%.2f", "%1" + dollar + "s", "%%")
+  assertEquals(expected, protected.tokens)
+  assertEquals(source, PlaceholderProtector.restore(protected.text, protected.tokens))
+ }
 }
