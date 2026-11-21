@@ -329,4 +329,16 @@ class ApkBackupManagerTest {
             assertFalse("Preflight rejection must happen before output creation", destination.exists())
         } finally { root.deleteRecursively() }
     }
+    @Test fun freeSpacePreflightRequiresPayloadPlusSafetyReserve() {
+        val required = 20L * 1024L * 1024L
+        val reserve = maxOf(8L * 1024L * 1024L, required / 100L)
+
+        assertTrue(ApkBackupManager.hasSufficientSpace(required, required + reserve))
+        assertFalse(ApkBackupManager.hasSufficientSpace(required, required + reserve - 1L))
+        assertFalse(ApkBackupManager.hasSufficientSpace(required, required))
+        assertFalse(ApkBackupManager.hasSufficientSpace(required, 0L))
+        assertFalse(ApkBackupManager.hasSufficientSpace(-1L, Long.MAX_VALUE))
+        assertFalse(ApkBackupManager.hasSufficientSpace(required, -1L))
+    }
+
 }
