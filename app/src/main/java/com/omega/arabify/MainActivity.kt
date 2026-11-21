@@ -693,7 +693,6 @@ private fun copyUriToCache(
 }
 
 
-internal data class InstalledApp(val label:String,val packageName:String,val apkPath:String,val splitApkPaths:List<String>) { val splitCount:Int get()=splitApkPaths.size }
 
 private fun drawableToBitmap(drawable:Drawable):Bitmap {
  val width=drawable.intrinsicWidth.coerceAtLeast(1).coerceAtMost(192)
@@ -708,10 +707,20 @@ private fun drawableToBitmap(drawable:Drawable):Bitmap {
 @Suppress("DEPRECATION")
 private fun loadInstalledApps(context:Context):List<InstalledApp> {
  val pm=context.packageManager
- return pm.getInstalledApplications(PackageManager.GET_META_DATA)
-  .filter { pm.getLaunchIntentForPackage(it.packageName)!=null && it.sourceDir!=null }
-  .map { info -> InstalledApp(pm.getApplicationLabel(info).toString(),info.packageName,info.sourceDir,info.splitSourceDirs?.toList() ?: emptyList()) }
-  .sortedBy { it.label.lowercase() }
+ val launcherIntent=Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+ val candidates=pm.queryIntentActivities(launcherIntent,PackageManager.MATCH_DEFAULT_ONLY)
+  .mapNotNull { resolved ->
+   val info=resolved.activityInfo?.applicationInfo ?: return@mapNotNull null
+   val packageName=info.packageName?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+   val apkPath=info.sourceDir?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+   LauncherAppCandidate(
+    label=pm.getApplicationLabel(info).toString(),
+    packageName=packageName,
+    apkPath=apkPath,
+    splitApkPaths=info.splitSourceDirs?.toList() ?: emptyList()
+   )
+  }
+ return InstalledAppDiscovery.fromCandidates(candidates)
 }
 
 
