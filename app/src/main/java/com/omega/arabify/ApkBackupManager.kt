@@ -23,6 +23,7 @@ internal object ApkBackupManager {
     private const val MANIFEST = "manifest.json"
     private const val MAX_APK_BYTES = 1_500L * 1024L * 1024L
     private const val MAX_TOTAL_BYTES = 3L * 1024L * 1024L * 1024L
+    private const val MIN_FREE_SPACE_RESERVE_BYTES = 8L * 1024L * 1024L
     private const val MAX_APK_COUNT = 64
     private const val MAX_MANIFEST_BYTES = 1024L * 1024L
     private const val MAX_ZIP_ENTRIES = MAX_APK_COUNT + 1
@@ -61,6 +62,9 @@ internal object ApkBackupManager {
         val outputParent = outputPath.parent ?: error("مسار النسخة الاحتياطية غير صالح.")
         requireNoSymbolicLinks(outputParent, "مسار النسخة الاحتياطية يحتوي على رابط رمزي غير آمن.")
         Files.createDirectories(outputParent)
+        // The temporary ZIP and its verification extraction coexist until the
+        // atomic replacement succeeds, so reserve space for both worst cases.
+        requireSufficientSpace(outputParent.toFile(), Math.multiplyExact(total, 2L))
         requireNoSymbolicLinks(outputPath, "ملف النسخة الاحتياطية هدفه رابط رمزي غير آمن.")
         val canonicalOutput = output.absoluteFile.canonicalFile
         require(apkFiles.none { it.absoluteFile.canonicalFile == canonicalOutput }) {
@@ -157,6 +161,15 @@ internal object ApkBackupManager {
                 require(packageName.matches(Regex("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+"))) { "اسم الحزمة غير صالح." }
                 val array = manifest.getJSONArray("apks")
                 require(array.length() in 1..MAX_APK_COUNT) { "قائمة ملفات APK غير صالحة." }
+                // Validate the declared extraction working set before creating any APK files.
+                val declaredTotal = (0 until array.length()).fold(0L) { accumulated, index ->
+                    val size = array.getJSONObject(index).getLong("sizeBytes")
+                    require(size in 1..MAX_APK_BYTES) { "حجم APK في manifest غير صالح." }
+                    val next = Math.addExact(accumulated, size)
+                    require(next <= MAX_TOTAL_BYTES) { "الحجم الإجمالي للنسخة الاحتياطية أكبر من الحد." }
+                    next
+                }
+                requireSufficientSpace(destination, declaredTotal)
                 var total = 0L
                 val expectedEntries = linkedSetOf(MANIFEST)
                 val verified = ArrayList<BackupApk>(array.length())
@@ -266,6 +279,19 @@ internal object ApkBackupManager {
             require(centralDirectoryOffset + centralDirectorySize == eocdOffset) {
                 "حدود فهرس ZIP داخل النسخة الاحتياطية غير صالحة."
             }
+        }
+    }
+
+    internal fun hasSufficientSpace(requiredBytes: Long, availableBytes: Long): Boolean {
+        if (requiredBytes <= 0L || availableBytes < 0L || requiredBytes > availableBytes) return false
+        val reserveBytes = maxOf(MIN_FREE_SPACE_RESERVE_BYTES, requiredBytes / 100L)
+        return availableBytes - requiredBytes >= reserveBytes
+    }
+
+    private fun requireSufficientSpace(directory: File, requiredBytes: Long) {
+        val availableBytes = directory.usableSpace
+        require(hasSufficientSpace(requiredBytes, availableBytes)) {
+            "المساحة الحرة غير كافية لإكمال العملية بأمان. المطلوب: ${requiredBytes / (1024L * 1024L)} MiB، المتاح: ${availableBytes / (1024L * 1024L)} MiB."
         }
     }
 
