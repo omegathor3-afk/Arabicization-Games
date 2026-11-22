@@ -45,6 +45,8 @@ internal data class UnityTextAssetPreview(
     val name: String,
     val pathName: String?,
     val scriptPreview: String,
+    /** Complete decoded source retained under the inspector's aggregate byte budget. */
+    val fullScript: String,
     val originalCodePointCount: Int,
     val truncated: Boolean
 )
@@ -101,6 +103,7 @@ internal fun createUnityTextAssetPreview(
         name = prefixByCodePoints(content.name, 128),
         pathName = content.pathName?.let { prefixByCodePoints(it, 512) },
         scriptPreview = preview,
+        fullScript = content.script,
         originalCodePointCount = originalCount,
         truncated = originalCount > preview.codePointCount(0, preview.length)
     )

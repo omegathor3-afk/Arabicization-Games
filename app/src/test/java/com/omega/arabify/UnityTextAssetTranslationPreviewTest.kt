@@ -1,5 +1,6 @@
 package com.omega.arabify
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -12,7 +13,8 @@ class UnityTextAssetTranslationPreviewTest {
         script: String,
         pathName: String? = "Assets/Localization/dialogue.txt",
         name: String = "dialogue",
-        truncated: Boolean = false
+        truncated: Boolean = false,
+        fullScript: String = script
     ) = UnityTextAssetPreview(
         bundlePath = "assets/bin/Data/StreamingAssets/localization.bundle",
         serializedFilePath = "CAB/resources.assets",
@@ -20,13 +22,14 @@ class UnityTextAssetTranslationPreviewTest {
         name = name,
         pathName = pathName,
         scriptPreview = script,
-        originalCodePointCount = script.codePointCount(0, script.length) + if (truncated) 10 else 0,
+        fullScript = fullScript,
+        originalCodePointCount = fullScript.codePointCount(0, fullScript.length),
         truncated = truncated
     )
 
     @Test
     fun translatesJsonValuesWithoutChangingKeysOrFormatPlaceholders() = runBlocking {
-        val source = """{"start":"Start game %1${'$'}s","count":4}"""
+        val source = """{"start":"Start game %1$s","count":4}"""
         val result = UnityTextAssetPreviewTranslator.translate(
             preview(source, pathName = "Assets/Localization/menu.json")
         ) { value ->
@@ -34,11 +37,13 @@ class UnityTextAssetTranslationPreviewTest {
         }
 
         val json = JSONObject(result.text)
-        assertEquals("ابدأ اللعبة %1${'$'}s", json.getString("start"))
+        assertEquals("ابدأ اللعبة %1$s", json.getString("start"))
         assertEquals(4, json.getInt("count"))
         assertEquals(1, result.translatedStrings)
         assertEquals(0, result.skippedStrings)
         assertEquals("json", result.format)
+        assertEquals(result.text, result.previewText)
+        assertFalse(result.previewTruncated)
     }
 
     @Test
@@ -55,6 +60,37 @@ class UnityTextAssetTranslationPreviewTest {
     }
 
     @Test
+    fun translatesCompleteSourceWhenOnlyTheVisiblePreviewIsTruncated() = runBlocking {
+        val fullSource = "Welcome to the castle.\nFind the hidden key."
+        val seen = mutableListOf<String>()
+        val result = UnityTextAssetPreviewTranslator.translate(
+            preview(
+                script = "Welcome to",
+                fullScript = fullSource,
+                truncated = true
+            )
+        ) { value ->
+            seen += value
+            when (value) {
+                "Welcome to the castle." -> "أهلًا بك في القلعة."
+                "Find the hidden key." -> "اعثر على المفتاح المخفي."
+                else -> value
+            }
+        }
+
+        assertEquals(
+            listOf("Welcome to the castle.", "Find the hidden key."),
+            seen
+        )
+        assertEquals(
+            "أهلًا بك في القلعة.\nاعثر على المفتاح المخفي.",
+            result.text
+        )
+        assertEquals(result.text, result.previewText)
+        assertEquals(2, result.translatedStrings)
+    }
+
+    @Test
     fun rejectsTranslationsThatDoNotContainArabicForEnglishSentences() = runBlocking {
         val source = "Welcome to the old castle."
         val result = UnityTextAssetPreviewTranslator.translate(preview(source)) {
@@ -64,22 +100,6 @@ class UnityTextAssetTranslationPreviewTest {
         assertEquals(source, result.text)
         assertEquals(0, result.translatedStrings)
         assertEquals(1, result.skippedStrings)
-    }
-
-    @Test
-    fun refusesTruncatedPreviewsBeforeCallingTranslator() = runBlocking {
-        var called = false
-        val error = runCatching {
-            UnityTextAssetPreviewTranslator.translate(
-                preview("Welcome to the castle", truncated = true)
-            ) {
-                called = true
-                "مرحبًا"
-            }
-        }.exceptionOrNull()
-
-        assertTrue(error is IllegalArgumentException)
-        assertFalse(called)
     }
 
     @Test
@@ -112,5 +132,19 @@ class UnityTextAssetTranslationPreviewTest {
             name = "dialogue.txt"
         )
         assertEquals("txt", UnityTextAssetPreviewTranslator.supportedFormat(item))
+    }
+
+    @Test
+    fun propagatesCancellationFromCompleteTextAssetTranslation() = runBlocking {
+        val error = runCatching {
+            runBlocking {
+                UnityTextAssetPreviewTranslator.translate(
+                    preview("Welcome", fullScript = "Welcome\nFind the key.")
+                ) {
+                    throw CancellationException("cancel translation")
+                }
+            }
+        }.exceptionOrNull()
+        assertTrue(error is CancellationException)
     }
 }

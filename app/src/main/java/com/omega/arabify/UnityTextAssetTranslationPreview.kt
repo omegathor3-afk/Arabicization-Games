@@ -19,20 +19,29 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 internal data class UnityTextAssetTranslationResult(
+    /** Complete translated source; never silently replaced by its display preview. */
     val text: String,
+    val previewText: String,
+    val previewTruncated: Boolean,
     val translatedStrings: Int,
     val skippedStrings: Int,
     val format: String
 )
 
 /**
- * Translates only a complete, explicitly recognized TextAsset text format.
- * This is a review preview: it never writes a SerializedFile or AssetBundle.
+ * Translates the complete decoded TextAsset source only when its declared
+ * path/name identifies a supported text format. The UI preview may be shorter;
+ * the source itself is retained under UnityBundleDeepInspector's byte budgets.
+ *
+ * This is still a review preview: it never writes a SerializedFile or AssetBundle.
  */
 internal object UnityTextAssetPreviewTranslator {
+    private const val MAX_TRANSLATED_PREVIEW_CODE_POINTS = 1_200
     private val supportedFormats = setOf("json", "txt", "properties", "strings")
 
     fun supportedFormat(preview: UnityTextAssetPreview): String? {
@@ -47,18 +56,25 @@ internal object UnityTextAssetPreviewTranslator {
         preview: UnityTextAssetPreview,
         translate: suspend (String) -> String
     ): UnityTextAssetTranslationResult {
-        require(!preview.truncated) {
-            "المعاينة مختصرة؛ أعد الفحص بحد نص كامل قبل الترجمة."
+        require(preview.fullScript.isNotBlank()) {
+            "لا يوجد نص كامل قابل للترجمة في TextAsset."
         }
         val format = supportedFormat(preview)
             ?: error("صيغة TextAsset غير معروفة؛ الترجمة التلقائية متاحة فقط لـ JSON وTXT وProperties وStrings.")
         val transformed = AssetTextTransformer.transform(
             path = "textasset.$format",
-            source = preview.scriptPreview,
+            source = preview.fullScript,
             translate = translate
+        )
+        val codePointCount = transformed.text.codePointCount(0, transformed.text.length)
+        val previewEnd = transformed.text.offsetByCodePoints(
+            0,
+            minOf(codePointCount, MAX_TRANSLATED_PREVIEW_CODE_POINTS)
         )
         return UnityTextAssetTranslationResult(
             text = transformed.text,
+            previewText = transformed.text.substring(0, previewEnd),
+            previewTruncated = codePointCount > MAX_TRANSLATED_PREVIEW_CODE_POINTS,
             translatedStrings = transformed.translated,
             skippedStrings = transformed.skipped,
             format = format
@@ -80,11 +96,12 @@ internal fun UnityTextAssetTranslationPreview(
         preview.pathId.toString(),
         preview.name,
         preview.pathName.orEmpty(),
-        preview.scriptPreview
+        preview.fullScript
     )
-    var translatedText by remember(stateKey) { mutableStateOf<String?>(null) }
+    var translatedResult by remember(stateKey) { mutableStateOf<UnityTextAssetTranslationResult?>(null) }
     var message by remember(stateKey) { mutableStateOf<String?>(null) }
     var busy by remember(stateKey) { mutableStateOf(false) }
+    var translationJob by remember(stateKey) { mutableStateOf<Job?>(null) }
     val format = UnityTextAssetPreviewTranslator.supportedFormat(preview)
 
     Column(
@@ -94,47 +111,70 @@ internal fun UnityTextAssetTranslationPreview(
         Button(
             onClick = {
                 busy = true
-                translatedText = null
+                translatedResult = null
                 message = null
-                scope.launch {
+                val job = scope.launch(start = CoroutineStart.LAZY) {
                     try {
                         val result = UnityTextAssetPreviewTranslator.translate(preview) { value ->
                             translator.translateEnglishToArabic(value)
                         }
                         if (result.translatedStrings > 0) {
-                            translatedText = result.text
+                            translatedResult = result
                             message = "تمت ترجمة ${result.translatedStrings} قيمة؛ تُركت ${result.skippedStrings} قيمة دون تغيير."
                         } else {
                             message = "لم تُقبل أي قيمة للترجمة؛ لم يتغير النص الأصلي."
                         }
                     } catch (cancelled: CancellationException) {
+                        message = "تم إلغاء الترجمة؛ النص الأصلي محفوظ دون تغيير."
                         throw cancelled
                     } catch (error: Exception) {
-                        message = error.message ?: "تعذرت ترجمة معاينة TextAsset."
+                        message = error.message ?: "تعذرت ترجمة TextAsset."
                     } finally {
                         busy = false
+                        translationJob = null
                     }
                 }
+                translationJob = job
+                job.start()
             },
-            enabled = modelReady && !preview.truncated && format != null && !busy,
+            enabled = modelReady && format != null && !busy,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(if (busy) "جارٍ ترجمة المعاينة..." else "ترجمة معاينة TextAsset")
+            Text(if (busy) "جارٍ ترجمة TextAsset كاملًا..." else "ترجمة TextAsset كاملًا")
+        }
+        if (busy) {
+            TextButton(
+                onClick = { translationJob?.cancel() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("إلغاء الترجمة")
+            }
         }
         if (!modelReady) {
             Text("جهّز نموذج العربية أولًا لاستخدام الترجمة المحلية.", color = ArabifyPalette.warningText, fontSize = 10.sp)
         } else if (preview.truncated) {
-            Text("لن نترجم معاينة مختصرة حتى لا ننتج ملفًا ناقصًا.", color = ArabifyPalette.warningText, fontSize = 10.sp)
+            Text(
+                "المعاينة المعروضة مختصرة، لكن الترجمة تستخدم النص الكامل المستخرج ضمن حدود الذاكرة.",
+                color = ArabifyPalette.warningText,
+                fontSize = 10.sp
+            )
         } else if (format == null) {
             Text("الصيغة غير معروفة؛ لن نترجم محتوى قد يكون ثنائيًا أو كودًا.", color = ArabifyPalette.warningText, fontSize = 10.sp)
         }
-        translatedText?.let { value ->
+        translatedResult?.let { result ->
             Text("معاينة الترجمة — لم تُكتب داخل اللعبة", color = ArabifyPalette.accent, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
-            Text(value, color = ArabifyPalette.textBody, fontSize = 11.sp, lineHeight = 17.sp)
+            Text(result.previewText, color = ArabifyPalette.textBody, fontSize = 11.sp, lineHeight = 17.sp)
+            if (result.previewTruncated) {
+                Text(
+                    "عرض الترجمة مختصر إلى أول 1200 محرف؛ زر النسخ ينقل النص الكامل.",
+                    color = ArabifyPalette.warningText,
+                    fontSize = 10.sp
+                )
+            }
             TextButton(
-                onClick = { clipboard.setText(AnnotatedString(value)) },
+                onClick = { clipboard.setText(AnnotatedString(result.text)) },
             ) {
-                Text("نسخ الترجمة")
+                Text("نسخ الترجمة كاملة")
             }
         }
         message?.let { Text(it, color = ArabifyPalette.textSecondary, fontSize = 10.sp) }
