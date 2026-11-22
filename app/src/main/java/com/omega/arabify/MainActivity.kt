@@ -242,6 +242,12 @@ private fun ArabifyApp(context: Context) {
      appendLine(item.path + " — " + item.status)
      item.details.forEach { appendLine("  " + it) }
     }
+    deep.textAssetPreviews.forEachIndexed { index, preview ->
+     appendLine("Unity TextAsset #${index + 1}: ${preview.name} — ${preview.serializedFilePath} — PathID ${preview.pathId}")
+     preview.pathName?.let { appendLine("Path: " + it) }
+     appendLine(preview.scriptPreview)
+     if(preview.truncated) appendLine("المعاينة مختصرة؛ النص الكامل أطول من الحد المعروض.")
+    }
     deep.notes.forEach { appendLine("ملاحظة فحص UnityFS: " + it) }
    }
    unityDeepError?.let { appendLine("خطأ فحص UnityFS: " + it) }
@@ -592,6 +598,23 @@ private fun ArabifyApp(context: Context) {
            deep.items.forEach { item ->
             Text(item.path + "\n" + item.status,color=ArabifyPalette.textBody,fontSize=10.sp)
             item.details.forEach { detail -> Text("• " + detail,color=ArabifyPalette.textSecondary,fontSize=10.sp) }
+           }
+           if(deep.textAssetPreviews.isNotEmpty()) {
+            Text("نصوص Unity المكتشفة — معاينة للقراءة فقط",color=ArabifyPalette.accent,fontWeight=FontWeight.Bold,fontSize=13.sp)
+            deep.textAssetPreviews.forEach { preview ->
+             Card(colors=CardDefaults.cardColors(containerColor=ArabifyPalette.surfaceElevated),shape=RoundedCornerShape(14.dp)) {
+              Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+               Text(preview.name.ifBlank { "TextAsset" },color=Color.White,fontWeight=FontWeight.SemiBold,fontSize=12.sp)
+               Text(preview.serializedFilePath + " • PathID " + preview.pathId,color=ArabifyPalette.textMuted,fontSize=9.sp)
+               preview.pathName?.let { Text("المسار داخل اللعبة: " + it,color=ArabifyPalette.textSecondary,fontSize=10.sp) }
+               Text(preview.scriptPreview,color=ArabifyPalette.textBody,fontSize=11.sp,lineHeight=17.sp)
+               if(preview.truncated) Text("تم اختصار المعاينة لحماية الذاكرة؛ لم يُعدّل النص الأصلي.",color=ArabifyPalette.warningText,fontSize=10.sp)
+               TextButton(onClick={clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(preview.scriptPreview))}) {
+                Text("نسخ المعاينة")
+               }
+              }
+             }
+            }
            }
            deep.notes.forEach { note -> Text("• " + note,color=ArabifyPalette.warningText,fontSize=10.sp) }
           }

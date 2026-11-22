@@ -23,7 +23,10 @@ internal data class UnityBundleDeepInspectionLimits(
     val maxTotalObjectRecords: Int = 250_000,
     val maxTextAssetsPerFile: Int = 100,
     val maxTextAssetObjectBytes: Long = 1024L * 1024L,
-    val maxTotalTextAssetBytes: Long = 8L * 1024L * 1024L
+    val maxTotalTextAssetBytes: Long = 8L * 1024L * 1024L,
+    val maxTextAssetPreviews: Int = 32,
+    val maxPreviewCodePointsPerTextAsset: Int = 1_200,
+    val maxTotalPreviewCodePoints: Int = 24_000
 )
 
 internal data class UnityBundleDeepInspectionItem(
@@ -34,6 +37,47 @@ internal data class UnityBundleDeepInspectionItem(
     val objectRecordsIndexed: Int = 0,
     val details: List<String> = emptyList()
 )
+
+internal data class UnityTextAssetPreview(
+    val bundlePath: String,
+    val serializedFilePath: String,
+    val pathId: Long,
+    val name: String,
+    val pathName: String?,
+    val scriptPreview: String,
+    val originalCodePointCount: Int,
+    val truncated: Boolean
+)
+
+internal fun createUnityTextAssetPreview(
+    bundlePath: String,
+    serializedFilePath: String,
+    pathId: Long,
+    content: UnityTextAssetContent,
+    maxCodePoints: Int
+): UnityTextAssetPreview? {
+    require(maxCodePoints in 1..8_192)
+    if (content.script.isBlank()) return null
+
+    fun prefixByCodePoints(value: String, limit: Int): String {
+        val count = value.codePointCount(0, value.length)
+        val end = value.offsetByCodePoints(0, minOf(count, limit))
+        return value.substring(0, end)
+    }
+
+    val originalCount = content.script.codePointCount(0, content.script.length)
+    val preview = prefixByCodePoints(content.script, maxCodePoints)
+    return UnityTextAssetPreview(
+        bundlePath = bundlePath,
+        serializedFilePath = serializedFilePath,
+        pathId = pathId,
+        name = prefixByCodePoints(content.name, 128),
+        pathName = content.pathName?.let { prefixByCodePoints(it, 512) },
+        scriptPreview = preview,
+        originalCodePointCount = originalCount,
+        truncated = originalCount > preview.codePointCount(0, preview.length)
+    )
+}
 
 internal data class UnityBundleDeepInspectionReport(
     val bundlesFound: Int,
@@ -46,7 +90,8 @@ internal data class UnityBundleDeepInspectionReport(
     val objectRecordsBudgetExhausted: Boolean = false,
     val bytesExtracted: Long = 0L,
     val textAssetsReadOnly: Int = 0,
-    val textAssetUtf8Candidates: Int = 0
+    val textAssetUtf8Candidates: Int = 0,
+    val textAssetPreviews: List<UnityTextAssetPreview> = emptyList()
 ) {
     val summary: String
         get() = "UnityFS: " + bundlesInspected + "/" + bundlesFound +
@@ -55,6 +100,7 @@ internal data class UnityBundleDeepInspectionReport(
             " • object records indexed: " + objectRecordsIndexed +
             " • TextAssets read-only: " + textAssetsReadOnly +
             " • UTF-8 text candidates: " + textAssetUtf8Candidates +
+            " • previews: " + textAssetPreviews.size +
             " • CAB bytes: " + bytesExtracted +
             (if (objectRecordsBudgetExhausted) " • تم بلوغ حد فهرسة الكائنات" else "") +
             " • قراءة فقط"
@@ -131,6 +177,8 @@ internal object UnityBundleDeepInspector {
         var objectRecordsIndexed = 0
         var remainingObjectRecords = limits.maxTotalObjectRecords
         var remainingTextAssetBytes = limits.maxTotalTextAssetBytes
+        var remainingPreviewCodePoints = limits.maxTotalPreviewCodePoints
+        val textAssetPreviews = mutableListOf<UnityTextAssetPreview>()
         var textAssetsReadOnly = 0
         var textAssetUtf8Candidates = 0
         var objectRecordsBudgetExhausted = false
@@ -431,6 +479,27 @@ internal object UnityBundleDeepInspector {
                                         textAssetsInFile++
                                         if (textAsset.script.isNotBlank()) {
                                             textCandidatesInFile++
+                                            if (textAssetPreviews.size < limits.maxTextAssetPreviews &&
+                                                remainingPreviewCodePoints > 0
+                                            ) {
+                                                val preview = createUnityTextAssetPreview(
+                                                    bundlePath = candidate.path,
+                                                    serializedFilePath = relativePath,
+                                                    pathId = textObject.pathId,
+                                                    content = textAsset,
+                                                    maxCodePoints = minOf(
+                                                        limits.maxPreviewCodePointsPerTextAsset,
+                                                        remainingPreviewCodePoints
+                                                    )
+                                                )
+                                                if (preview != null) {
+                                                    textAssetPreviews += preview
+                                                    remainingPreviewCodePoints -=
+                                                        preview.scriptPreview.codePointCount(
+                                                            0, preview.scriptPreview.length
+                                                        )
+                                                }
+                                            }
                                         }
                                     }
                             }
@@ -501,7 +570,8 @@ internal object UnityBundleDeepInspector {
             objectRecordsBudgetExhausted = objectRecordsBudgetExhausted,
             bytesExtracted = totalExtractedBytes,
             textAssetsReadOnly = textAssetsReadOnly,
-            textAssetUtf8Candidates = textAssetUtf8Candidates
+            textAssetUtf8Candidates = textAssetUtf8Candidates,
+            textAssetPreviews = textAssetPreviews
         )
     }
 
@@ -523,7 +593,10 @@ internal object UnityBundleDeepInspector {
             limits.maxTotalObjectRecords in 1..1_000_000 &&
             limits.maxTextAssetsPerFile in 1..1_000 &&
             limits.maxTextAssetObjectBytes in 1L..(4L * 1024L * 1024L) &&
-            limits.maxTotalTextAssetBytes in 0L..(64L * 1024L * 1024L)
+            limits.maxTotalTextAssetBytes in 0L..(64L * 1024L * 1024L) &&
+            limits.maxTextAssetPreviews in 0..200 &&
+            limits.maxPreviewCodePointsPerTextAsset in 1..8_192 &&
+            limits.maxTotalPreviewCodePoints in 0..64_000
 }
 
 internal fun requiredUnityScratchSpaceBytes(
