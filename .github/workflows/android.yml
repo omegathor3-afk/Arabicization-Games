@@ -38,7 +38,7 @@ jobs:
       TEXT_ASSET_FIXTURE="build/unitypy/unity-2019.4-textasset.bundle"
       TEXT_ASSET_URL="https://raw.githubusercontent.com/fatal10110/unity-asset-reader/226687d59a5ec3430af451cc0ada76ee950f3240/fixtures/bundles/editor/2019.4.41f2/lz4/shared"
       curl --fail --location --retry 3 --retry-all-errors "$TEXT_ASSET_URL" --output "$TEXT_ASSET_FIXTURE"
-      printf '%s  %s\\n' '3d5e40d3ba950e2df737c2e5f83a5e7fc3f5311e91b90929b37186c846e16115' "$TEXT_ASSET_FIXTURE" | sha256sum --check -
+      printf '%s  %s\n' '3d5e40d3ba950e2df737c2e5f83a5e7fc3f5311e91b90929b37186c846e16115' "$TEXT_ASSET_FIXTURE" | sha256sum --check -
       python3 -m py_compile .github/scripts/create-unitypy-textasset-oracle.py
       "$VENV/bin/python" .github/scripts/create-unitypy-textasset-oracle.py "$TEXT_ASSET_FIXTURE" build/unitypy/textasset-oracle.properties build/unitypy/textasset-oracle.json
       echo "ARABIFY_UNITYFS_FIXTURE=$GITHUB_WORKSPACE/build/unitypy/atlas_test" >> "$GITHUB_ENV"
