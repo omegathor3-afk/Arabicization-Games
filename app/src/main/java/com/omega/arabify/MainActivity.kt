@@ -612,6 +612,11 @@ private fun ArabifyApp(context: Context) {
                TextButton(onClick={clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(preview.scriptPreview))}) {
                 Text("نسخ المعاينة")
                }
+               UnityTextAssetTranslationPreview(
+                preview = preview,
+                translator = offlineTranslator,
+                modelReady = modelReady
+               )
               }
              }
             }
