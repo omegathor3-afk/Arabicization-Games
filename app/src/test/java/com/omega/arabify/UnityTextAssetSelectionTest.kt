@@ -25,7 +25,8 @@ class UnityTextAssetSelectionTest {
             objectInfo(1L, 49),
             objectInfo(2L, 28),
             objectInfo(3L, 49),
-            objectInfo(4L, 49)
+            objectInfo(4L, 49),
+            objectInfo(5L, 49)
         )
         var inspected = 0
 

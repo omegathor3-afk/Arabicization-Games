@@ -154,3 +154,16 @@ jobs:
       path: app/build/outputs/apk/debug/app-debug.apk
       if-no-files-found: error
       retention-days: 14
+   - name: Run Android lint
+     if: always()
+     run: gradle lintDebug
+   - name: Upload Android lint reports
+     if: always()
+     uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+     with:
+      name: arabify-lint-results
+      path: |
+       app/build/reports/lint-results-debug.html
+       app/build/reports/lint-results-debug.xml
+      if-no-files-found: ignore
+      retention-days: 14

@@ -613,12 +613,18 @@ internal object UnityBundleDeepInspector {
                 limits.maxTextAssetsPerFile + ")؛ توجد مرشحات إضافية لم تُقرأ."
         }
         if (textAssetReadLimitReached) {
-            notes += "تم بلوغ حد حجم TextAsset لكل كائن أو الميزانية الإجمالية (" +
+            notes += "تم بلوغ حد TextAsset لكل كائن (" +
+                limits.maxTextAssetObjectBytes + " bytes) أو الميزانية الإجمالية (" +
                 limits.maxTotalTextAssetBytes +
                 " bytes)؛ قد توجد مرشحات لم تُقرأ، والنتيجة ليست جردًا كاملًا."
         }
         if (textAssetPreviewLimitReached) {
-            notes += "تم بلوغ حد عدد المعاينات أو ميزانية أحرفها؛ قد توجد نصوص مقروءة لم تظهر في قائمة المعاينة."
+            notes += "تم بلوغ حد المعاينات (" + limits.maxTextAssetPreviews +
+                ") أو ميزانية أحرفها (" + limits.maxTotalPreviewCodePoints +
+                ")؛ قد توجد نصوص مقروءة لم تظهر في قائمة المعاينة."
+        }
+        if (serializedFilesParsed > 0 && textAssetsReadOnly == 0) {
+            notes += "لم يُقرأ أي TextAsset بنجاح؛ قد لا تكون موجودة، أو قد تكون TypeTrees غائبة أو المخططات غير مدعومة أو البيانات ثنائية/غير UTF-8. هذا لا يثبت عدم وجود نصوص داخل اللعبة."
         }
         return UnityBundleDeepInspectionReport(
             bundlesFound = inventory.bundleFiles,
