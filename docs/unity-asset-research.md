@@ -89,7 +89,22 @@ The current regression fixture deliberately has `typeTreeEnabled=false`; it veri
 
 ## Test provenance
 
-The current unit tests use generated minimal binary headers, synthetic UnityFS bundles, synthetic TextAsset payloads and synthetic ZIP fixtures. They are useful for parser invariants and regression checks, but **they are not real game samples**. The pinned UnityPy `atlas_test` fixture contains no TextAsset object (its class IDs are 687078895, 213, 142 and 28), so the new TextAsset reader is not yet validated against a real TextAsset from a Unity build. A legally redistributable TextAsset fixture and UnityPy differential oracle remain required before declaring real-file compatibility.
+The unit tests still use generated minimal binary headers, synthetic UnityFS bundles, synthetic TextAsset payloads and synthetic ZIP fixtures for parser invariants. In addition, CI now runs a **real Unity Editor-built TextAsset fixture** from the MIT-licensed `fatal10110/unity-asset-reader` repository (pinned commit `226687d59a5ec3430af451cc0ada76ee950f3240`). Its fixture documentation states that the bundle was generated from the maintainer's own Unity project, contains no third-party game data, and includes one UTF-8 TextAsset with a four-byte emoji. The 2019.4.41f2 fixture is downloaded only in CI, SHA-256 checked, and is never bundled into ARABIFY. The UnityPy oracle and Kotlin test compare the extracted CAB bytes, SerializedFile v21 header/type/object metadata, every TextAsset TypeTree node, object offsets, name, and exact script bytes.
+
+This closes the missing real-TextAsset test gate for **one TypeTree-enabled Unity 2019.4.41f2 editor fixture only**. It does not validate stripped Player builds, TextAssets containing arbitrary binary `.bytes` data, all Unity versions, external resource streams, or any write/repack path. The pinned UnityPy `atlas_test` fixture remains a separate UnityFS differential fixture and contains no TextAsset object.
+
+## Independent real TextAsset fixture (read-only)
+
+Android CI also downloads `fixtures/bundles/editor/2019.4.41f2/lz4/shared` from [fatal10110/unity-asset-reader](https://github.com/fatal10110/unity-asset-reader/tree/226687d59a5ec3430af451cc0ada76ee950f3240). The upstream fixture guide identifies this as a Unity 2019.4.41f2 Editor build (UnityFS v7, SerializedFile v21) containing one TextAsset. The repository is MIT-licensed; its fixture documentation says the editor-built samples come from the maintainer's own Unity project and contain no third-party game data. The fixture's `hello.txt` source is 58 bytes of UTF-8 and includes accented Latin, the euro sign, and a four-byte emoji.
+
+- Pinned source commit: `226687d59a5ec3430af451cc0ada76ee950f3240`
+- Fixture size: 1,219 bytes
+- Fixture SHA-256: `3d5e40d3ba950e2df737c2e5f83a5e7fc3f5311e91b90929b37186c846e16115`
+- CI-only; not copied into the APK or committed as game data.
+- UnityPy 1.24.2 generates an independent manifest. Kotlin must match extracted member paths/sizes/hashes, SerializedFile metadata, object offsets, the full TextAsset TypeTree node list, the TextAsset name, and the exact UTF-8 script bytes.
+- The test verifies that the original UnityFS file remains byte-identical after inspection.
+
+This is a parser-validation fixture, not a game-compatibility claim. It does not exercise a stripped Player build, binary `.bytes` payloads, every Unity version, or asset rewriting. Upstream provenance: [fixture inventory](https://github.com/fatal10110/unity-asset-reader/blob/226687d59a5ec3430af451cc0ada76ee950f3240/fixtures/README.md), [fixture build recipe](https://github.com/fatal10110/unity-asset-reader/blob/226687d59a5ec3430af451cc0ada76ee950f3240/fixtures/BUILDING.md), and [MIT license](https://github.com/fatal10110/unity-asset-reader/blob/226687d59a5ec3430af451cc0ada76ee950f3240/LICENSE).
 
 ## Independent UnityFS differential fixture
 
