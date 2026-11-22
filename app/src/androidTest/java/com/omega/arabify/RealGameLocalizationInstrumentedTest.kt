@@ -18,6 +18,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.io.RandomAccessFile
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
 
 /**
  * End-to-end package test against the separately installed, open-source
@@ -191,4 +195,137 @@ class RealGameLocalizationInstrumentedTest {
         }
         }
     }
+
+    @Test
+    fun signingPreservesStoredArscAlignmentAfterAssetRepack() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val gameInfo = context.packageManager.getApplicationInfo("com.joeld.minesweeper", 0)
+        val sourceApk = File(gameInfo.sourceDir)
+        val unsignedApk = File(context.cacheDir, "alignment-policy-unsigned.apk")
+        val signedApk = File(context.cacheDir, "alignment-policy-signed.apk")
+        unsignedApk.delete()
+        signedApk.delete()
+
+        try {
+            ZipFile(sourceApk).use { input ->
+                assertTrue("The real game fixture has no resources.arsc", input.getEntry("resources.arsc") != null)
+                val counting = CountingOutputStream(unsignedApk.outputStream().buffered())
+                ZipOutputStream(counting).use { output ->
+                    val entries = input.entries()
+                    while (entries.hasMoreElements()) {
+                        val entry = entries.nextElement()
+                        if (isOldSignatureEntry(entry.name)) continue
+                        val target = ApkZipEntryPolicy.create(entry, null, counting.bytesWritten)
+                        output.putNextEntry(target)
+                        if (!entry.isDirectory) {
+                            input.getInputStream(entry).use { it.copyTo(output) }
+                        }
+                        output.closeEntry()
+                    }
+                }
+            }
+
+            ApkSigningService.signAndVerify(context, unsignedApk, signedApk)
+            assertTrue("Signed alignment fixture was not created", signedApk.isFile && signedApk.length() > 0L)
+            ZipFile(signedApk).use { output ->
+                val resources = requireNotNull(output.getEntry("resources.arsc"))
+                assertEquals("resources.arsc must remain uncompressed after signing", ZipEntry.STORED, resources.method)
+            }
+            assertEquals(
+                "ApkSigner must preserve the four-byte resources.arsc data alignment",
+                0L,
+                localDataOffset(signedApk, "resources.arsc") % 4L
+            )
+        } finally {
+            unsignedApk.delete()
+            signedApk.delete()
+        }
+    }
+
+    private fun isOldSignatureEntry(name: String): Boolean {
+        val normalized = name.uppercase(java.util.Locale.ROOT)
+        if (!normalized.startsWith("META-INF/")) return false
+        val fileName = normalized.substringAfterLast('/')
+        return fileName == "MANIFEST.MF" ||
+            fileName.endsWith(".SF") ||
+            fileName.endsWith(".RSA") ||
+            fileName.endsWith(".DSA") ||
+            fileName.endsWith(".EC")
+    }
+
+    private fun localDataOffset(apk: File, wantedName: String): Long {
+        RandomAccessFile(apk, "r").use { input ->
+            val lowerBound = maxOf(0L, input.length() - 65_557L)
+            var endOfCentralDirectory = -1L
+            var position = input.length() - 22L
+            while (position >= lowerBound) {
+                input.seek(position)
+                if (readLittleEndianInt(input) == 0x06054B50L) {
+                    input.seek(position + 20L)
+                    val commentLength = readLittleEndianShort(input)
+                    if (position + 22L + commentLength == input.length()) {
+                        endOfCentralDirectory = position
+                        break
+                    }
+                }
+                position--
+            }
+            check(endOfCentralDirectory >= 0L) { "ZIP end-of-central-directory record was not found" }
+
+            input.seek(endOfCentralDirectory + 10L)
+            val entryCount = readLittleEndianShort(input)
+            input.seek(endOfCentralDirectory + 16L)
+            val centralDirectoryOffset = readLittleEndianInt(input)
+            check(entryCount != 0xFFFF && centralDirectoryOffset != 0xFFFF_FFFFL) {
+                "ZIP64 APK fixture is outside this test's bounded parser"
+            }
+
+            var cursor = centralDirectoryOffset
+            repeat(entryCount) {
+                input.seek(cursor)
+                check(readLittleEndianInt(input) == 0x02014B50L) {
+                    "Malformed ZIP central-directory record"
+                }
+                input.seek(cursor + 28L)
+                val nameLength = readLittleEndianShort(input)
+                val extraLength = readLittleEndianShort(input)
+                val commentLength = readLittleEndianShort(input)
+                input.seek(cursor + 42L)
+                val localHeaderOffset = readLittleEndianInt(input)
+                input.seek(cursor + 46L)
+                val nameBytes = ByteArray(nameLength)
+                input.readFully(nameBytes)
+                val name = String(nameBytes, Charsets.UTF_8)
+                if (name == wantedName) {
+                    input.seek(localHeaderOffset + 26L)
+                    val localNameLength = readLittleEndianShort(input)
+                    val localExtraLength = readLittleEndianShort(input)
+                    return localHeaderOffset + 30L + localNameLength + localExtraLength
+                }
+                cursor += 46L + nameLength + extraLength + commentLength
+            }
+        }
+        error("ZIP local header was not found for the requested entry")
+    }
+
+    private fun readLittleEndianShort(input: RandomAccessFile): Int {
+        val low = input.read()
+        val high = input.read()
+        check(low >= 0 && high >= 0) { "Unexpected end of ZIP file" }
+        return low or (high shl 8)
+    }
+
+    private fun readLittleEndianInt(input: RandomAccessFile): Long {
+        val b0 = input.read()
+        val b1 = input.read()
+        val b2 = input.read()
+        val b3 = input.read()
+        check(b0 >= 0 && b1 >= 0 && b2 >= 0 && b3 >= 0) { "Unexpected end of ZIP file" }
+        return b0.toLong() or
+            (b1.toLong() shl 8) or
+            (b2.toLong() shl 16) or
+            (b3.toLong() shl 24)
+    }
+
 }
