@@ -7,6 +7,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -22,6 +23,84 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+
+internal object UnityTextAssetPreviewInputPolicy {
+    const val MAX_SOURCE_UTF16_CODE_UNITS = 1_048_576
+    const val MAX_TEXT_LINES = 10_000
+    const val MAX_JSON_DEPTH = 64
+    const val MAX_JSON_DELIMITERS = 20_000
+    const val MAX_JSON_STRING_TOKENS = 20_000
+    const val MAX_TRANSLATION_CANDIDATES = 500
+
+    fun validate(format: String, source: String) {
+        require(source.length <= MAX_SOURCE_UTF16_CODE_UNITS) {
+            "TextAsset يتجاوز حد حجم النص المسموح للمعاينة."
+        }
+        if (format == "json") validateJson(source) else validateLineCount(source)
+    }
+
+    private fun validateLineCount(source: String) {
+        var lines = 1
+        for (character in source) {
+            if (character == '\n') {
+                lines++
+                require(lines <= MAX_TEXT_LINES) {
+                    "TextAsset يحتوي على أسطر أكثر من الحد الآمن للترجمة."
+                }
+            }
+        }
+    }
+
+    private fun validateJson(source: String) {
+        var depth = 0
+        var delimiters = 0
+        var stringTokens = 0
+        var inString = false
+        var escaped = false
+
+        for (character in source) {
+            if (inString) {
+                if (escaped) {
+                    escaped = false
+                } else {
+                    when (character) {
+                        '\\' -> escaped = true
+                        '"' -> inString = false
+                    }
+                }
+                continue
+            }
+
+            when (character) {
+                '"' -> {
+                    inString = true
+                    stringTokens++
+                    require(stringTokens <= MAX_JSON_STRING_TOKENS) {
+                        "JSON يحتوي على عدد كبير جدًا من النصوص."
+                    }
+                }
+                '{', '[' -> {
+                    depth++
+                    delimiters++
+                    require(depth <= MAX_JSON_DEPTH) {
+                        "JSON متداخل بعمق يتجاوز الحد الآمن."
+                    }
+                }
+                '}', ']' -> {
+                    depth--
+                    delimiters++
+                    require(depth >= 0) { "بنية JSON غير متوازنة." }
+                }
+                ',', ':' -> delimiters++
+            }
+            require(delimiters <= MAX_JSON_DELIMITERS) {
+                "JSON يحتوي على عناصر أكثر من الحد الآمن للترجمة."
+            }
+        }
+
+        require(!inString && depth == 0) { "بنية JSON غير مكتملة." }
+    }
+}
 
 internal data class UnityTextAssetTranslationResult(
     /** Complete translated source; never silently replaced by its display preview. */
@@ -61,9 +140,11 @@ internal object UnityTextAssetPreviewTranslator {
         }
         val format = supportedFormat(preview)
             ?: error("صيغة TextAsset غير معروفة؛ الترجمة التلقائية متاحة فقط لـ JSON وTXT وProperties وStrings.")
+        UnityTextAssetPreviewInputPolicy.validate(format, preview.fullScript)
         val transformed = AssetTextTransformer.transform(
             path = "textasset.$format",
             source = preview.fullScript,
+            maxTranslationCandidates = UnityTextAssetPreviewInputPolicy.MAX_TRANSLATION_CANDIDATES,
             translate = translate
         )
         val codePointCount = transformed.text.codePointCount(0, transformed.text.length)
@@ -103,6 +184,9 @@ internal fun UnityTextAssetTranslationPreview(
     var busy by remember(stateKey) { mutableStateOf(false) }
     var translationJob by remember(stateKey) { mutableStateOf<Job?>(null) }
     val format = UnityTextAssetPreviewTranslator.supportedFormat(preview)
+    DisposableEffect(stateKey, translationJob) {
+        onDispose { translationJob?.cancel() }
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -152,14 +236,14 @@ internal fun UnityTextAssetTranslationPreview(
         }
         if (!modelReady) {
             Text("جهّز نموذج العربية أولًا لاستخدام الترجمة المحلية.", color = ArabifyPalette.warningText, fontSize = 10.sp)
+        } else if (format == null) {
+            Text("الصيغة غير معروفة؛ لن نترجم محتوى قد يكون ثنائيًا أو كودًا.", color = ArabifyPalette.warningText, fontSize = 10.sp)
         } else if (preview.truncated) {
             Text(
-                "المعاينة المعروضة مختصرة، لكن الترجمة تستخدم النص الكامل المستخرج ضمن حدود الذاكرة.",
+                "المعاينة مختصرة، لكن الترجمة تستخدم النص الكامل ضمن الحدود الآمنة: 500 قيمة كحد أقصى لكل TextAsset.",
                 color = ArabifyPalette.warningText,
                 fontSize = 10.sp
             )
-        } else if (format == null) {
-            Text("الصيغة غير معروفة؛ لن نترجم محتوى قد يكون ثنائيًا أو كودًا.", color = ArabifyPalette.warningText, fontSize = 10.sp)
         }
         translatedResult?.let { result ->
             Text("معاينة الترجمة — لم تُكتب داخل اللعبة", color = ArabifyPalette.accent, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)

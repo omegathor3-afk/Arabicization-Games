@@ -29,7 +29,7 @@ class UnityTextAssetTranslationPreviewTest {
 
     @Test
     fun translatesJsonValuesWithoutChangingKeysOrFormatPlaceholders() = runBlocking {
-        val source = """{"start":"Start game %1$s","count":4}"""
+        val source = """{"start":"Start game %1${'$'}s","count":4}"""
         val result = UnityTextAssetPreviewTranslator.translate(
             preview(source, pathName = "Assets/Localization/menu.json")
         ) { value ->
@@ -37,7 +37,7 @@ class UnityTextAssetTranslationPreviewTest {
         }
 
         val json = JSONObject(result.text)
-        assertEquals("ابدأ اللعبة %1$s", json.getString("start"))
+        assertEquals("ابدأ اللعبة %1${'$'}s", json.getString("start"))
         assertEquals(4, json.getInt("count"))
         assertEquals(1, result.translatedStrings)
         assertEquals(0, result.skippedStrings)
@@ -88,6 +88,45 @@ class UnityTextAssetTranslationPreviewTest {
         )
         assertEquals(result.text, result.previewText)
         assertEquals(2, result.translatedStrings)
+    }
+
+    @Test
+    fun rejectsExcessiveTextLinesBeforeAllocatingTheLineList() {
+        val source = "A\n".repeat(UnityTextAssetPreviewInputPolicy.MAX_TEXT_LINES + 1)
+        var translatorCalled = false
+        val error = runCatching {
+            runBlocking {
+                UnityTextAssetPreviewTranslator.translate(
+                    preview("A", fullScript = source)
+                ) {
+                    translatorCalled = true
+                    "نص"
+                }
+            }
+        }.exceptionOrNull()
+
+        assertTrue(error is IllegalArgumentException)
+        assertFalse(translatorCalled)
+    }
+
+    @Test
+    fun rejectsExcessiveJsonNestingBeforeParsing() {
+        val depth = UnityTextAssetPreviewInputPolicy.MAX_JSON_DEPTH + 1
+        val source = "[".repeat(depth) + "0" + "]".repeat(depth)
+        var translatorCalled = false
+        val error = runCatching {
+            runBlocking {
+                UnityTextAssetPreviewTranslator.translate(
+                    preview(source, pathName = "Assets/deep.json")
+                ) {
+                    translatorCalled = true
+                    "نص"
+                }
+            }
+        }.exceptionOrNull()
+
+        assertTrue(error is IllegalArgumentException)
+        assertFalse(translatorCalled)
     }
 
     @Test

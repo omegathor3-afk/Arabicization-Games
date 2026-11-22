@@ -22,11 +22,20 @@ internal data class AssetLocalizationReport(
 internal object AssetTextTransformer {
  data class Result(val text:String,val translated:Int,val skipped:Int)
 
- suspend fun transform(path:String, source:String, translate:suspend (String)->String):Result {
+ suspend fun transform(
+  path:String,
+  source:String,
+  maxTranslationCandidates:Int=Int.MAX_VALUE,
+  translate:suspend (String)->String
+ ):Result {
+  require(maxTranslationCandidates>=0) { "حد الترجمات غير صالح." }
   var translated=0
   var skipped=0
+  var translationCandidates=0
   suspend fun tx(value:String):String {
    if(!looksTranslatable(value)){skipped++;return value}
+   if(translationCandidates>=maxTranslationCandidates){skipped++;return value}
+   translationCandidates++
    val protected=PlaceholderProtector.protect(value)
    return try {
     val result=translate(protected.text)

@@ -72,6 +72,23 @@ class AssetTextTransformerTest {
  }
 
 
+ @Test fun respectsTranslationCandidateLimitAndLeavesRemainingSourceUnchanged()=runBlocking {
+  val source="First line\nSecond line"
+  var calls=0
+  val result=AssetTextTransformer.transform(
+   path="assets/limited.txt",
+   source=source,
+   maxTranslationCandidates=1
+  ) {
+   calls++
+   "سطر مترجم"
+  }
+  assertEquals(1,calls)
+  assertEquals("سطر مترجم\nSecond line",result.text)
+  assertEquals(1,result.translated)
+  assertEquals(1,result.skipped)
+ }
+
  @Test fun jsonTranslationPropagatesCoroutineCancellationInsteadOfSkippingIt() {
   val observed=runCatching {
    runBlocking {

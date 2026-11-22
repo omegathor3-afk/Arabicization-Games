@@ -11,7 +11,7 @@ This increment adds a local translation preview for complete decoded TextAsset s
 - Java-style Properties
 - Apple `.strings`
 
-The complete decoded script is retained in memory only for the already-bounded preview candidates. The inspector caps each object at 1 MiB, total TextAsset reads at 8 MiB, the number of preview objects at 32, and the visible source preview at 1,200 Unicode code points. Translation uses the complete retained script, not the visible snippet. The translated result is also displayed as a bounded preview; the user can copy the complete translated text.
+The complete decoded script is retained in memory only for the already-bounded preview candidates. The inspector caps each object at 1 MiB, total TextAsset reads at 8 MiB, the number of preview objects at 32, and the visible source preview at 1,200 Unicode code points. Translation uses the complete retained script, not the visible snippet. A TextAsset is additionally limited to 500 translation candidates, 10,000 text lines, JSON nesting depth 64, and 20,000 JSON delimiters/string tokens; excess input is rejected or left unchanged before expensive parsing/translation. The translated result is also displayed as a bounded preview; the user can copy the complete translated text.
 
 The translator reuses the existing `AssetTextTransformer`, placeholder protection, and translation quality gate. JSON keys and non-string values are not translated; TXT comments and Properties/Strings syntax are preserved by the existing transformer. Values rejected by the quality gate remain unchanged.
 
