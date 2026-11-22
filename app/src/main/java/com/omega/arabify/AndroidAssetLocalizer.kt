@@ -25,7 +25,13 @@ internal object AssetTextTransformer {
  suspend fun transform(
   path:String,
   source:String,
-  maxTranslationCandidates:Int=Int.MAX_VALUE,
+  translate:suspend (String)->String
+ ):Result = transform(path,source,Int.MAX_VALUE,translate)
+
+ suspend fun transform(
+  path:String,
+  source:String,
+  maxTranslationCandidates:Int,
   translate:suspend (String)->String
  ):Result {
   require(maxTranslationCandidates>=0) { "حد الترجمات غير صالح." }
