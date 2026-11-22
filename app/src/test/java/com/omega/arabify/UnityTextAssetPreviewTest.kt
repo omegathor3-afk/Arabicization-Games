@@ -46,10 +46,12 @@ class UnityTextAssetPreviewTest {
             maxCodePoints = 20
         )
 
-        assertEquals("مرحبا 123", preview?.scriptPreview)
-        assertFalse(preview?.truncated ?: true)
-        assertEquals(128, preview?.name?.codePointCount(0, preview.name.length))
-        assertEquals(512, preview?.pathName?.codePointCount(0, preview.pathName!!.length))
+        val result = requireNotNull(preview)
+        assertEquals("مرحبا 123", result.scriptPreview)
+        assertFalse(result.truncated)
+        assertEquals(128, result.name.codePointCount(0, result.name.length))
+        val displayedPath = requireNotNull(result.pathName)
+        assertEquals(512, displayedPath.codePointCount(0, displayedPath.length))
     }
 
     @Test
