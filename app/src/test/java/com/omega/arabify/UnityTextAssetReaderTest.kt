@@ -56,10 +56,13 @@ class UnityTextAssetReaderTest {
         fieldName = fieldName
     )
 
-    private fun payload(vararg strings: ByteArray): ByteArray {
+    private fun payload(
+        vararg strings: ByteArray,
+        byteOrder: ByteOrder = ByteOrder.LITTLE_ENDIAN
+    ): ByteArray {
         val output = ByteArrayOutputStream()
         strings.forEach { bytes ->
-            val length = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
+            val length = ByteBuffer.allocate(4).order(byteOrder)
                 .putInt(bytes.size).array()
             output.write(length)
             output.write(bytes)
@@ -73,14 +76,18 @@ class UnityTextAssetReaderTest {
         script: ByteArray = "{\"start\":\"Hello\"}".toByteArray(Charsets.UTF_8),
         includePathName: Boolean = false,
         classId: Int = 49,
-        unresolved: Int = 0
+        unresolved: Int = 0,
+        endian: String = "little"
     ): Fixture {
         val strings = if (includePathName) {
             arrayOf(name, script, "Assets/Strings.txt".toByteArray(Charsets.UTF_8))
         } else {
             arrayOf(name, script)
         }
-        val payload = payload(*strings)
+        val payload = payload(
+            *strings,
+            byteOrder = if (endian == "little") ByteOrder.LITTLE_ENDIAN else ByteOrder.BIG_ENDIAN
+        )
         val dataOffset = 128L
         val fileBytes = ByteArray(dataOffset.toInt()) + payload
         val file = File.createTempFile("arabify-textasset-", ".assets")
@@ -105,7 +112,7 @@ class UnityTextAssetReaderTest {
             fileSize = fileBytes.size.toLong(),
             formatVersion = 22,
             dataOffset = dataOffset,
-            endian = "little",
+            endian = endian,
             headerSize = 48
         )
         val typeTable = UnitySerializedTypeTable(listOf(record), bytesConsumed = 0)
@@ -134,6 +141,19 @@ class UnityTextAssetReaderTest {
             assertEquals("{\"start\":\"Hello\"}", result?.script)
             assertNull(result?.pathName)
             assertTrue(original.contentEquals(fixture.file.readBytes()))
+        } finally {
+            fixture.file.delete()
+        }
+    }
+
+    @Test fun readsBigEndianPayloadUsingSerializedFileEndianness() {
+        val fixture = fixture(endian = "big")
+        try {
+            val result = UnityTextAssetReader.read(
+                fixture.file, fixture.header, fixture.typeTable, fixture.objectInfo
+            )
+            assertEquals("GameStrings", result?.name)
+            assertEquals("{\"start\":\"Hello\"}", result?.script)
         } finally {
             fixture.file.delete()
         }
@@ -218,6 +238,74 @@ class UnityTextAssetReaderTest {
             )
             assertNull(UnityTextAssetReader.read(
                 fixture.file, fixture.header, fixture.typeTable, outside
+            ))
+        } finally {
+            fixture.file.delete()
+        }
+    }
+
+    @Test fun rejectsUnsupportedSerializedHeaderVersionsAndMetadataOverlap() {
+        val fixture = fixture()
+        try {
+            assertNull(UnityTextAssetReader.read(
+                fixture.file,
+                fixture.header.copy(formatVersion = 8),
+                fixture.typeTable,
+                fixture.objectInfo
+            ))
+            assertNull(UnityTextAssetReader.read(
+                fixture.file,
+                fixture.header.copy(formatVersion = 101),
+                fixture.typeTable,
+                fixture.objectInfo
+            ))
+            assertNull(UnityTextAssetReader.read(
+                fixture.file,
+                fixture.header.copy(metadataSize = 0L),
+                fixture.typeTable,
+                fixture.objectInfo
+            ))
+
+            val overlappingDataOffset =
+                fixture.header.headerSize.toLong() + fixture.header.metadataSize - 1L
+            assertNull(UnityTextAssetReader.read(
+                fixture.file,
+                fixture.header.copy(dataOffset = overlappingDataOffset),
+                fixture.typeTable,
+                fixture.objectInfo.copy(absoluteDataOffset = overlappingDataOffset)
+            ))
+        } finally {
+            fixture.file.delete()
+        }
+    }
+
+    @Test fun rejectsUnexpectedTypeTreeByteSizesForStringNodes() {
+        val fixture = fixture()
+        try {
+            val originalNodes = fixture.typeTable.records.single().typeTree!!.nodes
+
+            val invalidStringNodes = originalNodes.toMutableList()
+            invalidStringNodes[1] = invalidStringNodes[1].copy(byteSize = 0)
+            val invalidStringRecord = fixture.typeTable.records.single().copy(
+                typeTree = UnityTypeTree(invalidStringNodes, 0, 0)
+            )
+            assertNull(UnityTextAssetReader.read(
+                fixture.file,
+                fixture.header,
+                fixture.typeTable.copy(records = listOf(invalidStringRecord)),
+                fixture.objectInfo
+            ))
+
+            val invalidArrayNodes = originalNodes.toMutableList()
+            invalidArrayNodes[2] = invalidArrayNodes[2].copy(byteSize = 4)
+            val invalidArrayRecord = fixture.typeTable.records.single().copy(
+                typeTree = UnityTypeTree(invalidArrayNodes, 0, 0)
+            )
+            assertNull(UnityTextAssetReader.read(
+                fixture.file,
+                fixture.header,
+                fixture.typeTable.copy(records = listOf(invalidArrayRecord)),
+                fixture.objectInfo
             ))
         } finally {
             fixture.file.delete()
