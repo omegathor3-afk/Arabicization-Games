@@ -77,21 +77,62 @@ class ApkZipEntryPolicyTest {
     }
 
     @Test
-    fun existingSixteenKiBAlignmentIsPreserved() {
+    fun existingSixteenKiBAlignmentIsPreservedInWrittenZip() {
+        val output = File.createTempFile("arabify-zip-16k-", ".apk")
+        val bytes = byteArrayOf(7, 8, 9)
         val entry = ZipEntry("lib/arm64-v8a/libsample.so").apply {
             method = ZipEntry.STORED
-            size = 0L
-            compressedSize = 0L
-            crc = 0L
-            extra = byteArrayOf(
-                0x35.toByte(), 0xD9.toByte(), 0x02, 0x00, 0x00, 0x40
-            )
+            size = bytes.size.toLong()
+            compressedSize = size
+            crc = crc32(bytes)
+            extra = byteArrayOf(0x35.toByte(), 0xD9.toByte(), 0x02, 0x00, 0x00, 0x40)
         }
 
-        val result = ApkZipEntryPolicy.create(entry, null, 13L)
-        val extra = requireNotNull(result.extra)
-        assertEquals(0xD935, unsignedShort(extra, 0))
-        assertEquals(16_384, unsignedShort(extra, 4))
+        try {
+            writeSingleEntry(output, entry, bytes)
+            assertEquals(0L, localDataOffset(output, entry.name) % 16_384L)
+            ZipFile(output).use { zip ->
+                val result = requireNotNull(zip.getEntry(entry.name))
+                assertEquals(ZipEntry.STORED, result.method)
+                assertArrayEquals(bytes, zip.getInputStream(result).use { it.readBytes() })
+            }
+        } finally {
+            output.delete()
+        }
+    }
+
+    @Test
+    fun outOfRangeTimestampDoesNotInjectUnaccountedExtraBytes() {
+        val output = File.createTempFile("arabify-zip-time-", ".apk")
+        val bytes = byteArrayOf(1, 2, 3)
+        val entry = ZipEntry("resources.arsc").apply {
+            method = ZipEntry.STORED
+            size = bytes.size.toLong()
+            compressedSize = size
+            crc = crc32(bytes)
+            time = 0L
+        }
+
+        try {
+            writeSingleEntry(output, entry, bytes)
+            assertEquals(0L, localDataOffset(output, entry.name) % 4L)
+            ZipFile(output).use { zip ->
+                val result = requireNotNull(zip.getEntry(entry.name))
+                assertEquals(ZipEntry.STORED, result.method)
+                assertArrayEquals(bytes, zip.getInputStream(result).use { it.readBytes() })
+            }
+        } finally {
+            output.delete()
+        }
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsTruncatedExtraFieldInsteadOfCopyingIt() {
+        val entry = ZipEntry("resources.arsc").apply {
+            method = ZipEntry.DEFLATED
+            extra = byteArrayOf(0x34, 0x12, 0x05, 0x00, 0x01)
+        }
+        ApkZipEntryPolicy.create(entry, null, 0L)
     }
 
     private fun repack(
@@ -122,6 +163,16 @@ class ApkZipEntryPolicyTest {
                     output.closeEntry()
                 }
             }
+        }
+    }
+
+    private fun writeSingleEntry(file: File, entry: ZipEntry, bytes: ByteArray) {
+        val counting = CountingOutputStream(file.outputStream().buffered())
+        ZipOutputStream(counting).use { output ->
+            val target = ApkZipEntryPolicy.create(entry, null, counting.bytesWritten)
+            output.putNextEntry(target)
+            output.write(bytes)
+            output.closeEntry()
         }
     }
 

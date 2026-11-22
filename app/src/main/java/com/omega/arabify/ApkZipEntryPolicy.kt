@@ -28,12 +28,17 @@ internal class CountingOutputStream(output: OutputStream) : FilterOutputStream(o
 internal object ApkZipEntryPolicy {
     private const val ALIGNMENT_EXTRA_ID = 0xD935
     private const val ZIP64_EXTRA_ID = 0x0001
+    private const val EXTENDED_TIMESTAMP_EXTRA_ID = 0x5455
     private const val MIN_ALIGNMENT = 4
     private const val MAX_ALIGNMENT = 16_384
+    private const val DOS_SAFE_MIN_MILLIS = 315_662_400_000L
+    private const val DOS_SAFE_MAX_MILLIS = 4_354_689_600_000L
+    private const val FALLBACK_DOS_TIME_MILLIS = 1_230_768_000_000L
 
     private data class FilteredExtra(
         val bytes: ByteArray,
-        val alignment: Int?
+        val alignment: Int?,
+        val hasExtendedTimestamp: Boolean
     )
 
     /**
@@ -60,8 +65,25 @@ internal object ApkZipEntryPolicy {
         }
 
         val filteredExtra = filterExtraFields(source.extra ?: ByteArray(0))
+        var outputExtra = filteredExtra.bytes
+        val sourceTime = source.time
         val output = ZipEntry(source.name)
-        if (source.time >= 0L) output.time = source.time
+        if (sourceTime != -1L) {
+            if (sourceTime in DOS_SAFE_MIN_MILLIS..DOS_SAFE_MAX_MILLIS) {
+                output.time = sourceTime
+            } else {
+                // Avoid ZipOutputStream silently adding a timestamp extra field
+                // after the alignment offset has already been calculated.
+                output.time = FALLBACK_DOS_TIME_MILLIS
+                val epochSeconds = sourceTime / 1_000L
+                if (!filteredExtra.hasExtendedTimestamp &&
+                    sourceTime >= 0L &&
+                    epochSeconds <= 0xFFFF_FFFFL
+                ) {
+                    outputExtra = appendExtendedTimestamp(outputExtra, epochSeconds)
+                }
+            }
+        }
         source.comment?.let { output.comment = it }
         output.method = outputMethod
 
@@ -71,7 +93,7 @@ internal object ApkZipEntryPolicy {
                 output.compressedSize = 0L
                 output.crc = 0L
             }
-            if (filteredExtra.bytes.isNotEmpty()) output.extra = filteredExtra.bytes
+            if (outputExtra.isNotEmpty()) output.extra = outputExtra
             return output
         }
 
@@ -87,13 +109,13 @@ internal object ApkZipEntryPolicy {
 
             val alignment = maxOf(MIN_ALIGNMENT, filteredExtra.alignment ?: MIN_ALIGNMENT)
             output.extra = appendAlignmentField(
-                filteredExtra.bytes,
+                outputExtra,
                 source.name,
                 localHeaderOffset,
                 alignment
             )
-        } else if (filteredExtra.bytes.isNotEmpty()) {
-            output.extra = filteredExtra.bytes
+        } else if (outputExtra.isNotEmpty()) {
+            output.extra = outputExtra
         }
 
         return output
@@ -106,6 +128,7 @@ internal object ApkZipEntryPolicy {
     private fun filterExtraFields(extra: ByteArray): FilteredExtra {
         val retained = ByteArrayOutputStream(extra.size)
         var alignment: Int? = null
+        var hasExtendedTimestamp = false
         var offset = 0
 
         while (offset < extra.size) {
@@ -130,13 +153,32 @@ internal object ApkZipEntryPolicy {
                     }
                     alignment = declaredAlignment
                 }
+                id == EXTENDED_TIMESTAMP_EXTRA_ID -> {
+                    hasExtendedTimestamp = true
+                    retained.write(extra, offset, 4 + dataSize)
+                }
                 id == ZIP64_EXTRA_ID || (id == 0 && dataSize == 0) -> Unit
                 else -> retained.write(extra, offset, 4 + dataSize)
             }
             offset += 4 + dataSize
         }
 
-        return FilteredExtra(retained.toByteArray(), alignment)
+        return FilteredExtra(retained.toByteArray(), alignment, hasExtendedTimestamp)
+    }
+
+    private fun appendExtendedTimestamp(originalExtra: ByteArray, epochSeconds: Long): ByteArray {
+        val resultSize = Math.addExact(originalExtra.size, 9)
+        require(resultSize <= 0xFFFF) { "ZIP extra fields exceed the format limit" }
+        val result = ByteArray(resultSize)
+        originalExtra.copyInto(result)
+        val fieldOffset = originalExtra.size
+        writeUnsignedShort(result, fieldOffset, EXTENDED_TIMESTAMP_EXTRA_ID)
+        writeUnsignedShort(result, fieldOffset + 2, 5)
+        result[fieldOffset + 4] = 0x01
+        for (index in 0 until 4) {
+            result[fieldOffset + 5 + index] = (epochSeconds ushr (index * 8)).toByte()
+        }
+        return result
     }
 
     private fun appendAlignmentField(
