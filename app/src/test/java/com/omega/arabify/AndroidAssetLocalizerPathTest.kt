@@ -65,7 +65,7 @@ class AndroidAssetLocalizerPathTest {
         assertFalse(guard.register("assets\\bin\\Data\\StreamingAssets\\dialogue.txt", "assets/bin/Data/StreamingAssets/dialogue.txt"))
         assertTrue(guard.register("assets/bin/Data/StreamingAssets/Dialogue.txt", "assets/bin/Data/StreamingAssets/Dialogue.txt"))
         assertFalse(guard.register(""))
-        assertFalse(guard.register("assets/\\u0000/dialogue.txt"))
+        assertFalse(guard.register("assets/" + 0.toChar() + "/dialogue.txt"))
     }
 
     @Test fun boundedArchiveReadAcceptsExactLimit() {

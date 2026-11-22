@@ -129,7 +129,7 @@ internal class ArchiveEntryNameGuard {
  private val normalizedCandidatePaths = HashSet<String>()
 
  fun register(name: String, normalizedCandidatePath: String? = null): Boolean {
-  if (name.isEmpty() || name.contains('\\u0000') || !entryNames.add(name)) return false
+  if (name.isEmpty() || name.indexOf(0.toChar()) >= 0 || !entryNames.add(name)) return false
   return normalizedCandidatePath == null || normalizedCandidatePaths.add(normalizedCandidatePath)
  }
 }
