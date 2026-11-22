@@ -252,7 +252,8 @@ internal object AndroidAssetLocalizer {
 
    require(translatedStrings>0){"لم يتم العثور على نصوص قابلة للترجمة في ملفات JSON/TXT/Properties/Strings المدعومة."}
    unsignedApk.parentFile?.mkdirs()
-   ZipOutputStream(unsignedApk.outputStream().buffered()).use { out ->
+   val countingOutput = CountingOutputStream(unsignedApk.outputStream().buffered())
+   ZipOutputStream(countingOutput).use { out ->
     val all=zip.entries()
     var copiedArchiveBytes=0L
     var writtenEntries=0
@@ -261,13 +262,10 @@ internal object AndroidAssetLocalizer {
      writtenEntries++
      require(writtenEntries<=MAX_ARCHIVE_ENTRIES){"عدد عناصر APK تغير أثناء إعادة البناء."}
      if(isOldSignature(entry.name))continue
-     val target=ZipEntry(entry.name).apply{
-      time=entry.time
-      comment=entry.comment
-     }
+     val replacement=transformed[entry.name]
+     val target=ApkZipEntryPolicy.create(entry,replacement,countingOutput.bytesWritten)
      out.putNextEntry(target)
      if(!entry.isDirectory){
-      val replacement=transformed[entry.name]
       val remaining=MAX_TOTAL_REBUILT_BYTES-copiedArchiveBytes
       require(remaining>=0L){"الحجم المفكوك للأرشيف تجاوز حد إعادة البناء الآمن."}
       val entryBudget=minOf(MAX_SINGLE_REBUILT_ENTRY_BYTES,remaining)
