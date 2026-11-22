@@ -58,6 +58,16 @@ class AndroidAssetLocalizerPathTest {
         ))
     }
 
+    @Test fun rejectsDuplicateAndAmbiguousArchiveEntryNames() {
+        val guard = ArchiveEntryNameGuard()
+        assertTrue(guard.register("assets/bin/Data/StreamingAssets/dialogue.txt", "assets/bin/Data/StreamingAssets/dialogue.txt"))
+        assertFalse(guard.register("assets/bin/Data/StreamingAssets/dialogue.txt", "assets/bin/Data/StreamingAssets/dialogue.txt"))
+        assertFalse(guard.register("assets\\bin\\Data\\StreamingAssets\\dialogue.txt", "assets/bin/Data/StreamingAssets/dialogue.txt"))
+        assertTrue(guard.register("assets/bin/Data/StreamingAssets/Dialogue.txt", "assets/bin/Data/StreamingAssets/Dialogue.txt"))
+        assertFalse(guard.register(""))
+        assertFalse(guard.register("assets/\\u0000/dialogue.txt"))
+    }
+
     @Test fun boundedArchiveReadAcceptsExactLimit() {
         val bytes = "safe archive text".toByteArray(Charsets.UTF_8)
         val result = BoundedArchiveInput.readAll(ByteArrayInputStream(bytes), bytes.size.toLong())

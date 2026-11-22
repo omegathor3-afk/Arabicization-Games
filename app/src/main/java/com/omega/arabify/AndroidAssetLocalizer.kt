@@ -124,6 +124,16 @@ internal object AssetTextTransformer {
  }
 }
 
+internal class ArchiveEntryNameGuard {
+ private val entryNames = HashSet<String>()
+ private val normalizedCandidatePaths = HashSet<String>()
+
+ fun register(name: String, normalizedCandidatePath: String? = null): Boolean {
+  if (name.isEmpty() || name.contains('\\u0000') || !entryNames.add(name)) return false
+  return normalizedCandidatePath == null || normalizedCandidatePaths.add(normalizedCandidatePath)
+ }
+}
+
 internal object AndroidAssetLocalizer {
  private const val MAX_FILE_BYTES=512L*1024L
  private const val MAX_TOTAL_TRANSLATION_BYTES=4L*1024L*1024L
@@ -193,14 +203,20 @@ internal object AndroidAssetLocalizer {
   ZipFile(inputApk).use { zip ->
    val entries=zip.entries()
    val candidates=mutableListOf<ZipEntry>()
+   val archiveEntryNames=ArchiveEntryNameGuard()
    var hasNativeLibraries=false
    var archiveEntryCount=0
    while(entries.hasMoreElements()){
     val entry=entries.nextElement()
     archiveEntryCount++
     require(archiveEntryCount<=MAX_ARCHIVE_ENTRIES){"عدد عناصر APK يتجاوز حد إعادة البناء الآمن (100,000)."}
+    val supportedTextEntry=!entry.isDirectory&&isSupportedTextAsset(entry.name,entry.size,allowedPathPrefixes)
+    val normalizedCandidatePath=if(supportedTextEntry) normalizeArchivePath(entry.name) else null
+    require(archiveEntryNames.register(entry.name,normalizedCandidatePath)){
+     "ملف APK يحتوي على اسم ZIP فارغ أو مكرر، أو مسارين نصيين متطابقين بعد تطبيع الفواصل؛ أوقفنا إعادة البناء لتجنب استبدال محتوى غير محدد."
+    }
     if(entry.name.startsWith("lib/")&&entry.name.endsWith(".so",true))hasNativeLibraries=true
-    if(!entry.isDirectory&&isSupportedTextAsset(entry.name,entry.size,allowedPathPrefixes)){
+    if(supportedTextEntry){
      candidates+=entry
      require(candidates.size<=MAX_CANDIDATE_FILES){"عدد ملفات النصوص المرشحة يتجاوز حد المعالجة الآمن (2,048)."}
     }
