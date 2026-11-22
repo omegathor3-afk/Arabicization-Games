@@ -8,6 +8,7 @@ import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
+import kotlinx.coroutines.CancellationException
 
 internal data class AssetLocalizationReport(
  val packageName: String?,
@@ -36,7 +37,8 @@ internal object AssetTextTransformer {
      val restored=PlaceholderProtector.restore(result,protected.tokens)
      if(restored.isBlank()){skipped++;value}else{translated++;restored}
     }
-   }catch(_:Exception){skipped++;value}
+   }catch(cancelled:CancellationException){throw cancelled}
+   catch(_:Exception){skipped++;value}
   }
 
   return when(path.substringAfterLast('.',"").lowercase()) {
@@ -48,7 +50,8 @@ internal object AssetTextTransformer {
      else -> source.also{skipped++}
     }
     Result(output,translated,skipped)
-   }catch(_:Exception){Result(source,0,1)}
+   }catch(cancelled:CancellationException){throw cancelled}
+   catch(_:Exception){Result(source,0,1)}
    "properties" -> {
     val output=mutableListOf<String>()
     for(line in source.split("\n")) {

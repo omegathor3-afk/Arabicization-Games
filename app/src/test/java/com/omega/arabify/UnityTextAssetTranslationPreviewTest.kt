@@ -82,10 +82,35 @@ class UnityTextAssetTranslationPreviewTest {
         assertFalse(called)
     }
 
-    @Test(expected = IllegalStateException::class)
-    fun refusesUnknownTextAssetFormats() = runBlocking {
-        UnityTextAssetPreviewTranslator.translate(
-            preview("binary-like payload", pathName = "Assets/data.bytes", name = "data")
-        ) { "ترجمة" }
+    @Test
+    fun refusesUnknownTextAssetFormats() {
+        val error = runCatching {
+            runBlocking {
+                UnityTextAssetPreviewTranslator.translate(
+                    preview("binary-like payload", pathName = "Assets/data.bytes", name = "data")
+                ) { "ترجمة" }
+            }
+        }.exceptionOrNull()
+        assertTrue(error is IllegalStateException)
+    }
+
+    @Test
+    fun explicitUnsupportedPathDoesNotFallBackToSupportedDisplayName() {
+        val item = preview(
+            "binary-like payload",
+            pathName = "Assets/data.bytes",
+            name = "dialogue.txt"
+        )
+        assertEquals(null, UnityTextAssetPreviewTranslator.supportedFormat(item))
+    }
+
+    @Test
+    fun displayNameProvidesFormatOnlyWhenPathNameIsMissing() {
+        val item = preview(
+            "Welcome to the castle",
+            pathName = null,
+            name = "dialogue.txt"
+        )
+        assertEquals("txt", UnityTextAssetPreviewTranslator.supportedFormat(item))
     }
 }

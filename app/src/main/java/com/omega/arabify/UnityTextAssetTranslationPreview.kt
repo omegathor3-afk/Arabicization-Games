@@ -3,7 +3,6 @@ package com.omega.arabify
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -19,6 +18,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 internal data class UnityTextAssetTranslationResult(
@@ -36,12 +36,11 @@ internal object UnityTextAssetPreviewTranslator {
     private val supportedFormats = setOf("json", "txt", "properties", "strings")
 
     fun supportedFormat(preview: UnityTextAssetPreview): String? {
-        val candidates = listOfNotNull(preview.pathName, preview.name)
-        for (candidate in candidates) {
-            val extension = candidate.substringAfterLast('.', "").lowercase()
-            if (extension in supportedFormats) return extension
-        }
-        return null
+        // A declared in-game path is authoritative. Never fall back to a
+        // misleading filename when the actual path has an unsupported extension.
+        val candidate = preview.pathName?.takeIf { it.isNotBlank() } ?: preview.name
+        val extension = candidate.substringAfterLast('.', "").lowercase()
+        return extension.takeIf { it in supportedFormats }
     }
 
     suspend fun translate(
@@ -79,6 +78,8 @@ internal fun UnityTextAssetTranslationPreview(
         preview.bundlePath,
         preview.serializedFilePath,
         preview.pathId.toString(),
+        preview.name,
+        preview.pathName.orEmpty(),
         preview.scriptPreview
     )
     var translatedText by remember(stateKey) { mutableStateOf<String?>(null) }
@@ -106,6 +107,8 @@ internal fun UnityTextAssetTranslationPreview(
                         } else {
                             message = "لم تُقبل أي قيمة للترجمة؛ لم يتغير النص الأصلي."
                         }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
                     } catch (error: Exception) {
                         message = error.message ?: "تعذرت ترجمة معاينة TextAsset."
                     } finally {
@@ -130,7 +133,6 @@ internal fun UnityTextAssetTranslationPreview(
             Text(value, color = ArabifyPalette.textBody, fontSize = 11.sp, lineHeight = 17.sp)
             TextButton(
                 onClick = { clipboard.setText(AnnotatedString(value)) },
-                modifier = Modifier.padding(start = 0.dp)
             ) {
                 Text("نسخ الترجمة")
             }

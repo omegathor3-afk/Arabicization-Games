@@ -1,5 +1,6 @@
 package com.omega.arabify
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -68,6 +69,18 @@ class AssetTextTransformerTest {
   assertEquals(source,result.text)
   assertEquals(0,result.translated)
   assertEquals(1,result.skipped)
+ }
+
+
+ @Test fun jsonTranslationPropagatesCoroutineCancellationInsteadOfSkippingIt() {
+  val observed=runCatching {
+   runBlocking {
+    AssetTextTransformer.transform("assets/strings.json","""{"label":"Welcome to the castle"}""") {
+     throw CancellationException("cancel translation")
+    }
+   }
+  }.exceptionOrNull()
+  assertTrue(observed is CancellationException)
  }
 
 }

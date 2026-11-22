@@ -16,9 +16,10 @@ It reuses the existing `AssetTextTransformer`, placeholder protection, and trans
 ## Safety boundaries
 
 - Truncated previews are rejected instead of translating partial JSON or text.
-- Unknown extensions are rejected instead of guessing that arbitrary TextAsset bytes are prose.
+- Unknown extensions are rejected instead of guessing that arbitrary TextAsset bytes are prose. A non-empty `m_PathName` is authoritative; a supported-looking `m_Name` cannot override an explicitly unsupported path.
 - The existing on-device Arabic ML Kit model must already be available.
 - The translated output is shown and can be copied for review.
+- Coroutine cancellation is propagated through the shared text transformer rather than being misreported as a skipped translation.
 - **No SerializedFile object, UnityFS member, AssetBundle, APK, or original game file is rewritten by this preview.**
 
 This is an extraction/translation-review milestone, not end-to-end Unity localization.
