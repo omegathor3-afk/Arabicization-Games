@@ -49,6 +49,33 @@ internal data class UnityTextAssetPreview(
     val truncated: Boolean
 )
 
+internal data class UnityTextAssetObjectSelection(
+    val objects: List<UnitySerializedObjectInfo>,
+    val limitReached: Boolean
+)
+
+/**
+ * Selects at most [maxObjects] TextAsset records without materializing a second
+ * filtered copy of the full object table. It inspects only one extra matching
+ * record to prove that the per-file limit omitted additional candidates.
+ */
+internal fun selectUnityTextAssetObjects(
+    objects: Iterable<UnitySerializedObjectInfo>,
+    maxObjects: Int,
+    isTextAsset: (UnitySerializedObjectInfo) -> Boolean
+): UnityTextAssetObjectSelection {
+    require(maxObjects in 1..1_000)
+    val selected = ArrayList<UnitySerializedObjectInfo>(minOf(maxObjects, 32))
+    for (objectInfo in objects) {
+        if (!isTextAsset(objectInfo)) continue
+        if (selected.size == maxObjects) {
+            return UnityTextAssetObjectSelection(selected, limitReached = true)
+        }
+        selected += objectInfo
+    }
+    return UnityTextAssetObjectSelection(selected, limitReached = false)
+}
+
 internal fun createUnityTextAssetPreview(
     bundlePath: String,
     serializedFilePath: String,
@@ -91,7 +118,10 @@ internal data class UnityBundleDeepInspectionReport(
     val bytesExtracted: Long = 0L,
     val textAssetsReadOnly: Int = 0,
     val textAssetUtf8Candidates: Int = 0,
-    val textAssetPreviews: List<UnityTextAssetPreview> = emptyList()
+    val textAssetPreviews: List<UnityTextAssetPreview> = emptyList(),
+    val textAssetObjectLimitFiles: Int = 0,
+    val textAssetReadLimitReached: Boolean = false,
+    val textAssetPreviewLimitReached: Boolean = false
 ) {
     val summary: String
         get() = "UnityFS: " + bundlesInspected + "/" + bundlesFound +
@@ -101,6 +131,8 @@ internal data class UnityBundleDeepInspectionReport(
             " • TextAssets read-only: " + textAssetsReadOnly +
             " • UTF-8 text candidates: " + textAssetUtf8Candidates +
             " • previews: " + textAssetPreviews.size +
+            (if (textAssetObjectLimitFiles > 0 || textAssetReadLimitReached) " • فحص TextAsset محدود" else "") +
+            (if (textAssetPreviewLimitReached) " • معاينات محدودة" else "") +
             " • CAB bytes: " + bytesExtracted +
             (if (objectRecordsBudgetExhausted) " • تم بلوغ حد فهرسة الكائنات" else "") +
             " • قراءة فقط"
@@ -181,6 +213,9 @@ internal object UnityBundleDeepInspector {
         val textAssetPreviews = mutableListOf<UnityTextAssetPreview>()
         var textAssetsReadOnly = 0
         var textAssetUtf8Candidates = 0
+        var textAssetObjectLimitFiles = 0
+        var textAssetReadLimitReached = false
+        var textAssetPreviewLimitReached = false
         var objectRecordsBudgetExhausted = false
 
         ZipFile(apk).use { zip ->
@@ -450,20 +485,30 @@ internal object UnityBundleDeepInspector {
                             var textCandidatesInFile = 0
                             val typeTable = inspection.typeTable
                             val objectTable = inspection.objectTable
-                            if (typeTable != null && objectTable != null &&
-                                remainingTextAssetBytes > 0L
-                            ) {
-                                objectTable.objects.asSequence()
-                                    .filter { UnityTextAssetReader.isTextAssetObject(
+                            if (typeTable != null && objectTable != null) {
+                                val selection = selectUnityTextAssetObjects(
+                                    objectTable.objects,
+                                    limits.maxTextAssetsPerFile
+                                ) {
+                                    UnityTextAssetReader.isTextAssetObject(
                                         inspection.header, typeTable, it
-                                    ) }
-                                    .take(limits.maxTextAssetsPerFile)
-                                    .forEach textAssetLoop@ { textObject ->
+                                    )
+                                }
+                                if (selection.limitReached) textAssetObjectLimitFiles++
+                                if (remainingTextAssetBytes <= 0L && selection.objects.isNotEmpty()) {
+                                    textAssetReadLimitReached = true
+                                } else {
+                                    selection.objects.forEach textAssetLoop@ { textObject ->
                                         val objectBudget = minOf(
                                             limits.maxTextAssetObjectBytes,
                                             remainingTextAssetBytes
                                         )
                                         if (textObject.byteSize !in 1L..objectBudget) {
+                                            if (textObject.byteSize > limits.maxTextAssetObjectBytes ||
+                                                textObject.byteSize > remainingTextAssetBytes
+                                            ) {
+                                                textAssetReadLimitReached = true
+                                            }
                                             return@textAssetLoop
                                         }
                                         // Charge the aggregate I/O budget before attempting to
@@ -499,9 +544,12 @@ internal object UnityBundleDeepInspector {
                                                             0, preview.scriptPreview.length
                                                         )
                                                 }
+                                            } else {
+                                                textAssetPreviewLimitReached = true
                                             }
                                         }
                                     }
+                                }
                             }
                             textAssetsReadOnly += textAssetsInFile
                             textAssetUtf8Candidates += textCandidatesInFile
@@ -559,6 +607,19 @@ internal object UnityBundleDeepInspector {
             notes += "تم بلوغ الحد الإجمالي " + limits.maxTotalObjectRecords +
                 " لسجلات الكائنات؛ لم تُفهرس جداول الكائنات المتبقية، وبقيت جميع الأصول للقراءة فقط."
         }
+        if (textAssetObjectLimitFiles > 0) {
+            notes += "بلغت " + textAssetObjectLimitFiles +
+                " ملفات SerializedFile حد TextAsset لكل ملف (" +
+                limits.maxTextAssetsPerFile + ")؛ توجد مرشحات إضافية لم تُقرأ."
+        }
+        if (textAssetReadLimitReached) {
+            notes += "تم بلوغ حد حجم TextAsset لكل كائن أو الميزانية الإجمالية (" +
+                limits.maxTotalTextAssetBytes +
+                " bytes)؛ قد توجد مرشحات لم تُقرأ، والنتيجة ليست جردًا كاملًا."
+        }
+        if (textAssetPreviewLimitReached) {
+            notes += "تم بلوغ حد عدد المعاينات أو ميزانية أحرفها؛ قد توجد نصوص مقروءة لم تظهر في قائمة المعاينة."
+        }
         return UnityBundleDeepInspectionReport(
             bundlesFound = inventory.bundleFiles,
             bundlesInspected = bundlesInspected,
@@ -571,7 +632,10 @@ internal object UnityBundleDeepInspector {
             bytesExtracted = totalExtractedBytes,
             textAssetsReadOnly = textAssetsReadOnly,
             textAssetUtf8Candidates = textAssetUtf8Candidates,
-            textAssetPreviews = textAssetPreviews
+            textAssetPreviews = textAssetPreviews,
+            textAssetObjectLimitFiles = textAssetObjectLimitFiles,
+            textAssetReadLimitReached = textAssetReadLimitReached,
+            textAssetPreviewLimitReached = textAssetPreviewLimitReached
         )
     }
 
