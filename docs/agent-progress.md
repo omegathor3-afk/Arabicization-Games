@@ -110,18 +110,36 @@ all new heads; build green.
     bundle stage translated anything; report carries nullable bundle
     counts so the generic path is unchanged. Tests: 262 green.
 
+## Issue mapping (corrected - earlier entries here had wrong numbers)
+
+- Issue #2 (Unity Mono StreamingAssets first bounded pass): DONE and
+  exceeded (whole chain through APK rebuild, 38f80c3). Candidate to close;
+  left open for the user to decide.
+- Issue #6 (safe Unity SerializedFile/AssetBundle string localization):
+  DONE at TextAsset scope (patcher, rewriter, APK chain, differential
+  tests vs UnityDataTools + UnityPy). Candidate to close; user decides.
+- Issue #3 (split APK rebuild+sign): OPEN, not started.
+- Issue #4 (verified offline Arabic model for production builds): OPEN.
+  Bergamot JNI boundary + pinned model verifier exist and CI proved both
+  model-v3.0 directions translate offline on an emulator, but production
+  installer/lifecycle + physical-device gates are not done; UI path is
+  still ML Kit (download-once, then offline).
+- Issue #5 (license-aware Arabic font catalog + per-role matching): OPEN.
+  ArabicFontAnalyzer exists (analysis only).
+- Issue #7 (Unreal PAK/IoStore): research only; not supported, not claimed.
+
 ## Next up (in order)
 
 - DONE: artifact URL reported (Actions run 45280230697).
 - DONE: APK-level integration of the UnityFS bundle localizer (38f80c3).
-- UI wiring for the bundle stage (game picker -> preview -> apply):
-  UnityMonoLocalizer.localize is called from MainActivity; the new bundle
-  counts already flow into its report, but preview/dry-run of bundled
-  TextAssets in the UI is still missing.
-- Split APK rebuild support (their issue #2).
-- Bergamot offline engine wiring (their issue #6) - currently ML Kit only,
-  model downloads once then works offline.
-- Font catalog/matching (their issue #5); Arabic shaping review for games
+- DONE: UI shows the bundle share of the result (60d2317); bundled
+  TextAsset previews already existed via UnityBundleDeepInspector.
+- Split APK rebuild+sign support (issue #3).
+- Offline model production packaging (issue #4) - biggest remaining chunk
+  for the "offline translation verified after restart offline" criterion;
+  an offline-after-restart emulator test for the ML Kit path is a cheaper
+  intermediate step.
+- Font catalog/matching (issue #5); Arabic shaping review for games
   without proper text layout.
 - IL2CPP: research only; not supported and not claimed.
 
