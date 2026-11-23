@@ -117,8 +117,13 @@ all new heads; build green.
     stage) - tolerant per-member rebuild of split APK sets. Every member
     is rebuilt through the same ZIP policy (stale signatures stripped)
     because all APKs in a set must share one signer; the set fails only
-    when no member translates. Signing/install session + UI wiring remain.
-    Tests: 264 green.
+    when no member translates. Tests: 264 green.
+    `be185da` added signSet: one-key signing for every rebuilt member via
+    the persisted AndroidKeyStore key (device-only, CI emulator covers it).
+    Remaining for #3: MainActivity wiring - run localizeSet + signSet for
+    split apps, then hand the signed set to the install session (candidate
+    route: wrap the signed set in the existing verified ARABIFY ZIP format
+    so the restore installer path serves it).
 
 ## Issue mapping (corrected - earlier entries here had wrong numbers)
 
