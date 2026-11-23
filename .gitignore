@@ -1,0 +1,24 @@
+# Gradle / build outputs
+.gradle/
+**/build/
+.kotlin/
+
+# Local environment
+local.properties
+*.log
+
+# Android signing material must never be committed
+*.keystore
+*.jks
+*.p12
+key.properties
+
+# IDE
+.idea/
+*.iml
+.cxx/
+
+# Built packages (delivered through CI artifacts, not git)
+*.apk
+*.aab
+*.ap_
