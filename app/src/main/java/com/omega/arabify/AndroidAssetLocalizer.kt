@@ -16,7 +16,9 @@ internal data class AssetLocalizationReport(
  val filesTranslated: Int,
  val stringsTranslated: Int,
  val stringsSkipped: Int,
- val outputApk: File
+ val outputApk: File,
+ val bundleFilesTranslated: Int? = null,
+ val bundleStringsTranslated: Int? = null
 )
 
 internal object AssetTextTransformer {

@@ -107,7 +107,9 @@ internal object UnityMonoLocalizer {
                 bundleReport.textAssetsTranslated,
                 bundleReport.stringsTranslated,
                 bundleReport.stringsSkipped,
-                signedApk
+                signedApk,
+                bundleFilesTranslated = bundleReport.textAssetsTranslated,
+                bundleStringsTranslated = bundleReport.stringsTranslated
             )
         } finally {
             if (bundleReport != null) bundleStageApk.delete()
@@ -117,7 +119,9 @@ internal object UnityMonoLocalizer {
                 filesDiscovered = report.filesDiscovered + bundleReport.bundlesProcessed,
                 filesTranslated = report.filesTranslated + bundleReport.textAssetsTranslated,
                 stringsTranslated = report.stringsTranslated + bundleReport.stringsTranslated,
-                stringsSkipped = report.stringsSkipped + bundleReport.stringsSkipped
+                stringsSkipped = report.stringsSkipped + bundleReport.stringsSkipped,
+                bundleFilesTranslated = bundleReport.textAssetsTranslated,
+                bundleStringsTranslated = bundleReport.stringsTranslated
             )
         } else {
             report

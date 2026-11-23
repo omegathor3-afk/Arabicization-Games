@@ -542,6 +542,7 @@ private fun ArabifyApp(context: Context) {
          }
          assetReport?.let { report ->
           Text("الملفات: ${report.filesTranslated} / ${report.filesDiscovered} • النصوص المترجمة: ${report.stringsTranslated} • المتروكة: ${report.stringsSkipped}",color=ArabifyPalette.success,fontSize=13.sp)
+          if((report.bundleStringsTranslated ?: 0) > 0) Text("منها داخل حزم UnityFS: ${report.bundleFilesTranslated} ملف نصي، ${report.bundleStringsTranslated} نصًا مترجمًا.",color=ArabifyPalette.success,fontSize=11.sp)
           Button(onClick={saveLauncher.launch("arabify_assets_arabic.apk")},modifier=Modifier.fillMaxWidth()){Text("الخطوة الأخيرة: حفظ APK بعد التعريب")}
          }
          assetError?.let{Text(it,color=ArabifyPalette.danger,fontSize=12.sp)}
