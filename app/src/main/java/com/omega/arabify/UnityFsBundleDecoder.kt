@@ -45,8 +45,8 @@ internal object UnityFsBundleDecoder {
                 require(declaredSize <= actualLength)
                 validateArchiveFlags(header)
 
-                val alignedHeaderEnd = if (needsHeaderAlignment(header)) {
-                    align16(header.headerSize.toLong())
+                val alignedHeaderEnd = if (unityFsNeedsHeaderAlignment(header)) {
+                    unityFsAlign16(header.headerSize.toLong())
                 } else {
                     header.headerSize.toLong()
                 }
@@ -69,7 +69,7 @@ internal object UnityFsBundleDecoder {
                     Math.addExact(alignedHeaderEnd, compressedInfoSize)
                 }
                 val dataStart = if ((header.flags and FLAG_BLOCK_INFO_NEEDS_PADDING_AT_START) != 0L) {
-                    align16(afterInfo)
+                    unityFsAlign16(afterInfo)
                 } else {
                     afterInfo
                 }
@@ -141,7 +141,7 @@ internal object UnityFsBundleDecoder {
         }.getOrNull()
     }
 
-    private const val FLAG_BLOCK_INFO_NEEDS_PADDING_AT_START = 0x200L
+    internal const val FLAG_BLOCK_INFO_NEEDS_PADDING_AT_START = 0x200L
     private const val KNOWN_ARCHIVE_FLAGS = 0x3fL or 0x40L or 0x80L or 0x100L or 0x200L
     private const val ENCRYPTION_FLAGS = 0x400L or 0x1000L
 
@@ -175,13 +175,13 @@ internal object UnityFsBundleDecoder {
         }
     }
 
-    private fun needsHeaderAlignment(header: UnityArchiveHeader): Boolean {
+    internal fun unityFsNeedsHeaderAlignment(header: UnityArchiveHeader): Boolean {
         if (header.formatVersion >= 7) return true
         val version = parseEngineVersion(header.engineVersion) ?: return false
         return version.first == 2019 && version.second == 4 && version.third >= 15
     }
 
-    private fun align16(value: Long): Long = Math.addExact(value, (16L - (value and 15L)) and 15L)
+    internal fun unityFsAlign16(value: Long): Long = Math.addExact(value, (16L - (value and 15L)) and 15L)
 
     private fun requireWorkingSet(
         compressedBytes: Long,
