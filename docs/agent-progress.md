@@ -39,7 +39,7 @@ feature claims without passing tests, no build artifacts in git.
    untouched nodes, source bundle never modified). Library level, strict
    Arabic errors, no UI wiring yet. Integration test drives a hand-built
    UnityFS bundle holding a SerializedFile fixture end to end.
-   Tests: 250 green.
+   Tests: 249 green (2 pre-existing conditional skips).
 
 ## Next up (in order)
 
