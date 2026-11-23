@@ -109,6 +109,16 @@ all new heads; build green.
     bundle share (bundled TextAssets + strings) as a second line when the
     bundle stage translated anything; report carries nullable bundle
     counts so the generic path is unchanged. Tests: 262 green.
+18. `6024785` refactor(assets): AndroidAssetLocalizer's ZIP
+    transform/rebuild logic extracted into transformToUnsignedApk
+    (lambda translate + requireTranslations flag); localize() behavior
+    unchanged. Tests: 262 green.
+19. `0fd65ac` feat(splits): SplitApkSetLocalizer (issue #3, library
+    stage) - tolerant per-member rebuild of split APK sets. Every member
+    is rebuilt through the same ZIP policy (stale signatures stripped)
+    because all APKs in a set must share one signer; the set fails only
+    when no member translates. Signing/install session + UI wiring remain.
+    Tests: 264 green.
 
 ## Issue mapping (corrected - earlier entries here had wrong numbers)
 
@@ -118,7 +128,10 @@ all new heads; build green.
 - Issue #6 (safe Unity SerializedFile/AssetBundle string localization):
   DONE at TextAsset scope (patcher, rewriter, APK chain, differential
   tests vs UnityDataTools + UnityPy). Candidate to close; user decides.
-- Issue #3 (split APK rebuild+sign): OPEN, not started.
+- Issue #3 (split APK rebuild+sign): library stage DONE (0fd65ac:
+  tolerant per-member rebuild with signature stripping). Remaining:
+  sign every member with one key on device, install-session wiring,
+  and enabling the MainActivity split path (currently refuses splits).
 - Issue #4 (verified offline Arabic model for production builds): OPEN.
   Bergamot JNI boundary + pinned model verifier exist and CI proved both
   model-v3.0 directions translate offline on an emulator, but production
