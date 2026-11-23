@@ -25,7 +25,7 @@ class PlaceholderProtectorTest {
   val protected = PlaceholderProtector.protect(source)
   val expected = listOf("%1" + dollar + "02d", "%.2f", "%1" + dollar + "s", "%%")
   assertEquals(expected, protected.tokens)
-  assertEquals(source, PlaceholderProtector.restore(protected.text, protected.tokens))
+  assertEquals(source, PlaceholderProtector.restore(protected.text, protected))
  }
  @Test fun avoidsCollisionsWithLiteralLegacyMarkerText() {
   val source = "Literal __ARABIFY_TOKEN_0__ and {player}"
