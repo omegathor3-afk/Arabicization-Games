@@ -105,6 +105,10 @@ all new heads; build green.
     were never changed after the bundle stage landed; scope text and the
     asset-section warning updated to match implemented+tested behavior.
     IL2CPP and resources.assets remain explicitly excluded.
+17. `60d2317` feat(ui): the localization result now shows the UnityFS
+    bundle share (bundled TextAssets + strings) as a second line when the
+    bundle stage translated anything; report carries nullable bundle
+    counts so the generic path is unchanged. Tests: 262 green.
 
 ## Next up (in order)
 
