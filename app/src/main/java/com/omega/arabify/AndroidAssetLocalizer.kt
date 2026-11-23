@@ -330,7 +330,7 @@ internal object AndroidAssetLocalizer {
 
  internal suspend fun transformToUnsignedApk(
   inputApk:File,unsignedApk:File,extractNativeLibs:Boolean,
-  allowedPathPrefixes:List<String>,onProgress:(Int,Int)->Unit={_,_->},
+  allowedPathPrefixes:List<String> = allowedRoots,onProgress:(Int,Int)->Unit={_,_->},
   requireTranslations:Boolean=true,
   tx:suspend (String)->String
  ):AssetLocalizationReport {
