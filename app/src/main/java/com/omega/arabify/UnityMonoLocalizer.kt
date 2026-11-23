@@ -63,17 +63,67 @@ internal object UnityMonoLocalizer {
             UnityRuntimeKind.UNKNOWN ->
                 error("لم نعثر على Assembly-CSharp.dll داخل assets/bin/Data/Managed؛ لا يمكن تأكيد أن هذه نسخة Unity Mono.")
         }
-        val report = AndroidAssetLocalizer.localize(
-            context = context,
-            inputApk = inputApk,
-            unsignedApk = unsignedApk,
-            signedApk = signedApk,
-            translator = translator,
-            onProgress = onProgress,
-            allowedPathPrefixes = listOf("assets/bin/Data/StreamingAssets/")
+        // Stage 1: UnityFS bundles inside the APK (TextAsset write-back).
+        // Tolerant: a game with no translatable bundle TextAssets just skips
+        // this stage; strict-gate failures still abort everything.
+        val bundleStageApk = File(
+            unsignedApk.parentFile,
+            unsignedApk.nameWithoutExtension + "-bundles.apk"
         )
-        UnityAssetIntegrityVerifier.verifyUnchanged(inputApk, report.outputApk)
-        return report
+        val bundleWorkDir = File(
+            unsignedApk.parentFile,
+            unsignedApk.nameWithoutExtension + "-bundlework"
+        )
+        val bundleReport = try {
+            UnityApkBundleLocalizer.tryLocalizeBundlesInApk(
+                inputApk, bundleStageApk, bundleWorkDir,
+                translator::translateEnglishToArabic
+            )
+        } finally {
+            bundleWorkDir.deleteRecursively()
+        }
+        val looseInput = if (bundleReport != null) bundleStageApk else inputApk
+
+        // Stage 2: loose text files (existing pipeline, signs at the end).
+        val report = try {
+            AndroidAssetLocalizer.localize(
+                context = context,
+                inputApk = looseInput,
+                unsignedApk = unsignedApk,
+                signedApk = signedApk,
+                translator = translator,
+                onProgress = onProgress,
+                allowedPathPrefixes = listOf("assets/bin/Data/StreamingAssets/")
+            )
+        } catch (failure: IllegalArgumentException) {
+            // When only the bundle stage produced translations, sign that
+            // stage's APK directly instead of failing on missing loose text.
+            val noLooseText = failure.message?.startsWith("لم يتم العثور على نصوص قابلة للترجمة") == true
+            if (bundleReport == null || !noLooseText) throw failure
+            ApkSigningService.signAndVerify(context, bundleStageApk, signedApk)
+            AssetLocalizationReport(
+                null,
+                bundleReport.bundlesProcessed,
+                bundleReport.textAssetsTranslated,
+                bundleReport.stringsTranslated,
+                bundleReport.stringsSkipped,
+                signedApk
+            )
+        } finally {
+            if (bundleReport != null) bundleStageApk.delete()
+        }
+        val merged = if (bundleReport != null) {
+            report.copy(
+                filesDiscovered = report.filesDiscovered + bundleReport.bundlesProcessed,
+                filesTranslated = report.filesTranslated + bundleReport.textAssetsTranslated,
+                stringsTranslated = report.stringsTranslated + bundleReport.stringsTranslated,
+                stringsSkipped = report.stringsSkipped + bundleReport.stringsSkipped
+            )
+        } else {
+            report
+        }
+        UnityAssetIntegrityVerifier.verifyUnchanged(inputApk, merged.outputApk)
+        return merged
     }
 
     internal data class FixtureReport(val stringsTranslated: Int)

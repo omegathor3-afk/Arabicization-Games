@@ -117,6 +117,26 @@ class UnityApkBundleLocalizerTest {
     }
 
     @Test
+    fun tolerantVariantReturnsNullWithoutWritingOutput() {
+        runBlocking {
+            val dir = createTempDir()
+            val apk = File(dir, "plain.apk")
+            ZipOutputStream(apk.outputStream().buffered()).use { out ->
+                out.putNextEntry(ZipEntry("classes.dex"))
+                out.write(byteArrayOf(1, 2, 3))
+                out.closeEntry()
+            }
+            val output = File(dir, "out.apk")
+            val report = UnityApkBundleLocalizer.tryLocalizeBundlesInApk(
+                apk, output, File(dir, "work"), fakeArabic
+            )
+            assertNull(report)
+            assertTrue(!output.exists())
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
     fun apkWithoutTranslatableBundlesIsRefused() {
         runBlocking {
             val dir = createTempDir()

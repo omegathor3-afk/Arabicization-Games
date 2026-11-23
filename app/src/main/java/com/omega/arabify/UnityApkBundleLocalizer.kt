@@ -36,7 +36,32 @@ internal object UnityApkBundleLocalizer {
         workingDir: File,
         translate: suspend (String) -> String,
         limits: UnityFsDecodeLimits = UnityFsDecodeLimits()
-    ): UnityApkBundleReport {
+    ): UnityApkBundleReport =
+        localizeBundlesInApk(inputApk, outputApk, workingDir, translate, limits, requireTranslations = true)
+            ?: error("لم يتم العثور على TextAssets قابلة للترجمة داخل حزم UnityFS في هذا الملف.")
+
+    /**
+     * Tolerant variant for chained pipelines: returns null when no bundle
+     * holds translatable TextAssets, writing nothing, instead of failing.
+     * Strict-gate failures (corrupt bundles) still abort.
+     */
+    internal suspend fun tryLocalizeBundlesInApk(
+        inputApk: File,
+        outputApk: File,
+        workingDir: File,
+        translate: suspend (String) -> String,
+        limits: UnityFsDecodeLimits = UnityFsDecodeLimits()
+    ): UnityApkBundleReport? =
+        localizeBundlesInApk(inputApk, outputApk, workingDir, translate, limits, requireTranslations = false)
+
+    private suspend fun localizeBundlesInApk(
+        inputApk: File,
+        outputApk: File,
+        workingDir: File,
+        translate: suspend (String) -> String,
+        limits: UnityFsDecodeLimits,
+        requireTranslations: Boolean
+    ): UnityApkBundleReport? {
         require(inputApk.isFile) { "ملف APK الأصلي غير موجود." }
         require(inputApk.absoluteFile != outputApk.absoluteFile) { "لا يمكن الكتابة فوق ملف APK الأصلي." }
         require(workingDir.isDirectory || workingDir.mkdirs()) { "تعذر إنشاء مجلد العمل المؤقت." }
@@ -86,8 +111,11 @@ internal object UnityApkBundleLocalizer {
                 }
             }
 
-            require(stringsTranslated > 0) {
-                "لم يتم العثور على TextAssets قابلة للترجمة داخل حزم UnityFS في هذا الملف."
+            if (stringsTranslated == 0) {
+                require(!requireTranslations) {
+                    "لم يتم العثور على TextAssets قابلة للترجمة داخل حزم UnityFS في هذا الملف."
+                }
+                return null
             }
 
             // Pass 2: rebuild the APK, replacing localized bundles.
