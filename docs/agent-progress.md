@@ -82,10 +82,16 @@ all new heads; build green.
     (unit tests, APK build+verify, emulator real-game test). Reverted;
     the original upload step remains the APK delivery route.
 
+12. `4ec0b65` revert of the duplicate CI step; `4b560db` docs correction.
+    Run 45280230697 artifact link sent to the user (arabify-debug-apk).
+13. `79f2992` test(unity): rewrite a REAL Unity 2021.3 LZMA-storage
+    bundle. The rewriter re-chunks storage as raw/LZ4; verified with our
+    parsers AND UnityPy 1.25.4 reads the Arabic TextAsset back from the
+    rewritten real bundle. Tests: 261 green.
+
 ## Next up (in order)
 
-- Confirm the artifact appears on the CI run for 0509397 and record its
-  download URL for the user report.
+- DONE: artifact URL reported (Actions run 45280230697).
 - UI wiring for the bundle localizer (game picker -> preview -> apply),
   currently library-level only.
 - Split APK rebuild support (their issue #2); Bergamot wiring (#6);
