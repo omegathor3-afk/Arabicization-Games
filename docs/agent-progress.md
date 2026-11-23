@@ -75,9 +75,12 @@ all new heads; build green.
     rebuild the APK via ApkZipEntryPolicy (methods/alignment preserved,
     stale signatures dropped). Source APK never modified; a strict-gate
     failure aborts instead of shipping a broken APK. Tests: 260 green.
-11. `0509397` ci: the Android CI build job now uploads the verified debug
-    APK as the `arabify-debug-apk` workflow artifact (14-day retention) -
-    this is the APK delivery route for the user.
+11. `0509397` + revert `4ec0b65` ci: I added a duplicate
+    `arabify-debug-apk` upload step; the workflow ALREADY had one
+    ("Upload final debug APK", if: always()). The duplicate made run
+    45280230697's tail step fail even though every real step was green
+    (unit tests, APK build+verify, emulator real-game test). Reverted;
+    the original upload step remains the APK delivery route.
 
 ## Next up (in order)
 
