@@ -40,6 +40,13 @@ internal object AssetTextTransformer {
   var translationCandidates=0
   suspend fun tx(value:String):String {
    if(!looksTranslatable(value)){skipped++;return value}
+   val glossaryHit=ArabicUiGlossary.translateExact(value)
+   if(glossaryHit!=null){
+    translated++
+    val prefix=value.takeWhile{it.isWhitespace()}
+    val suffix=value.takeLastWhile{it.isWhitespace()}
+    return prefix+glossaryHit+suffix
+   }
    if(translationCandidates>=maxTranslationCandidates){skipped++;return value}
    translationCandidates++
    val protected=PlaceholderProtector.protect(value)
@@ -84,6 +91,10 @@ internal object AssetTextTransformer {
     }
     Result(output.joinToString("\n"),translated,skipped)
    }
+   "csv" -> {
+    val output=transformCsv(source,::tx){skipped++}
+    Result(output,translated,skipped)
+   }
    "strings" -> {
     val pattern=Regex("^(\\s*\"(?:\\\\.|[^\"])*\"\\s*=\\s*\")(.*?)(\"\\s*;\\s*)$")
     val output=mutableListOf<String>()
@@ -103,6 +114,104 @@ internal object AssetTextTransformer {
    }
    else -> Result(source,0,1)
   }
+ }
+
+ private val csvHeaderNames=setOf(
+  "key","id","keys","identifier","code","text","value","string","source","target",
+  "translation","en","eng","english","ar","arabic","default","loc","localization"
+ )
+ private val csvKeyColumnNames=setOf("key","id","keys","identifier","code")
+ private val csvHeaderCell=Regex("[A-Za-z][A-Za-z0-9_ ]{0,31}")
+ private val csvSnakeIdentifier=Regex("[a-z0-9]+(?:_[a-z0-9]+)+")
+
+ internal data class CsvCell(val start:Int,val end:Int,val quoted:Boolean,val value:String)
+
+ /** RFC4180-style CSV reader that records source spans so untouched content is rebuilt byte-identically. */
+ internal fun parseCsv(source:String):List<List<CsvCell>> {
+  val rows=mutableListOf<MutableList<CsvCell>>()
+  var row=mutableListOf<CsvCell>()
+  var i=0
+  val n=source.length
+  while(i<n){
+   val start=i
+   var quoted=false
+   val value:String
+   if(source[i]=='"'){
+    quoted=true
+    i++
+    val sb=StringBuilder()
+    while(i<n){
+     val c=source[i]
+     if(c=='"'){
+      if(i+1<n&&source[i+1]=='"'){sb.append('"');i+=2}
+      else{i++;break}
+     }else{sb.append(c);i++}
+    }
+    value=sb.toString()
+   }else{
+    val sb=StringBuilder()
+    while(i<n&&source[i]!=','&&source[i]!='\n'&&source[i]!='\r'){sb.append(source[i]);i++}
+    value=sb.toString()
+   }
+   row+=CsvCell(start,i,quoted,value)
+   if(i<n&&source[i]==','){i++}
+   else{
+    if(i<n&&source[i]=='\r')i++
+    if(i<n&&source[i]=='\n')i++
+    rows+=row
+    row=mutableListOf()
+   }
+  }
+  if(row.isNotEmpty())rows+=row
+  return rows
+ }
+
+ private fun encodeCsvCell(text:String,wasQuoted:Boolean):String {
+  val needsQuote=text.any{it=='"'||it==','||it=='\n'||it=='\r'}
+  return when {
+   needsQuote->"\""+text.replace("\"","\"\"")+"\""
+   wasQuoted->"\""+text+"\""
+   else->text
+  }
+ }
+
+ /**
+  * Translates CSV cells in place. A first row that looks like a localization
+  * header is preserved, key/identifier columns are never touched, and bare
+  * snake_case identifiers stay as-is because they are usually keys, not prose.
+  */
+ private suspend fun transformCsv(
+  source:String,
+  tx:suspend(String)->String,
+  markSkipped:()->Unit
+ ):String {
+  val rows=parseCsv(source)
+  if(rows.isEmpty())return source
+  val header:List<String>?=if(rows.size>=2){
+   val first=rows[0].map{it.value.trim()}
+   if(first.isNotEmpty()&&first.all{csvHeaderCell.matches(it)}&&first.any{it.lowercase(java.util.Locale.ROOT) in csvHeaderNames})first else null
+  }else null
+  val keyColumns:Set<Int> = header?.mapIndexedNotNull{index,name->if(name.lowercase(java.util.Locale.ROOT) in csvKeyColumnNames)index else null}?.toSet() ?: emptySet()
+  val out=StringBuilder(source.length)
+  var cursor=0
+  rows.forEachIndexed{rowIndex,cells->
+   val isHeaderRow=rowIndex==0&&header!=null
+   cells.forEachIndexed{colIndex,cell->
+    out.append(source,cursor,cell.start)
+    val skip=isHeaderRow||colIndex in keyColumns||csvSnakeIdentifier.matches(cell.value.trim())
+    if(skip){
+     markSkipped()
+     out.append(source,cell.start,cell.end)
+    }else{
+     val translated=tx(cell.value)
+     if(translated==cell.value)out.append(source,cell.start,cell.end)
+     else out.append(encodeCsvCell(translated,cell.quoted))
+    }
+    cursor=cell.end
+   }
+  }
+  out.append(source,cursor,source.length)
+  return out.toString()
  }
 
  private suspend fun transformObject(obj:JSONObject,tx:suspend(String)->String):JSONObject {
@@ -159,7 +268,7 @@ internal object AndroidAssetLocalizer {
  private const val MAX_ARCHIVE_ENTRIES=100_000
  private const val MAX_SINGLE_REBUILT_ENTRY_BYTES=2L*1024L*1024L*1024L
  private const val MAX_TOTAL_REBUILT_BYTES=4L*1024L*1024L*1024L
- private val supported=setOf("json","txt","properties","strings")
+ private val supported=setOf("json","csv","txt","properties","strings")
  private val allowedRoots=listOf("assets/","res/raw/","localization/","strings/")
 
  internal fun isSupportedTextAsset(
@@ -268,7 +377,7 @@ internal object AndroidAssetLocalizer {
     onProgress(index+1,candidates.size)
    }
 
-   require(translatedStrings>0){"لم يتم العثور على نصوص قابلة للترجمة في ملفات JSON/TXT/Properties/Strings المدعومة."}
+   require(translatedStrings>0){"لم يتم العثور على نصوص قابلة للترجمة في ملفات JSON/CSV/TXT/Properties/Strings المدعومة."}
    unsignedApk.parentFile?.mkdirs()
    val countingOutput = CountingOutputStream(unsignedApk.outputStream().buffered())
    ZipOutputStream(countingOutput).use { out ->

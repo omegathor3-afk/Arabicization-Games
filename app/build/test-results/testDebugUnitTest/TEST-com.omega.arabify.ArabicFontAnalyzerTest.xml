@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.omega.arabify.ArabicFontAnalyzerTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-11-23T20:41:17.084Z" hostname="e2b.local" time="0.01">
+  <properties/>
+  <testcase name="recognizesSupportedFontExtensions" classname="com.omega.arabify.ArabicFontAnalyzerTest" time="0.003"/>
+  <testcase name="readsFamilySubfamilyWeightAndItalicMetadata" classname="com.omega.arabify.ArabicFontAnalyzerTest" time="0.002"/>
+  <testcase name="rejectsMalformedFontWithoutCrashing" classname="com.omega.arabify.ArabicFontAnalyzerTest" time="0.0"/>
+  <testcase name="ranksArabicSuitableFontAheadOfLatinOnlyFont" classname="com.omega.arabify.ArabicFontAnalyzerTest" time="0.001"/>
+  <testcase name="detectsArabicCoverageFromTrueTypeCmapFormat12" classname="com.omega.arabify.ArabicFontAnalyzerTest" time="0.001"/>
+  <testcase name="requiresArabicScriptInBothGsubAndGposForSuitableRanking" classname="com.omega.arabify.ArabicFontAnalyzerTest" time="0.001"/>
+  <testcase name="ranksClosestArabicFontStyleAheadOfOtherFamiliesAndWeights" classname="com.omega.arabify.ArabicFontAnalyzerTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

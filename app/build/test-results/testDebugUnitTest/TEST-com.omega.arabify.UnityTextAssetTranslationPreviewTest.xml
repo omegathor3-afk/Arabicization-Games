@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.omega.arabify.UnityTextAssetTranslationPreviewTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-11-23T20:41:17.770Z" hostname="e2b.local" time="0.007">
+  <properties/>
+  <testcase name="translatesCompleteSourceWhenOnlyTheVisiblePreviewIsTruncated" classname="com.omega.arabify.UnityTextAssetTranslationPreviewTest" time="0.002"/>
+  <testcase name="explicitUnsupportedPathDoesNotFallBackToSupportedDisplayName" classname="com.omega.arabify.UnityTextAssetTranslationPreviewTest" time="0.0"/>
+  <testcase name="rejectsTranslationsThatDoNotContainArabicForEnglishSentences" classname="com.omega.arabify.UnityTextAssetTranslationPreviewTest" time="0.0"/>
+  <testcase name="rejectsExcessiveTextLinesBeforeAllocatingTheLineList" classname="com.omega.arabify.UnityTextAssetTranslationPreviewTest" time="0.0"/>
+  <testcase name="rejectsExcessiveJsonNestingBeforeParsing" classname="com.omega.arabify.UnityTextAssetTranslationPreviewTest" time="0.001"/>
+  <testcase name="displayNameProvidesFormatOnlyWhenPathNameIsMissing" classname="com.omega.arabify.UnityTextAssetTranslationPreviewTest" time="0.0"/>
+  <testcase name="refusesUnknownTextAssetFormats" classname="com.omega.arabify.UnityTextAssetTranslationPreviewTest" time="0.0"/>
+  <testcase name="preservesTextCommentsAndRestoresNamedGameTokens" classname="com.omega.arabify.UnityTextAssetTranslationPreviewTest" time="0.001"/>
+  <testcase name="propagatesCancellationFromCompleteTextAssetTranslation" classname="com.omega.arabify.UnityTextAssetTranslationPreviewTest" time="0.0"/>
+  <testcase name="translatesJsonValuesWithoutChangingKeysOrFormatPlaceholders" classname="com.omega.arabify.UnityTextAssetTranslationPreviewTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

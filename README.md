@@ -18,7 +18,7 @@
 
 ## Unity Mono — أول محول محدود النطاق
 
-أُضيف محول أولي لمسار Unity Mono يكتشف وجود `assets/bin/Data/Managed/Assembly-CSharp.dll` ويرفض حزم IL2CPP عند ظهور `libil2cpp.so` أو `global-metadata.dat`. يمكنه إعادة بناء APK عبر مسار ZIP والتوقيع الحالي عندما تكون النصوص في ملفات واضحة مدعومة (JSON/TXT/Properties/Strings) داخل `assets/`، بما فيها StreamingAssets.
+أُضيف محول أولي لمسار Unity Mono يكتشف وجود `assets/bin/Data/Managed/Assembly-CSharp.dll` ويرفض حزم IL2CPP عند ظهور `libil2cpp.so` أو `global-metadata.dat`. يمكنه إعادة بناء APK عبر مسار ZIP والتوقيع الحالي عندما تكون النصوص في ملفات واضحة مدعومة (JSON/CSV/TXT/Properties/Strings) داخل `assets/`، بما فيها StreamingAssets.
 
 **هذا ليس بعدُ محولًا كاملًا لملفات Unity:** لا يغيّر CIL داخل Assembly-CSharp.dll، ولا يقرأ أو يعيد بناء `resources.assets` أو AssetBundles. ملفات DLL والموارد الثنائية تُحفظ كما هي. أضيفت اختبارات ZIP fixture لتأكيد اكتشاف Mono/IL2CPP وحفظ DLL وعدم إفساد موارد النصوص. يلزم اختبار لعبة Mono حقيقية قبل توسيع الادعاء بالتوافق.
 
@@ -53,8 +53,8 @@
 ## حدود الإصدار الحالي — مهم
 
 هذا ليس بعدُ مترجمًا عامًا لكل الألعاب:
-- مسار Android Native الحالي يعالج موارد `string` الافتراضية. ومسار assets التجريبي يعالج فقط ملفات JSON/TXT/Properties/Strings النصية الواضحة ضمن المسارات المسموح بها؛ لا يترجم DEX أو الصور أو الصوت أو الملفات الثنائية.
-- **Unity Mono: دعم أولي محدود** لملفات JSON/TXT/Properties/Strings الواضحة داخل `assets/bin/Data/StreamingAssets/`، مع اكتشاف Mono ورفض IL2CPP وإعادة بناء ZIP/توقيع APK عبر المسار الحالي. لا يغيّر هذا المسار `Assembly-CSharp.dll` أو `resources.assets` أو AssetBundles. **Unity IL2CPP غير مدعوم بعد**، ولا توجد إعادة بناء لملفات Resources أو AssetBundles.
+- مسار Android Native الحالي يعالج موارد `string` الافتراضية. ومسار assets التجريبي يعالج فقط ملفات JSON/CSV/TXT/Properties/Strings النصية الواضحة ضمن المسارات المسموح بها؛ لا يترجم DEX أو الصور أو الصوت أو الملفات الثنائية.
+- **Unity Mono: دعم أولي محدود** لملفات JSON/CSV/TXT/Properties/Strings الواضحة داخل `assets/bin/Data/StreamingAssets/`، مع اكتشاف Mono ورفض IL2CPP وإعادة بناء ZIP/توقيع APK عبر المسار الحالي. لا يغيّر هذا المسار `Assembly-CSharp.dll` أو `resources.assets` أو AssetBundles. **Unity IL2CPP غير مدعوم بعد**، ولا توجد إعادة بناء لملفات Resources أو AssetBundles.
 - **Unreal Engine: غير مدعوم للتعريب حاليًا**؛ الموجود هو اكتشاف مؤشرات فقط. لا يوجد قارئ/كاتب PAK أو IoStore (UCAS/UTOC)، ولا فك ضغط/تشفير أو إعادة بناء الحزم.
 - Godot: لا يوجد محول تعريب مكتمل.
 - لا يتم حاليًا تعريب `plurals` أو `string-array` أو XML أو ملفات localization الخاصة بمحركات الألعاب.
@@ -76,7 +76,7 @@
 - [x] ترجمة محلية إنجليزية ← عربية.
 - [x] إضافة موارد Android `string` عربية وإعادة بناء APK.
 - [x] توقيع الناتج والتحقق منه.
-- [x] مسار أولي لترجمة ملفات JSON/TXT/Properties/Strings داخل APK.
+- [x] مسار أولي لترجمة ملفات JSON/CSV/TXT/Properties/Strings داخل APK.
 - [ ] تحليل ملفات XML وPO/CSV مع الحفاظ على بنيتها.
 - [ ] معالجة plurals وstring-arrays وملفات XML المعقدة.
 - [ ] دعم ملفات JSON/TXT/CSV وملفات الترجمة في assets.

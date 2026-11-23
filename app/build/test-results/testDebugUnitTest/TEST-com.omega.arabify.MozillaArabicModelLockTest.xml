@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.omega.arabify.MozillaArabicModelLockTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-11-23T20:41:17.203Z" hostname="e2b.local" time="0.001">
+  <properties/>
+  <testcase name="packageSizesAreTrackedSeparatelyByDirection" classname="com.omega.arabify.MozillaArabicModelLockTest" time="0.001"/>
+  <testcase name="containsBothIndependentArabicDirections" classname="com.omega.arabify.MozillaArabicModelLockTest" time="0.0"/>
+  <testcase name="eachDirectionHasModelLexiconAndSentencePieceVocabulary" classname="com.omega.arabify.MozillaArabicModelLockTest" time="0.0"/>
+  <testcase name="recordsUseMozillaPublishedEngineAndModelLicenses" classname="com.omega.arabify.MozillaArabicModelLockTest" time="0.0"/>
+  <testcase name="allRegistryHashesAreSha256AndSizesArePositive" classname="com.omega.arabify.MozillaArabicModelLockTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

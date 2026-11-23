@@ -84,7 +84,7 @@ internal data class UnityTextAssetPatchManifest private constructor(
         private const val TEXT_ASSET_CLASS_ID = 49
         private const val MAX_METADATA_LENGTH = 4_096
         private const val MAX_SKIPPED_STRINGS = 20_000
-        private val supportedFormats = setOf("json", "txt", "properties", "strings")
+        private val supportedFormats = setOf("json", "csv", "txt", "properties", "strings")
 
         fun create(
             preview: UnityTextAssetPreview,

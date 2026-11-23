@@ -128,7 +128,7 @@ internal data class UnityTextAssetTranslationResult(
  */
 internal object UnityTextAssetPreviewTranslator {
     private const val MAX_TRANSLATED_PREVIEW_CODE_POINTS = 1_200
-    private val supportedFormats = setOf("json", "txt", "properties", "strings")
+    private val supportedFormats = setOf("json", "csv", "txt", "properties", "strings")
 
     fun supportedFormat(preview: UnityTextAssetPreview): String? {
         // A declared in-game path is authoritative. Never fall back to a

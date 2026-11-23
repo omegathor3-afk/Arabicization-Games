@@ -46,7 +46,7 @@ internal object UnityMonoPackageDetector {
  */
 internal object UnityMonoLocalizer {
     const val supportedScope =
-        "يدعم حاليًا ملفات JSON/TXT/Properties/Strings النصية الواضحة داخل APK لألعاب Unity Mono. لا يغيّر Assembly-CSharp.dll أو resources.assets أو AssetBundles."
+        "يدعم حاليًا ملفات JSON/CSV/TXT/Properties/Strings النصية الواضحة داخل APK لألعاب Unity Mono. لا يغيّر Assembly-CSharp.dll أو resources.assets أو AssetBundles."
 
     suspend fun localize(
         context: Context,
@@ -94,7 +94,7 @@ internal object UnityMonoLocalizer {
                     out.putNextEntry(java.util.zip.ZipEntry(entry.name).apply { time = entry.time })
                     val path = entry.name
                     val supported = path.startsWith("assets/bin/Data/StreamingAssets/") &&
-                        path.substringAfterLast('.', "").lowercase() in setOf("json", "txt", "properties", "strings")
+                        path.substringAfterLast('.', "").lowercase() in setOf("json", "csv", "txt", "properties", "strings")
                     if (supported && entry.size in 1..(512L * 1024L)) {
                         val source = zip.getInputStream(entry).bufferedReader(Charsets.UTF_8).use { it.readText() }
                         val result = AssetTextTransformer.transform(path, source, translate)

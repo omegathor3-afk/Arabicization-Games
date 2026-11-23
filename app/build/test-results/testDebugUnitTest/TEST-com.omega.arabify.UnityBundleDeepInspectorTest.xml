@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.omega.arabify.UnityBundleDeepInspectorTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-11-23T20:41:17.354Z" hostname="e2b.local" time="0.083">
+  <properties/>
+  <testcase name="enforcesAggregateObjectRecordBudgetAcrossSerializedFiles" classname="com.omega.arabify.UnityBundleDeepInspectorTest" time="0.039"/>
+  <testcase name="boundsZipEntryUniquenessVerificationBeforeCreatingScratchFiles" classname="com.omega.arabify.UnityBundleDeepInspectorTest" time="0.002"/>
+  <testcase name="skipsBundleThatExceedsConfiguredCopyBudget" classname="com.omega.arabify.UnityBundleDeepInspectorTest" time="0.002"/>
+  <testcase name="perFileObjectLimitDoesNotConsumeAggregateBudget" classname="com.omega.arabify.UnityBundleDeepInspectorTest" time="0.007"/>
+  <testcase name="enforcesAggregateCabOutputBudgetAcrossBundles" classname="com.omega.arabify.UnityBundleDeepInspectorTest" time="0.005"/>
+  <testcase name="perFileLimitTakesPrecedenceWhenBothObjectBudgetsWouldRejectTable" classname="com.omega.arabify.UnityBundleDeepInspectorTest" time="0.006"/>
+  <testcase name="extractsUnityFsCabNodesReadOnlyAndCleansTemporaryFiles" classname="com.omega.arabify.UnityBundleDeepInspectorTest" time="0.004"/>
+  <testcase name="refusesDeepInspectionWhenInventoryWasTruncated" classname="com.omega.arabify.UnityBundleDeepInspectorTest" time="0.001"/>
+  <testcase name="deepInspectionFindsBundleBeyondVisibleInventoryPreviewLimit" classname="com.omega.arabify.UnityBundleDeepInspectorTest" time="0.014"/>
+  <testcase name="scratchSpaceBudgetIncludesCompressedDecodedAndExtractedWorkingFiles" classname="com.omega.arabify.UnityBundleDeepInspectorTest" time="0.001"/>
+  <testcase name="reportsMalformedObjectTableAsUnavailableInsteadOfEmpty" classname="com.omega.arabify.UnityBundleDeepInspectorTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

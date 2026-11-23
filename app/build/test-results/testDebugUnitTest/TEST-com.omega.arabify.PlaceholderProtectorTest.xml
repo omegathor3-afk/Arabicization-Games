@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.omega.arabify.PlaceholderProtectorTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-11-23T20:41:17.206Z" hostname="e2b.local" time="0.004">
+  <properties/>
+  <testcase name="leavesNormalTextAlone" classname="com.omega.arabify.PlaceholderProtectorTest" time="0.0"/>
+  <testcase name="avoidsCollisionsWithLiteralLegacyMarkerText" classname="com.omega.arabify.PlaceholderProtectorTest" time="0.0"/>
+  <testcase name="protectsAndRestoresGameTokens" classname="com.omega.arabify.PlaceholderProtectorTest" time="0.0"/>
+  <testcase name="protectsPrintfWidthPrecisionAndLiteralPercent" classname="com.omega.arabify.PlaceholderProtectorTest" time="0.004"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

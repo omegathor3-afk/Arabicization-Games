@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.omega.arabify.UnityPyTextAssetFixtureTest" tests="1" skipped="1" failures="0" errors="0" timestamp="2026-11-23T20:41:17.530Z" hostname="e2b.local" time="0.0">
+  <properties/>
+  <testcase name="readsRealUnity2019TextAssetAndMatchesUnityPyOracleWithoutChangingSource" classname="com.omega.arabify.UnityPyTextAssetFixtureTest" time="0.0">
+    <skipped/>
+  </testcase>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

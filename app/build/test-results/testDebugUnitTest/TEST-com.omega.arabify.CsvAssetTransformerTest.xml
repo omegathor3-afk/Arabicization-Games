@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.omega.arabify.CsvAssetTransformerTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-11-23T20:41:17.170Z" hostname="e2b.local" time="0.021">
+  <properties/>
+  <testcase name="csvQuotesTranslationContainingComma" classname="com.omega.arabify.CsvAssetTransformerTest" time="0.003"/>
+  <testcase name="csvSkipsSnakeCaseIdentifiers" classname="com.omega.arabify.CsvAssetTransformerTest" time="0.001"/>
+  <testcase name="nonGlossaryProseStillUsesTranslator" classname="com.omega.arabify.CsvAssetTransformerTest" time="0.002"/>
+  <testcase name="glossaryLabelIsTranslatedWithoutCallingTranslator" classname="com.omega.arabify.CsvAssetTransformerTest" time="0.001"/>
+  <testcase name="parseCsvHandlesCarriageReturnNewlineAndEmptyCells" classname="com.omega.arabify.CsvAssetTransformerTest" time="0.001"/>
+  <testcase name="csvPreservesQuotedCellsAndEscapesInnerQuotes" classname="com.omega.arabify.CsvAssetTransformerTest" time="0.001"/>
+  <testcase name="csvTranslatesCellsAndKeepsHeaderAndKeyColumn" classname="com.omega.arabify.CsvAssetTransformerTest" time="0.002"/>
+  <testcase name="glossaryPreservesSurroundingWhitespace" classname="com.omega.arabify.CsvAssetTransformerTest" time="0.003"/>
+  <testcase name="csvPlaceholderSurvivesTranslation" classname="com.omega.arabify.CsvAssetTransformerTest" time="0.002"/>
+  <testcase name="csvWithoutHeaderTranslatesProseCellsOnly" classname="com.omega.arabify.CsvAssetTransformerTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

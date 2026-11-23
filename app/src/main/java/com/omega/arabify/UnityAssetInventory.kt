@@ -284,7 +284,7 @@ internal object UnityAssetInventoryScanner {
                         UnityAssetSupport.PRESERVE_UNSUPPORTED,
                         "Assembly/DLL محفوظ كما هو؛ لا يوجد تعديل CIL"
                     )
-                    isStreaming && extension in setOf("json", "txt", "properties", "strings") ->
+                    isStreaming && extension in setOf("json", "csv", "txt", "properties", "strings") ->
                         UnityAssetInventoryItem(
                             path, size, UnityAssetKind.STREAMING_TEXT,
                             UnityAssetSupport.TEXT_CANDIDATE_READ_ONLY,

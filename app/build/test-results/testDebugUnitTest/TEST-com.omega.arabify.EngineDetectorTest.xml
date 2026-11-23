@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.omega.arabify.EngineDetectorTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-11-23T20:41:17.194Z" hostname="e2b.local" time="0.004">
+  <properties/>
+  <testcase name="unrealNativeLibrary" classname="com.omega.arabify.EngineDetectorTest" time="0.001"/>
+  <testcase name="unreal" classname="com.omega.arabify.EngineDetectorTest" time="0.0"/>
+  <testcase name="unknown" classname="com.omega.arabify.EngineDetectorTest" time="0.0"/>
+  <testcase name="godot" classname="com.omega.arabify.EngineDetectorTest" time="0.0"/>
+  <testcase name="unity" classname="com.omega.arabify.EngineDetectorTest" time="0.0"/>
+  <testcase name="androidDex" classname="com.omega.arabify.EngineDetectorTest" time="0.0"/>
+  <testcase name="unityIl2Cpp" classname="com.omega.arabify.EngineDetectorTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

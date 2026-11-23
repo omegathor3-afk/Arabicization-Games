@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.omega.arabify.UnityTextAssetSelectionTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-11-23T20:41:17.765Z" hostname="e2b.local" time="0.003">
+  <properties/>
+  <testcase name="preservesOrderAndReportsWhenAnAdditionalTextAssetIsOmitted" classname="com.omega.arabify.UnityTextAssetSelectionTest" time="0.001"/>
+  <testcase name="doesNotReportLimitWhenCandidateCountExactlyMatchesLimit" classname="com.omega.arabify.UnityTextAssetSelectionTest" time="0.001"/>
+  <testcase name="rejectsUnboundedCandidateLimits" classname="com.omega.arabify.UnityTextAssetSelectionTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
