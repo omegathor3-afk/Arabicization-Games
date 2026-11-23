@@ -26,7 +26,7 @@ internal object UnityTextAssetReader {
     private const val MAX_OBJECT_BYTES = 4L * 1024L * 1024L
     private const val MAX_STRING_BYTES = 4 * 1024 * 1024
 
-    private data class StringField(
+    internal data class StringField(
         val name: String,
         val alignBytes: Boolean
     )
@@ -122,7 +122,7 @@ internal object UnityTextAssetReader {
         }.getOrNull()
     }
 
-    private fun findTypeRecord(
+    internal fun findTypeRecord(
         header: UnitySerializedHeader,
         typeTable: UnitySerializedTypeTable,
         objectInfo: UnitySerializedObjectInfo
@@ -134,7 +134,7 @@ internal object UnityTextAssetReader {
         }
     }
 
-    private fun parseStringFields(tree: UnityTypeTree): List<StringField>? {
+    internal fun parseStringFields(tree: UnityTypeTree): List<StringField>? {
         val nodes = tree.nodes
         if (nodes.size < 7) return null
         val root = nodes.first()
