@@ -101,6 +101,10 @@ all new heads; build green.
     localizeBundlesInApk behavior unchanged. Tests: 262 green.
     Caveat: the signing fallback path needs AndroidKeyStore, so it is
     covered by the CI emulator test, not JVM tests.
+16. `eeb4173` fix(ui): the supported-scope line still claimed AssetBundles
+    were never changed after the bundle stage landed; scope text and the
+    asset-section warning updated to match implemented+tested behavior.
+    IL2CPP and resources.assets remain explicitly excluded.
 
 ## Next up (in order)
 
