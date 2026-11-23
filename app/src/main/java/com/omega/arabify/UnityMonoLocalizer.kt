@@ -46,7 +46,7 @@ internal object UnityMonoPackageDetector {
  */
 internal object UnityMonoLocalizer {
     const val supportedScope =
-        "يدعم حاليًا ملفات JSON/CSV/TXT/Properties/Strings النصية الواضحة داخل APK لألعاب Unity Mono. لا يغيّر Assembly-CSharp.dll أو resources.assets أو AssetBundles."
+        "يدعم حاليًا ملفات JSON/CSV/TXT/Properties/Strings النصية الواضحة داخل APK لألعاب Unity Mono، إضافة إلى نصوص TextAsset داخل حزم UnityFS في StreamingAssets. لا يغيّر Assembly-CSharp.dll أو resources.assets ولا يدعم ألعاب IL2CPP."
 
     suspend fun localize(
         context: Context,

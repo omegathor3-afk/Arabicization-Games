@@ -491,7 +491,7 @@ private fun ArabifyApp(context: Context) {
         Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
          Text("تعريب ملفات النصوص داخل اللعبة",color=ArabifyPalette.accent,fontWeight=FontWeight.Bold,fontSize=17.sp)
          Text("يعالج هذا المسار ملفات JSON وTXT وProperties وStrings الموجودة داخل assets أو res/raw أو مجلدات localization/strings. يحافظ على مفاتيح JSON وخصائص الإعدادات والمتغيرات المعروفة.",color=ArabifyPalette.textSecondary,fontSize=12.sp)
-         Text("لن يترجم ملفات ثنائية أو XML أو ملفات Unity/Unreal المشفرة. لا تعتبر النتيجة تعريبًا كاملًا للعبة.",color=ArabifyPalette.warningText,fontSize=12.sp)
+         Text("لا يترجم ملفات Unreal أو ملفات Unity الثنائية خارج النطاق الموضح. لا تعتبر النتيجة تعريبًا كاملًا للعبة.",color=ArabifyPalette.warningText,fontSize=12.sp)
          if(scan.engine==GameEngine.UNITY) Text(UnityMonoLocalizer.supportedScope,color=ArabifyPalette.warningText,fontSize=12.sp)
          Button(onClick={
           val uri=selectedUri
