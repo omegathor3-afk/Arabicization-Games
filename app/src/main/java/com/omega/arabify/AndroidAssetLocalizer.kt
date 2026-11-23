@@ -315,13 +315,26 @@ internal object AndroidAssetLocalizer {
   translator:OfflineArabicTranslator,onProgress:(Int,Int)->Unit={_,_->},
   allowedPathPrefixes:List<String> = allowedRoots
  ):AssetLocalizationReport {
-  require(inputApk.isFile){"ملف APK الأصلي غير موجود."}
   val archiveInfo=try{
    @Suppress("DEPRECATION")
    context.packageManager.getPackageArchiveInfo(inputApk.absolutePath,0)
   }catch(_:Exception){null}
   val packageName=archiveInfo?.packageName
   val extractNativeLibs=archiveInfo?.applicationInfo?.let { it.flags and ApplicationInfo.FLAG_EXTRACT_NATIVE_LIBS != 0 } ?: false
+  val report=transformToUnsignedApk(inputApk,unsignedApk,extractNativeLibs,allowedPathPrefixes,onProgress,requireTranslations=true){value->
+   translator.translateEnglishToArabic(value)
+  }
+  ApkSigningService.signAndVerify(context,unsignedApk,signedApk)
+  return report.copy(packageName=packageName,outputApk=signedApk)
+ }
+
+ internal suspend fun transformToUnsignedApk(
+  inputApk:File,unsignedApk:File,extractNativeLibs:Boolean,
+  allowedPathPrefixes:List<String>,onProgress:(Int,Int)->Unit={_,_->},
+  requireTranslations:Boolean=true,
+  tx:suspend (String)->String
+ ):AssetLocalizationReport {
+  require(inputApk.isFile){"ملف APK الأصلي غير موجود."}
   var discovered=0
   var translatedFiles=0
   var translatedStrings=0
@@ -369,7 +382,7 @@ internal object AndroidAssetLocalizer {
     }
     totalBytes+=bytes.size
     val original=bytes.toString(Charsets.UTF_8)
-    val result=AssetTextTransformer.transform(entry.name,original){value->translator.translateEnglishToArabic(value)}
+    val result=AssetTextTransformer.transform(entry.name,original){value->tx(value)}
     if(result.translated>0){
      transformed[entry.name]=result.text.toByteArray(Charsets.UTF_8)
      translatedFiles++
@@ -379,7 +392,7 @@ internal object AndroidAssetLocalizer {
     onProgress(index+1,candidates.size)
    }
 
-   require(translatedStrings>0){"لم يتم العثور على نصوص قابلة للترجمة في ملفات JSON/CSV/TXT/Properties/Strings المدعومة."}
+   if(requireTranslations) require(translatedStrings>0){"لم يتم العثور على نصوص قابلة للترجمة في ملفات JSON/CSV/TXT/Properties/Strings المدعومة."}
    unsignedApk.parentFile?.mkdirs()
    val countingOutput = CountingOutputStream(unsignedApk.outputStream().buffered())
    ZipOutputStream(countingOutput).use { out ->
@@ -414,8 +427,7 @@ internal object AndroidAssetLocalizer {
     }
    }
   }
-  ApkSigningService.signAndVerify(context,unsignedApk,signedApk)
-  return AssetLocalizationReport(packageName,discovered,translatedFiles,translatedStrings,skippedStrings,signedApk)
+  return AssetLocalizationReport(null,discovered,translatedFiles,translatedStrings,skippedStrings,unsignedApk)
  }
 
  private fun isOldSignature(path:String):Boolean {
