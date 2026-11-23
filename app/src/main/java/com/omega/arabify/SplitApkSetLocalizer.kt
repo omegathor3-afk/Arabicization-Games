@@ -1,5 +1,6 @@
 package com.omega.arabify
 
+import android.content.Context
 import java.io.File
 
 /**
@@ -59,5 +60,20 @@ internal object SplitApkSetLocalizer {
             "لم يتم العثور على نصوص قابلة للترجمة في أي ملف من مجموعة Split."
         }
         return SetReport(members)
+    }
+
+    /**
+     * Signs every rebuilt member with the app key. The key is persisted in
+     * AndroidKeyStore, so all members share one signer - the hard requirement
+     * for installing a split set. Device-only (AndroidKeyStore); covered by
+     * the CI emulator path, not JVM tests.
+     */
+    fun signSet(context: Context, setReport: SetReport, signedDir: File): List<File> {
+        signedDir.mkdirs()
+        return setReport.members.map { member ->
+            val signed = File(signedDir, member.outputApk.name)
+            ApkSigningService.signAndVerify(context, member.outputApk, signed)
+            signed
+        }
     }
 }
