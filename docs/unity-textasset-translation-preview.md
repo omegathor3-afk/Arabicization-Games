@@ -11,7 +11,7 @@ This increment adds a local translation preview for complete decoded TextAsset s
 - Java-style Properties
 - Apple `.strings`
 
-The complete decoded script is retained in memory only for the already-bounded preview candidates. The inspector caps each object at 1 MiB, total TextAsset reads at 8 MiB, the number of preview objects at 32, and the visible source preview at 1,200 Unicode code points. Translation uses the complete retained script, not the visible snippet. A TextAsset is additionally limited to 500 translation candidates, 10,000 text lines, JSON nesting depth 64, and 20,000 JSON delimiters/string tokens; excess input is rejected or left unchanged before expensive parsing/translation. The translated result is also displayed as a bounded preview; the user can copy the complete translated text.
+The complete decoded script is retained in memory only for the already-bounded preview candidates. The inspector caps each object at 1 MiB, total TextAsset reads at 8 MiB, the number of preview objects at 32, and the visible source preview at 1,200 Unicode code points. Translation uses the complete retained script, not the visible snippet. A TextAsset is additionally limited to 500 translation candidates, 10,000 text lines, JSON nesting depth 64, and 20,000 JSON delimiters/string tokens; excess input is rejected or left unchanged before expensive parsing/translation. The translated result opens in an editable full-text review field. The user can copy the reviewed text or export a JSON Patch Manifest containing the source and reviewed text, object identity, and SHA-256 checksums.
 
 The translator reuses the existing `AssetTextTransformer`, placeholder protection, and translation quality gate. JSON keys and non-string values are not translated; TXT comments and Properties/Strings syntax are preserved by the existing transformer. Values rejected by the quality gate remain unchanged.
 
@@ -26,7 +26,9 @@ This is intentionally conservative: a translation that would require moving plac
 - Only complete decoded TextAsset scripts are translated; the UI's shortened display preview is never passed as if it were the full source.
 - Unknown extensions are rejected instead of guessing that arbitrary TextAsset bytes are prose. A non-empty `m_PathName` is authoritative; a supported-looking `m_Name` cannot override an explicitly unsupported path.
 - The existing on-device Arabic ML Kit model must already be available.
-- The translated output is shown as a bounded preview and can be copied in full for external review.
+- The translated output is editable in a full-text review field and can be copied in full.
+- A review-only JSON Patch Manifest can be exported through Android's Storage Access Framework. It records the source/reviewed text, Unity object identity, SHA-256 checksums, translation counts, and an explicit `applied: false` / `writerAvailable: false` state.
+- Manifest export rejects archive path traversal, oversized text, invalid JSON, and any lost, duplicated, reordered, or newly introduced placeholder/tag. The manifest is not executable and cannot modify a game.
 - Translation cancellation is propagated; the preview offers an explicit cancel action. Cancellation never writes to game assets.
 - **No SerializedFile object, UnityFS member, AssetBundle, APK, or original game file is rewritten by this preview.**
 
@@ -34,7 +36,7 @@ This is a complete-source extraction/translation-review milestone, not end-to-en
 
 ## Remaining work
 
-1. Add a user-editable source/translation review and an exportable patch manifest.
+1. Keep expanding the review workflow with per-string editing and review history; the current manifest is still one TextAsset at a time.
 2. Design a version-aware SerializedFile writer that updates object sizes, offsets, alignment, metadata, and file headers without touching unrelated bytes.
 3. Rebuild UnityFS blocks and verify the result with UnityPy and UnityDataTools across real Mono fixtures before enabling any write path.
 4. Test multiple Unity versions, stripped/no-TypeTree files, LZ4/LZMA, external `.resS`/`.resource` data, cancellation, and low-storage rollback.
