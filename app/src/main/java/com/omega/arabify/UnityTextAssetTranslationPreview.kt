@@ -1,9 +1,13 @@
 package com.omega.arabify
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -15,14 +19,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 internal object UnityTextAssetPreviewInputPolicy {
     const val MAX_SOURCE_UTF16_CODE_UNITS = 1_048_576
@@ -170,6 +177,7 @@ internal fun UnityTextAssetTranslationPreview(
     modelReady: Boolean
 ) {
     val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val stateKey = listOf(
         preview.bundlePath,
@@ -183,7 +191,35 @@ internal fun UnityTextAssetTranslationPreview(
     var message by remember(stateKey) { mutableStateOf<String?>(null) }
     var busy by remember(stateKey) { mutableStateOf(false) }
     var translationJob by remember(stateKey) { mutableStateOf<Job?>(null) }
+    var editedText by remember(stateKey) { mutableStateOf("") }
+    var exportBusy by remember(stateKey) { mutableStateOf(false) }
+    var exportMessage by remember(stateKey) { mutableStateOf<String?>(null) }
+    var pendingManifestJson by remember(stateKey) { mutableStateOf<String?>(null) }
     val format = UnityTextAssetPreviewTranslator.supportedFormat(preview)
+    val manifestLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { targetUri: Uri? ->
+        val manifestJson = pendingManifestJson
+        pendingManifestJson = null
+        if (targetUri != null && manifestJson != null) {
+            exportBusy = true
+            scope.launch {
+                try {
+                    withContext(Dispatchers.IO) {
+                        context.contentResolver.openOutputStream(targetUri, "wt")?.use { output ->
+                            output.write(manifestJson.toByteArray(Charsets.UTF_8))
+                            output.flush()
+                        } ?: error("تعذر إنشاء ملف Patch Manifest في المكان المحدد.")
+                    }
+                    exportMessage = "تم تصدير ملف المراجعة؛ لم يتم تطبيقه على اللعبة."
+                } catch (error: Exception) {
+                    exportMessage = error.message ?: "تعذر تصدير ملف المراجعة."
+                } finally {
+                    exportBusy = false
+                }
+            }
+        }
+    }
     DisposableEffect(stateKey, translationJob) {
         onDispose { translationJob?.cancel() }
     }
@@ -204,6 +240,8 @@ internal fun UnityTextAssetTranslationPreview(
                         }
                         if (result.translatedStrings > 0) {
                             translatedResult = result
+                            editedText = result.text
+                            exportMessage = null
                             message = "تمت ترجمة ${result.translatedStrings} قيمة؛ تُركت ${result.skippedStrings} قيمة دون تغيير."
                         } else {
                             message = "لم تُقبل أي قيمة للترجمة؛ لم يتغير النص الأصلي."
@@ -246,19 +284,75 @@ internal fun UnityTextAssetTranslationPreview(
             )
         }
         translatedResult?.let { result ->
-            Text("معاينة الترجمة — لم تُكتب داخل اللعبة", color = ArabifyPalette.accent, fontWeight = FontWeight.SemiBold, fontSize = 11.sp)
-            Text(result.previewText, color = ArabifyPalette.textBody, fontSize = 11.sp, lineHeight = 17.sp)
+            Text(
+                "مراجعة الترجمة — التعديل هنا لا يغيّر ملفات اللعبة",
+                color = ArabifyPalette.accent,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 11.sp
+            )
+            OutlinedTextField(
+                value = editedText,
+                onValueChange = {
+                    if (it.length <= UnityTextAssetPreviewInputPolicy.MAX_SOURCE_UTF16_CODE_UNITS) {
+                        editedText = it
+                        exportMessage = null
+                    } else {
+                        exportMessage = "النص يتجاوز حد التحرير الآمن البالغ 1 MiB من وحدات UTF-16."
+                    }
+                },
+                label = { Text("النص العربي القابل للمراجعة") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 4,
+                maxLines = 12,
+                enabled = !busy && !exportBusy && pendingManifestJson == null
+            )
             if (result.previewTruncated) {
                 Text(
-                    "عرض الترجمة مختصر إلى أول 1200 محرف؛ زر النسخ ينقل النص الكامل.",
+                    "النص الكامل موجود في حقل المراجعة؛ حد 1200 نقطة Unicode يخص المعاينة المختصرة فقط.",
                     color = ArabifyPalette.warningText,
                     fontSize = 10.sp
                 )
             }
             TextButton(
-                onClick = { clipboard.setText(AnnotatedString(result.text)) },
+                onClick = { clipboard.setText(AnnotatedString(editedText)) },
+                enabled = editedText.isNotEmpty()
             ) {
-                Text("نسخ الترجمة كاملة")
+                Text("نسخ الترجمة المراجعة كاملة")
+            }
+            Button(
+                onClick = {
+                    try {
+                        val manifest = UnityTextAssetPatchManifest.create(
+                            preview = preview,
+                            result = result,
+                            reviewedText = editedText
+                        )
+                        pendingManifestJson = manifest.toJsonString()
+                        val fileStem = preview.name
+                            .substringAfterLast('/')
+                            .substringBeforeLast('.')
+                            .replace(Regex("[^A-Za-z0-9_-]"), "_")
+                            .take(48)
+                            .ifBlank { "textasset" }
+                        manifestLauncher.launch("arabify-$fileStem.patch.json")
+                    } catch (error: Exception) {
+                        pendingManifestJson = null
+                        exportMessage = error.message ?: "تعذر تجهيز ملف المراجعة."
+                    }
+                },
+                enabled = !busy && !exportBusy && pendingManifestJson == null &&
+                    editedText.isNotBlank() && editedText != preview.fullScript,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (exportBusy || pendingManifestJson != null) "جارٍ تصدير ملف المراجعة..." else "تصدير Patch Manifest")
+            }
+            Text(
+                "ملف المراجعة يحتوي النص الأصلي والمراجع وSHA-256 ومعرّف الكائن. لا يطبّق التعديل على اللعبة ولا يعيد بناء AssetBundle.",
+                color = ArabifyPalette.warningText,
+                fontSize = 10.sp
+            )
+            exportMessage?.let {
+                Text(it, color = ArabifyPalette.textSecondary, fontSize = 10.sp)
             }
         }
         message?.let { Text(it, color = ArabifyPalette.textSecondary, fontSize = 10.sp) }
