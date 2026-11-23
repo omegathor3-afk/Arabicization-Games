@@ -47,12 +47,21 @@ feature claims without passing tests, no build artifacts in git.
 
 CI after batch 7: CodeQL (default setup) and CodeQL-and-Gitleaks green on
 all new heads; build green.
+9. `a34a9b3` fix(unity): real LZMA bundles were being refused. UnityFS
+   LZMA blocks are raw LZMA1 + 5-byte props header, not LZMA-alone; the
+   decoder now reattaches the size field. Proven with differential tests
+   against Unity's official UnityDataTools fixtures (Unity Companion
+   License, NOTICE vendored) and a UnityPy 1.25.4 oracle: real Unity
+   2021.3 LZMA bundle + real Unity 6 bundle decode, and every SerializedFile
+   object matches UnityPy (pathId, classId, byteSize). Tests: 256 green.
 
 ## Next up (in order)
 
-- Real-game fixture: run extract/preview/patch/rewrite on an actual Unity
-  Mono game bundle and compare with UnityPy's output (differential test
-  like the existing oracle pattern).
+- Writer differential: replace the CAB node in the real Unity 6 bundle
+  with a TextAsset SerializedFile, rewrite with UnityFsBundleRewriter,
+  and verify the result loads in UnityPy (one-off sandbox check; JVM
+  verifies structure). Note: rewriter currently refuses LZMA block-info
+  bundles, so cover the LZ4 fixtures; LZMA rewrite stays refused.
 - APK-level integration: locate the UnityFS bundle inside an APK, run the
   localizer, and rebuild a signed debug APK (library + tests first, UI
   wiring after).
@@ -75,6 +84,8 @@ all new heads; build green.
   main and Releases are never touched.
 - Not verifiable in the sandbox: physical-device behavior, Firebase Test
   Lab instrumented tests, real game compatibility.
+- UnityPy 1.25.4 is pip-installed in the workspace box; downloaded real
+  fixtures live in /downloads/realfixtures/.
 
 ## Known honest limits (do not claim otherwise)
 
