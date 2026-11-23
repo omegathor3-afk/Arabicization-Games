@@ -656,7 +656,7 @@ internal object UnityFsBlockDecompressor {
                 val memoryLimitKiB = (maxLzmaMemoryBytes / 1024L)
                     .coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
                 val output = ByteArray(expected)
-                val input = java.io.ByteArrayInputStream(compressed)
+                val input = java.io.ByteArrayInputStream(unityLzmaToAloneStream(compressed, expected))
                 org.tukaani.xz.LZMAInputStream(input, memoryLimitKiB).use { decoder ->
                     var offset = 0
                     while (offset < expected) {
@@ -670,5 +670,35 @@ internal object UnityFsBlockDecompressor {
                 output
             }
         }
+    }
+
+    /**
+     * UnityFS stores LZMA blocks as a raw LZMA1 stream prefixed with only the
+     * 5-byte LZMA properties/dictionary header; the 8-byte uncompressed-size
+     * field of the LZMA-alone format is omitted because the block metadata
+     * already carries the size. XZ for Java only accepts the LZMA-alone
+     * container, so the size field is reattached here. Streams that already
+     * carry a matching size field (older fixtures and tools) pass through.
+     */
+    private fun unityLzmaToAloneStream(compressed: ByteArray, expected: Int): ByteArray {
+        if (compressed.size >= 13) {
+            var declaredSize = 0L
+            for (i in 12 downTo 5) {
+                declaredSize = (declaredSize shl 8) or (compressed[i].toLong() and 0xffL)
+            }
+            if (declaredSize == expected.toLong()) return compressed
+        }
+        require(compressed.size >= 5) { "UnityFS LZMA block is shorter than its properties header" }
+        val props = compressed[0].toInt() and 0xff
+        require(props < 9 * 5 * 5) { "UnityFS LZMA properties byte is invalid" }
+        val out = ByteArray(compressed.size + 8)
+        System.arraycopy(compressed, 0, out, 0, 5)
+        var size = expected.toLong()
+        for (i in 5..12) {
+            out[i] = (size and 0xffL).toByte()
+            size = size shr 8
+        }
+        System.arraycopy(compressed, 5, out, 13, compressed.size - 5)
+        return out
     }
 }

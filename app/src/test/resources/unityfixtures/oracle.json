@@ -1,0 +1,947 @@
+{
+ "v22_bundle": {
+  "top_files": [
+   {
+    "bundle": "v22_packedassets_assets_all.bundle",
+    "nodes": [
+     "CAB-394ff12e47c27ee4c30d41d2747acd4b"
+    ]
+   }
+  ],
+  "serialized": {
+   "CAB-394ff12e47c27ee4c30d41d2747acd4b": {
+    "unity_version": "6000.0.65f1",
+    "format_version": "6000.0f1",
+    "objects": [
+     {
+      "path_id": 1,
+      "class_id": 142,
+      "type": "AssetBundle",
+      "byte_size": 300
+     },
+     {
+      "path_id": 674343093664966924,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 68
+     },
+     {
+      "path_id": 4902368549205534988,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 80
+     },
+     {
+      "path_id": 5206304541755795724,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 51
+     },
+     {
+      "path_id": 6854740422901983500,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 35
+     },
+     {
+      "path_id": 8430482813342345484,
+      "class_id": 114,
+      "type": "MonoBehaviour",
+      "byte_size": 104
+     }
+    ]
+   }
+  },
+  "node_details": [
+   {
+    "path": "CAB-394ff12e47c27ee4c30d41d2747acd4b",
+    "size": 0
+   }
+  ]
+ },
+ "u2021_bundle": {
+  "top_files": [
+   {
+    "bundle": "2021.3.0f1_assetbundle",
+    "nodes": [
+     "CAB-5d40f7cad7c871cf2ad2af19ac542994",
+     "CAB-5d40f7cad7c871cf2ad2af19ac542994.resS",
+     "CAB-5d40f7cad7c871cf2ad2af19ac542994.resource"
+    ]
+   }
+  ],
+  "serialized": {
+   "CAB-5d40f7cad7c871cf2ad2af19ac542994": {
+    "unity_version": "2021.3.0f1",
+    "format_version": "2021.3f1",
+    "objects": [
+     {
+      "path_id": -9180874206900030759,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 39
+     },
+     {
+      "path_id": -9023202112035587373,
+      "class_id": 28,
+      "type": "Texture2D",
+      "byte_size": 32896
+     },
+     {
+      "path_id": -9005721010300469989,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 80
+     },
+     {
+      "path_id": -8720048570983375440,
+      "class_id": 23,
+      "type": "MeshRenderer",
+      "byte_size": 156
+     },
+     {
+      "path_id": -8564259123370125535,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 43
+     },
+     {
+      "path_id": -8450148522576704768,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 35
+     },
+     {
+      "path_id": -8196865264539994992,
+      "class_id": 95,
+      "type": "Animator",
+      "byte_size": 56
+     },
+     {
+      "path_id": -8138362113332287275,
+      "class_id": 135,
+      "type": "SphereCollider",
+      "byte_size": 44
+     },
+     {
+      "path_id": -8074603400156879931,
+      "class_id": 83,
+      "type": "AudioClip",
+      "byte_size": 156
+     },
+     {
+      "path_id": -8060921138513181406,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 104
+     },
+     {
+      "path_id": -8015640747378788975,
+      "class_id": 21,
+      "type": "Material",
+      "byte_size": 904
+     },
+     {
+      "path_id": -7865028809519950684,
+      "class_id": 43,
+      "type": "Mesh",
+      "byte_size": 2720
+     },
+     {
+      "path_id": -7713320730566348882,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 39
+     },
+     {
+      "path_id": -7551979316049711457,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 80
+     },
+     {
+      "path_id": -7288055074905947232,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 68
+     },
+     {
+      "path_id": -7205171933712184032,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 68
+     },
+     {
+      "path_id": -7160786685895287674,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 43
+     },
+     {
+      "path_id": -6645798260792728778,
+      "class_id": 21,
+      "type": "Material",
+      "byte_size": 1028
+     },
+     {
+      "path_id": -6624713234786119786,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 43
+     },
+     {
+      "path_id": -6567687475032214782,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 47
+     },
+     {
+      "path_id": -6377179495188482494,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 80
+     },
+     {
+      "path_id": -5637639007827256240,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 51
+     },
+     {
+      "path_id": -5486111779503571325,
+      "class_id": 33,
+      "type": "MeshFilter",
+      "byte_size": 24
+     },
+     {
+      "path_id": -5484623090796618462,
+      "class_id": 33,
+      "type": "MeshFilter",
+      "byte_size": 24
+     },
+     {
+      "path_id": -5407907257826439233,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 51
+     },
+     {
+      "path_id": -5349918692753542437,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 68
+     },
+     {
+      "path_id": -5302649265423523261,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 43
+     },
+     {
+      "path_id": -4850512016903265157,
+      "class_id": 48,
+      "type": "Shader",
+      "byte_size": 58436
+     },
+     {
+      "path_id": -4781523354816791511,
+      "class_id": 21,
+      "type": "Material",
+      "byte_size": 1020
+     },
+     {
+      "path_id": -4716141648208258207,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 80
+     },
+     {
+      "path_id": -4683109761381211069,
+      "class_id": 43,
+      "type": "Mesh",
+      "byte_size": 80296
+     },
+     {
+      "path_id": -4618720353511229894,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 68
+     },
+     {
+      "path_id": -4606375687431940004,
+      "class_id": 114,
+      "type": "MonoBehaviour",
+      "byte_size": 248
+     },
+     {
+      "path_id": -4586346807259219102,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 80
+     },
+     {
+      "path_id": -4486286564524162325,
+      "class_id": 43,
+      "type": "Mesh",
+      "byte_size": 424876
+     },
+     {
+      "path_id": -4455971255125069403,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 80
+     },
+     {
+      "path_id": -4365321507395843767,
+      "class_id": 33,
+      "type": "MeshFilter",
+      "byte_size": 24
+     },
+     {
+      "path_id": -4339217461983190205,
+      "class_id": 115,
+      "type": "MonoScript",
+      "byte_size": 136
+     },
+     {
+      "path_id": -4230626793227549177,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 80
+     },
+     {
+      "path_id": -4103666597927606247,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 39
+     },
+     {
+      "path_id": -4067819952531011990,
+      "class_id": 48,
+      "type": "Shader",
+      "byte_size": 93940
+     },
+     {
+      "path_id": -4001888856119707736,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 68
+     },
+     {
+      "path_id": -3925355920536267312,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 43
+     },
+     {
+      "path_id": -3917318982995725274,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 51
+     },
+     {
+      "path_id": -3765523188966905173,
+      "class_id": 21,
+      "type": "Material",
+      "byte_size": 536
+     },
+     {
+      "path_id": -3741478623564010941,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 67
+     },
+     {
+      "path_id": -3546981787522247415,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 31
+     },
+     {
+      "path_id": -3455002188919363219,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 71
+     },
+     {
+      "path_id": -3419807111315239616,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 92
+     },
+     {
+      "path_id": -3167029911029054299,
+      "class_id": 23,
+      "type": "MeshRenderer",
+      "byte_size": 156
+     },
+     {
+      "path_id": -2719486287008657248,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 80
+     },
+     {
+      "path_id": -2651950813123678399,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 68
+     },
+     {
+      "path_id": -2575221265998162083,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 80
+     },
+     {
+      "path_id": -2097374110106508527,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 80
+     },
+     {
+      "path_id": -2063846300476783081,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 43
+     },
+     {
+      "path_id": -1965129053336905088,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 43
+     },
+     {
+      "path_id": -1683476749774118025,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 67
+     },
+     {
+      "path_id": -1682175822698124268,
+      "class_id": 21,
+      "type": "Material",
+      "byte_size": 1064
+     },
+     {
+      "path_id": -1573359609012889280,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 39
+     },
+     {
+      "path_id": -1516607606341619246,
+      "class_id": 137,
+      "type": "SkinnedMeshRenderer",
+      "byte_size": 224
+     },
+     {
+      "path_id": -1473921323670530447,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 95
+     },
+     {
+      "path_id": -1399971041133135777,
+      "class_id": 91,
+      "type": "AnimatorController",
+      "byte_size": 428
+     },
+     {
+      "path_id": -1375021647149554035,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 68
+     },
+     {
+      "path_id": -1225411016692436067,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 68
+     },
+     {
+      "path_id": -1097962762356269075,
+      "class_id": 21,
+      "type": "Material",
+      "byte_size": 1028
+     },
+     {
+      "path_id": -976500203463613133,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 80
+     },
+     {
+      "path_id": -810463049167678962,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 43
+     },
+     {
+      "path_id": -774432708067289669,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 80
+     },
+     {
+      "path_id": -691307443314598252,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 80
+     },
+     {
+      "path_id": -388885062936238621,
+      "class_id": 137,
+      "type": "SkinnedMeshRenderer",
+      "byte_size": 464
+     },
+     {
+      "path_id": -359141012355986318,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 43
+     },
+     {
+      "path_id": -315011293411196986,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 47
+     },
+     {
+      "path_id": -243109597807668206,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 80
+     },
+     {
+      "path_id": -237985942625632294,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 116
+     },
+     {
+      "path_id": 1,
+      "class_id": 142,
+      "type": "AssetBundle",
+      "byte_size": 3372
+     },
+     {
+      "path_id": 404836592933730457,
+      "class_id": 28,
+      "type": "Texture2D",
+      "byte_size": 200
+     },
+     {
+      "path_id": 436585070317582516,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 80
+     },
+     {
+      "path_id": 713871192698476304,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 35
+     },
+     {
+      "path_id": 794051113611672443,
+      "class_id": 23,
+      "type": "MeshRenderer",
+      "byte_size": 156
+     },
+     {
+      "path_id": 799824111034895784,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 68
+     },
+     {
+      "path_id": 845677610170300691,
+      "class_id": 43,
+      "type": "Mesh",
+      "byte_size": 87248
+     },
+     {
+      "path_id": 886648916348198777,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 59
+     },
+     {
+      "path_id": 1361202129747409588,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 68
+     },
+     {
+      "path_id": 1394534131998158228,
+      "class_id": 21,
+      "type": "Material",
+      "byte_size": 1028
+     },
+     {
+      "path_id": 1680437759712570818,
+      "class_id": 33,
+      "type": "MeshFilter",
+      "byte_size": 24
+     },
+     {
+      "path_id": 1756921877818560095,
+      "class_id": 23,
+      "type": "MeshRenderer",
+      "byte_size": 156
+     },
+     {
+      "path_id": 1904034051185057375,
+      "class_id": 21,
+      "type": "Material",
+      "byte_size": 1044
+     },
+     {
+      "path_id": 2063352849405097463,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 68
+     },
+     {
+      "path_id": 2068090740047174591,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 35
+     },
+     {
+      "path_id": 2133448013464128067,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 80
+     },
+     {
+      "path_id": 2152370074763270995,
+      "class_id": 74,
+      "type": "AnimationClip",
+      "byte_size": 2244
+     },
+     {
+      "path_id": 2282533744080708273,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 31
+     },
+     {
+      "path_id": 2478588251799287949,
+      "class_id": 135,
+      "type": "SphereCollider",
+      "byte_size": 44
+     },
+     {
+      "path_id": 2624902653669308750,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 43
+     },
+     {
+      "path_id": 2877074482193022206,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 92
+     },
+     {
+      "path_id": 2993273037121721810,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 39
+     },
+     {
+      "path_id": 3201720534944863714,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 59
+     },
+     {
+      "path_id": 3275523228701995130,
+      "class_id": 74,
+      "type": "AnimationClip",
+      "byte_size": 2644
+     },
+     {
+      "path_id": 3426710905874718078,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 55
+     },
+     {
+      "path_id": 3495385793845643680,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 80
+     },
+     {
+      "path_id": 3508550919051034069,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 92
+     },
+     {
+      "path_id": 4157438980232581984,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 43
+     },
+     {
+      "path_id": 4167780011977833166,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 68
+     },
+     {
+      "path_id": 4378008893471891431,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 43
+     },
+     {
+      "path_id": 4466464664368177382,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 39
+     },
+     {
+      "path_id": 4490184466655157513,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 31
+     },
+     {
+      "path_id": 4537052516454787942,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 104
+     },
+     {
+      "path_id": 4639608604875661751,
+      "class_id": 23,
+      "type": "MeshRenderer",
+      "byte_size": 156
+     },
+     {
+      "path_id": 4693305862354978555,
+      "class_id": 43,
+      "type": "Mesh",
+      "byte_size": 8172
+     },
+     {
+      "path_id": 4727024490401056873,
+      "class_id": 137,
+      "type": "SkinnedMeshRenderer",
+      "byte_size": 224
+     },
+     {
+      "path_id": 4741613065353255831,
+      "class_id": 23,
+      "type": "MeshRenderer",
+      "byte_size": 156
+     },
+     {
+      "path_id": 4797169861542192750,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 68
+     },
+     {
+      "path_id": 5063507808539723452,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 104
+     },
+     {
+      "path_id": 5298347465497383448,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 68
+     },
+     {
+      "path_id": 5388662321799902894,
+      "class_id": 43,
+      "type": "Mesh",
+      "byte_size": 4236
+     },
+     {
+      "path_id": 5619092051967831218,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 80
+     },
+     {
+      "path_id": 5948458159599234658,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 68
+     },
+     {
+      "path_id": 5969721916821219193,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 59
+     },
+     {
+      "path_id": 6025527554528651585,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 35
+     },
+     {
+      "path_id": 6095031023675920522,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 59
+     },
+     {
+      "path_id": 6377779632213801107,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 68
+     },
+     {
+      "path_id": 6630921689196554910,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 39
+     },
+     {
+      "path_id": 7143788370189130219,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 92
+     },
+     {
+      "path_id": 7277207269367644798,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 92
+     },
+     {
+      "path_id": 7697398594081939140,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 47
+     },
+     {
+      "path_id": 7768382245541279042,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 68
+     },
+     {
+      "path_id": 7889763420337511466,
+      "class_id": 43,
+      "type": "Mesh",
+      "byte_size": 2412
+     },
+     {
+      "path_id": 8024166250884847368,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 35
+     },
+     {
+      "path_id": 8122810628805875483,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 68
+     },
+     {
+      "path_id": 8284113439058897869,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 92
+     },
+     {
+      "path_id": 8313553778062039578,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 39
+     },
+     {
+      "path_id": 8334015855700187396,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 43
+     },
+     {
+      "path_id": 8555810540818505213,
+      "class_id": 33,
+      "type": "MeshFilter",
+      "byte_size": 24
+     },
+     {
+      "path_id": 8876972170645022554,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 43
+     },
+     {
+      "path_id": 8957929285671401881,
+      "class_id": 4,
+      "type": "Transform",
+      "byte_size": 80
+     },
+     {
+      "path_id": 9001362461581137807,
+      "class_id": 33,
+      "type": "MeshFilter",
+      "byte_size": 24
+     },
+     {
+      "path_id": 9007676397710837142,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 39
+     },
+     {
+      "path_id": 9073582682380749191,
+      "class_id": 1,
+      "type": "GameObject",
+      "byte_size": 43
+     }
+    ]
+   }
+  },
+  "node_details": [
+   {
+    "path": "CAB-5d40f7cad7c871cf2ad2af19ac542994",
+    "size": 0
+   },
+   {
+    "path": "CAB-5d40f7cad7c871cf2ad2af19ac542994.resS",
+    "size": 0
+   },
+   {
+    "path": "CAB-5d40f7cad7c871cf2ad2af19ac542994.resource",
+    "size": 0
+   }
+  ]
+ },
+ "v22_serialized": {
+  "top_files": [],
+  "serialized": {
+   "v22_monoscriptbundle.serializedfile": {
+    "unity_version": "6000.0.65f1",
+    "format_version": "6000.0f1",
+    "objects": [
+     {
+      "path_id": 1,
+      "class_id": 142,
+      "type": "AssetBundle",
+      "byte_size": 124
+     },
+     {
+      "path_id": 3225487681952536265,
+      "class_id": 115,
+      "type": "MonoScript",
+      "byte_size": 104
+     }
+    ]
+   }
+  }
+ }
+}

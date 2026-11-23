@@ -1,0 +1,16 @@
+Unity binary fixtures in this directory
+=======================================
+
+Source: https://github.com/Unity-Technologies/UnityDataTools
+Path:   TestCommon/Data/AssetBundleTypeTreeVariations/v22/ and
+        TestCommon/Data/AssetBundles/2021.3.0f1/
+Author: Unity Technologies
+License: Unity Companion License for Unity-dependent projects
+         (https://unity3d.com/legal/licenses/unity_companion_license)
+Retrieved: 2026-11-23, unmodified.
+
+These files are official Unity-built AssetBundle/SerializedFile samples
+used as reference fixtures for differential parser tests. This project is
+a Unity-dependent project (it reads and writes Unity binary formats).
+oracle.json was generated locally with UnityPy 1.25.4 from these files
+and records their node lists and object inventories as test expectations.
