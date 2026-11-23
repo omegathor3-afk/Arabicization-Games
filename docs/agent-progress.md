@@ -69,8 +69,24 @@ all new heads; build green.
   Note: the older private builders inside
   UnityTextAssetSerializedPatcherTest.kt remain self-consistent-only
   (they predate the shared builders); migrating them is cosmetic.
-- Then APK-level integration library; rebuild debug APK; Actions-artifact
-  delivery route.
+10. `6eb61a9` feat(unity): UnityApkBundleLocalizer - APK-level chain:
+    find UnityFS entries in an APK, translate every supported TextAsset in
+    their SerializedFiles, patch, chain one rewrite per changed node,
+    rebuild the APK via ApkZipEntryPolicy (methods/alignment preserved,
+    stale signatures dropped). Source APK never modified; a strict-gate
+    failure aborts instead of shipping a broken APK. Tests: 260 green.
+11. `0509397` ci: the Android CI build job now uploads the verified debug
+    APK as the `arabify-debug-apk` workflow artifact (14-day retention) -
+    this is the APK delivery route for the user.
+
+## Next up (in order)
+
+- Confirm the artifact appears on the CI run for 0509397 and record its
+  download URL for the user report.
+- UI wiring for the bundle localizer (game picker -> preview -> apply),
+  currently library-level only.
+- Split APK rebuild support (their issue #2); Bergamot wiring (#6);
+  font catalog (#5). IL2CPP remains unsupported, research only.
 - APK-level integration: locate the UnityFS bundle inside an APK, run the
   localizer, and rebuild a signed debug APK (library + tests first, UI
   wiring after).
