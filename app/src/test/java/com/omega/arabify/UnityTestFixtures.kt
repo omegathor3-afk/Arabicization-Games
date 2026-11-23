@@ -153,6 +153,115 @@ internal object UnityTestFixtures {
         return out.toByteArray()
     }
 
+    /** 32-byte TypeTree node (format >= 19): same fields plus a u64 refTypeHash. */
+    private fun typeNode32(level: Int, flags: Int, type: String, name: String, byteSize: Int, index: Int, meta: Int): ByteArray {
+        val out = ByteArrayOutputStream()
+        out.write(leShort(0))
+        out.write(level)
+        out.write(flags)
+        out.write(le(stringOffsets.getValue(type)))
+        out.write(le(stringOffsets.getValue(name)))
+        out.write(le(byteSize))
+        out.write(le(index))
+        out.write(le(meta))
+        out.write(leLong(0))
+        return out.toByteArray()
+    }
+
+    private fun typeTreeBlob32(): ByteArray {
+        val out = ByteArrayOutputStream()
+        out.write(le(9))
+        out.write(le(stringBuffer.size))
+        out.write(typeNode32(0, 0, "TextAsset", "", 1, 0, 0))
+        out.write(typeNode32(1, 0, "string", "m_Name", -1, 1, 0))
+        out.write(typeNode32(2, 1, "Array", "Array", -1, 2, 0x4000))
+        out.write(typeNode32(3, 0, "int", "size", 4, 3, 0))
+        out.write(typeNode32(3, 0, "char", "data", 1, 4, 0))
+        out.write(typeNode32(1, 0, "string", "m_Script", -1, 5, 0))
+        out.write(typeNode32(2, 1, "Array", "Array", -1, 6, 0x4000))
+        out.write(typeNode32(3, 0, "int", "size", 4, 7, 0))
+        out.write(typeNode32(3, 0, "char", "data", 1, 8, 0))
+        out.write(stringBuffer)
+        return out.toByteArray()
+    }
+
+    /**
+     * Builds a SerializedFile v22 (little-endian): 48-byte header with 64-bit
+     * fileSize/dataOffset, 32-byte TypeTree nodes, i64 object byteStart fields,
+     * and the v20+ reference-type count in the trailing metadata.
+     */
+    fun serializedFileV22(objects: List<TextAssetSpec>): ByteArray {
+        val metadata = ByteArrayOutputStream()
+        metadata.write("2021.3.45f1".toByteArray(Charsets.US_ASCII))
+        metadata.write(0)
+        metadata.write(le(13))
+        metadata.write(1)
+        metadata.write(le(1))
+        metadata.write(le(49)) // classId: TextAsset
+        metadata.write(0) // isStripped
+        metadata.write(leShort(-1)) // scriptTypeIndex
+        metadata.write(ByteArray(16)) // oldTypeHash
+        metadata.write(typeTreeBlob32())
+        metadata.write(le(0)) // v21+ type dependencies
+
+        val headerSize = 48
+        fun buildTable(byteStarts: List<Long>, byteSizes: List<Long>): ByteArray {
+            val table = ByteArrayOutputStream()
+            table.write(le(byteStarts.size))
+            byteStarts.forEachIndexed { index, byteStart ->
+                val pad = ((4L - ((headerSize + metadata.size() + table.size()) % 4L)) % 4L).toInt()
+                repeat(pad) { table.write(0) }
+                table.write(leLong(objects[index].pathId))
+                table.write(leLong(byteStart))
+                table.write(le(byteSizes[index].toInt()))
+                table.write(le(0)) // typeId
+            }
+            return table.toByteArray()
+        }
+        val zeroes = objects.map { 0L }
+        val provisionalTable = buildTable(zeroes, zeroes)
+        // Trailing metadata (script refs + externals + v20 ref types + empty
+        // userInformation cstring) lives inside the metadata region, so it is
+        // part of dataOffset's base.
+        val trailingBytes = 13
+        val dataOffset = headerSize + metadata.size() + provisionalTable.size.toLong() + trailingBytes
+
+        val payloads = mutableListOf<ByteArray>()
+        var cursor = dataOffset
+        objects.forEach { spec ->
+            val payload = objectPayload(spec.name, spec.script, cursor)
+            payloads.add(payload)
+            cursor += payload.size
+        }
+        val starts = mutableListOf<Long>()
+        var offset = 0L
+        payloads.forEach { starts.add(offset); offset += it.size }
+        val tableBytes = buildTable(starts, payloads.map { it.size.toLong() })
+        require(tableBytes.size == provisionalTable.size) { "fixture table size drifted" }
+        metadata.write(tableBytes)
+        metadata.write(le(0)) // script references
+        metadata.write(le(0)) // externals
+        metadata.write(le(0)) // v20+ reference types
+        metadata.write(0) // userInformation: empty cstring
+
+        val metadataBytes = metadata.toByteArray()
+        val fileSize = dataOffset + offset
+        val out = ByteArrayOutputStream()
+        out.write(be32(0)) // legacy u32 metadataSize
+        out.write(be32(0)) // legacy u32 fileSize
+        out.write(be32(22))
+        out.write(be32(0)) // legacy u32 dataOffset
+        out.write(0) // little endian
+        out.write(byteArrayOf(0, 0, 0))
+        out.write(be32(metadataBytes.size.toLong()))
+        out.write(be64(fileSize))
+        out.write(be64(dataOffset))
+        out.write(be64(0))
+        out.write(metadataBytes)
+        payloads.forEach { out.write(it) }
+        return out.toByteArray()
+    }
+
     // ---- UnityFS v7 ----
 
     /** Builds a UnityFS v7 bundle: LZ4 block info, raw + LZ4 storage blocks. */
