@@ -22,7 +22,7 @@ internal object TranslationQualityGate {
         if (expectedTokens.any { PlaceholderProtector.countOccurrences(translated, it) > 1 }) {
             return TranslationQualityResult(false, "placeholder_duplicated")
         }
-        val markerPositions = expectedTokens.map(translated::indexOf)
+        val markerPositions = expectedTokens.map { translated.indexOf(it) }
         if (markerPositions.zipWithNext().any { (previous, next) -> previous >= next }) {
             return TranslationQualityResult(false, "placeholder_order_changed")
         }

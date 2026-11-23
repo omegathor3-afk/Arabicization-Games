@@ -17,7 +17,7 @@ The translator reuses the existing `AssetTextTransformer`, placeholder protectio
 
 ## Placeholder integrity gate
 
-Before translated text is accepted, every protected marker must occur exactly once and in its original order. This conservative rule avoids silently swapping positional printf arguments or reversing markup boundaries. The gate also rejects placeholder-like syntax introduced by the translation (for example a new `{enemy}`, `%s`, `<b>`, or escaped newline) when that syntax was not present in the source. Rejected values remain byte-for-byte unchanged in the source text; the translator is not allowed to invent runtime variables or format specifiers.
+Before translated text is accepted, every protected marker must occur exactly once and in its original order. This conservative rule avoids silently swapping positional printf arguments or reversing markup boundaries. The gate also rejects placeholder-like syntax introduced by the translation (for example a new `{enemy}`, `%s`, `<b>`, or escaped newline) when that syntax was not present in the source. Rejected values remain unchanged; JSON container serialization may still normalize outer whitespace as before. The translator is not allowed to invent runtime variables or format specifiers.
 
 This is intentionally conservative: a translation that would require moving placeholders is skipped rather than risk changing the meaning of a runtime format string. Named-token reordering can be considered later only with format-specific semantics and tests.
 
