@@ -77,12 +77,6 @@ jobs:
       "$AAPT" dump badging "$APK" > badging.txt
       head -n 5 badging.txt
       sha256sum "$APK"
-   - name: Upload debug APK
-     uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-     with:
-      name: arabify-debug-apk
-      path: app/build/outputs/apk/debug/app-debug.apk
-      retention-days: 14
    - name: Build instrumentation test APK
      run: gradle assembleDebugAndroidTest
    - name: Checkout pinned open-source Android game source
