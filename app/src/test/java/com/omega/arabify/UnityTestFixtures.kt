@@ -123,7 +123,11 @@ internal object UnityTestFixtures {
         }
         val zeroes = objects.map { 0L }
         val provisionalTable = buildTable(zeroes, zeroes)
-        val dataOffset = headerSize + metadata.size() + provisionalTable.size.toLong()
+        // Trailing metadata (script refs + externals + empty userInformation)
+        // then zero padding: real SerializedFiles align dataOffset to 4.
+        val trailingBytes = 9
+        val rawDataOffset = headerSize + metadata.size() + provisionalTable.size.toLong() + trailingBytes
+        val dataOffset = (rawDataOffset + 3L) / 4L * 4L
 
         val payloads = mutableListOf<ByteArray>()
         var cursor = dataOffset
@@ -138,6 +142,10 @@ internal object UnityTestFixtures {
         val tableBytes = buildTable(starts, payloads.map { it.size.toLong() })
         require(tableBytes.size == provisionalTable.size) { "fixture table size drifted" }
         metadata.write(tableBytes)
+        metadata.write(le(0)) // script references
+        metadata.write(le(0)) // externals
+        metadata.write(0) // userInformation: empty cstring
+        repeat((dataOffset - headerSize - metadata.size()).toInt()) { metadata.write(0) }
 
         val metadataBytes = metadata.toByteArray()
         val fileSize = dataOffset + offset
@@ -224,7 +232,8 @@ internal object UnityTestFixtures {
         // userInformation cstring) lives inside the metadata region, so it is
         // part of dataOffset's base.
         val trailingBytes = 13
-        val dataOffset = headerSize + metadata.size() + provisionalTable.size.toLong() + trailingBytes
+        val rawDataOffset = headerSize + metadata.size() + provisionalTable.size.toLong() + trailingBytes
+        val dataOffset = (rawDataOffset + 3L) / 4L * 4L
 
         val payloads = mutableListOf<ByteArray>()
         var cursor = dataOffset
@@ -243,6 +252,7 @@ internal object UnityTestFixtures {
         metadata.write(le(0)) // externals
         metadata.write(le(0)) // v20+ reference types
         metadata.write(0) // userInformation: empty cstring
+        repeat((dataOffset - headerSize - metadata.size()).toInt()) { metadata.write(0) }
 
         val metadataBytes = metadata.toByteArray()
         val fileSize = dataOffset + offset
