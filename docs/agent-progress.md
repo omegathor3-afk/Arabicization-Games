@@ -57,11 +57,18 @@ all new heads; build green.
 
 ## Next up (in order)
 
-- Writer differential: replace the CAB node in the real Unity 6 bundle
-  with a TextAsset SerializedFile, rewrite with UnityFsBundleRewriter,
-  and verify the result loads in UnityPy (one-off sandbox check; JVM
-  verifies structure). Note: rewriter currently refuses LZMA block-info
-  bundles, so cover the LZ4 fixtures; LZMA rewrite stays refused.
+- FIXTURE GAP (found via UnityPy, next priority): our hand-built
+  SerializedFile fixtures are self-consistent (our reader/patcher accept
+  them) but UnityPy 1.25.4 fails to read object payloads from them
+  ("read_str out of bounds"). The rewritten real bundle DOES load in
+  UnityPy and lists our injected TextAsset object, so the container
+  rewrite is reference-validated; the inner SerializedFile fixture is
+  not. Fix: diff the fixture type tree against the real
+  v22_monoscriptbundle.serializedfile MonoScript tree (dump via UnityPy)
+  - likely node version/metaFlag details - until UnityPy reads the
+  fixture fully. Until then, payload-level claims rest on our own reader.
+- Then APK-level integration library; rebuild debug APK; Actions-artifact
+  delivery route.
 - APK-level integration: locate the UnityFS bundle inside an APK, run the
   localizer, and rebuild a signed debug APK (library + tests first, UI
   wiring after).
