@@ -69,12 +69,12 @@ internal object AndroidResourceLocalizer {
     try {
      val translatedText = ArabicUiGlossary.translateExact(source)
       ?: translator.translateEnglishToArabic(protected.text)
-     val expectedTokens = protected.tokens.indices.map { "__ARABIFY_TOKEN_${it}__" }
+     val expectedTokens = protected.markers
      val quality = TranslationQualityGate.review(source, translatedText, expectedTokens)
      if (!quality.accepted) {
       skipped++
      } else {
-      val restored = PlaceholderProtector.restore(translatedText, protected.tokens)
+      val restored = PlaceholderProtector.restore(translatedText, protected)
       packageBlock.getOrCreate(arabicConfig, "string", name).setValueAsString(restored)
       translated++
      }
