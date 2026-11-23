@@ -100,4 +100,14 @@ class AssetTextTransformerTest {
   assertTrue(observed is CancellationException)
  }
 
+ @Test fun preservesLiteralLegacyMarkerTextWhenAnotherPlaceholderIsPresent()=runBlocking {
+  val source = "Welcome __ARABIFY_TOKEN_0__ {player}"
+  val result = AssetTextTransformer.transform("assets/dialogue.txt", source) { value ->
+   value.replace("Welcome", "أهلًا")
+  }
+  assertEquals("أهلًا __ARABIFY_TOKEN_0__ {player}", result.text)
+  assertEquals(1, result.translated)
+  assertEquals(0, result.skipped)
+ }
+
 }

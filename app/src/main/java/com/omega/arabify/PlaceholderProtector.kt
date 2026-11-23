@@ -1,8 +1,18 @@
 package com.omega.arabify
 
-internal data class ProtectedText(val text: String, val tokens: List<String>)
+import java.util.UUID
+
+internal data class ProtectedText(
+    val text: String,
+    val tokens: List<String>,
+    val markerPrefix: String
+) {
+    val markers: List<String>
+        get() = tokens.indices.map { "$markerPrefix${it}__" }
+}
 
 internal object PlaceholderProtector {
+    private const val LEGACY_MARKER_PREFIX = "__ARABIFY_TOKEN_"
     // Preserve common Java/C-style format strings (including width/precision),
     // literal percent escapes, named game tokens, markup tags and escaped newlines.
     private val tokenPattern = Regex(
@@ -10,21 +20,35 @@ internal object PlaceholderProtector {
     )
 
     fun protect(source: String): ProtectedText {
+        val markerPrefix = if (source.contains(LEGACY_MARKER_PREFIX)) {
+            collisionFreeMarkerPrefix(source)
+        } else {
+            LEGACY_MARKER_PREFIX
+        }
         val tokens = mutableListOf<String>()
         val protected = tokenPattern.replace(source) { match ->
             val index = tokens.size
             tokens += match.value
-            "__ARABIFY_TOKEN_${index}__"
+            "$markerPrefix${index}__"
         }
-        return ProtectedText(protected, tokens)
+        return ProtectedText(protected, tokens, markerPrefix)
     }
 
-    fun restore(translated: String, tokens: List<String>): String {
+    fun restore(translated: String, protectedText: ProtectedText): String {
         var result = translated
-        tokens.forEachIndexed { index, token ->
-            result = result.replace("__ARABIFY_TOKEN_${index}__", token)
+        protectedText.markers.forEachIndexed { index, marker ->
+            result = result.replace(marker, protectedText.tokens[index])
         }
         return result
+    }
+
+    private fun collisionFreeMarkerPrefix(source: String): String {
+        var candidate: String
+        do {
+            val nonce = UUID.randomUUID().toString().replace("-", "")
+            candidate = "${LEGACY_MARKER_PREFIX}${nonce}_"
+        } while (source.contains(candidate))
+        return candidate
     }
 
     /** Count non-overlapping exact occurrences so duplicated game variables are rejected. */

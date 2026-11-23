@@ -1,13 +1,15 @@
 package com.omega.arabify
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlaceholderProtectorTest {
  @Test fun protectsAndRestoresGameTokens() {
   val source = "Hello {player}, score %1\$d and \${coins} <b>now</b>\\n"
   val protected = PlaceholderProtector.protect(source)
-  assertEquals(source, PlaceholderProtector.restore(protected.text, protected.tokens))
+  assertEquals(source, PlaceholderProtector.restore(protected.text, protected))
   assertEquals(6, protected.tokens.size)
  }
  @Test fun leavesNormalTextAlone() {
@@ -25,4 +27,13 @@ class PlaceholderProtectorTest {
   assertEquals(expected, protected.tokens)
   assertEquals(source, PlaceholderProtector.restore(protected.text, protected.tokens))
  }
+ @Test fun avoidsCollisionsWithLiteralLegacyMarkerText() {
+  val source = "Literal __ARABIFY_TOKEN_0__ and {player}"
+  val protected = PlaceholderProtector.protect(source)
+  assertTrue(protected.text.contains("__ARABIFY_TOKEN_0__"))
+  assertEquals(1, protected.markers.size)
+  assertFalse(source.contains(protected.markers.single()))
+  assertEquals(source, PlaceholderProtector.restore(protected.text, protected))
+ }
+
 }
