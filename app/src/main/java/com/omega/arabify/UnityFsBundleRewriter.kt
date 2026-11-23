@@ -33,9 +33,10 @@ internal data class UnityFsRewriteReport(
  *   decoder and the rebuilt stream is byte-compared against the expected bytes.
  *   Any mismatch deletes the output and fails.
  *
- * The 16-byte block-info hash is written as MD5 of the decompressed stream.
- * Unity uses this field as a cache hint; neither the engine loader nor our own
- * parser validates it, and no engine-side integrity check depends on it.
+ * The 16-byte block-info hash slot is written as truncated SHA-256 of the
+ * decompressed stream. Unity uses this field as a cache hint; neither the
+ * engine loader nor our own parser validates it, and no engine-side
+ * integrity check depends on it.
  */
 internal object UnityFsBundleRewriter {
     private const val BLOCK_CHUNK_BYTES = 4 * 1024 * 1024
@@ -109,7 +110,10 @@ internal object UnityFsBundleRewriter {
         }
 
         // Rebuild the block-info buffer (big-endian, same layout the parser reads).
-        val hash = MessageDigest.getInstance("MD5").digest(newStream)
+        // The 16-byte hash slot is a Unity cache hint: the engine loader does not
+        // validate it and neither does our strict parser. SHA-256 truncated to the
+        // 16-byte field width keeps the slot deterministic without MD5.
+        val hash = MessageDigest.getInstance("SHA-256").digest(newStream).copyOf(16)
         val infoRaw = ByteArrayOutputStream()
         fun be32(value: Long) {
             require(value in 1..0xffffffffL)

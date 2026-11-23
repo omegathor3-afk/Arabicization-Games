@@ -43,7 +43,8 @@ class UnityFsBundleRewriterTest {
   )
 
   val info = ByteArrayOutputStream()
-  info.write(MessageDigest.getInstance("MD5").digest(streamBytes))
+  // Hash slot is a cache hint the parser never validates; any 16 bytes work.
+  info.write(MessageDigest.getInstance("SHA-256").digest(streamBytes).copyOf(16))
   info.write(be32(blocks.size.toLong()))
   blocks.forEach { (uncompressed, compressed, flags) ->
    info.write(be32(uncompressed))
