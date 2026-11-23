@@ -88,17 +88,28 @@ all new heads; build green.
     bundle. The rewriter re-chunks storage as raw/LZ4; verified with our
     parsers AND UnityPy 1.25.4 reads the Arabic TextAsset back from the
     rewritten real bundle. Tests: 261 green.
+14. `49eb4dd` test(unity): migrated the last private fixture builder to
+    the shared UnityTestFixtures helper. Tests: 261 green.
+15. `38f80c3` feat(unity): production wiring - UnityMonoLocalizer.localize
+    now runs a UnityFS bundle stage before the loose-asset stage:
+    TextAssets inside bundles are translated via a new tolerant variant
+    (UnityApkBundleLocalizer.tryLocalizeBundlesInApk, returns null and
+    writes nothing when nothing is translatable), then loose assets are
+    translated on top of the bundle-localized APK in one signature cycle.
+    Games whose text lives ONLY inside bundles are signed from the bundle
+    stage and reported; counts merge when both stages translate. Strict
+    localizeBundlesInApk behavior unchanged. Tests: 262 green.
+    Caveat: the signing fallback path needs AndroidKeyStore, so it is
+    covered by the CI emulator test, not JVM tests.
 
 ## Next up (in order)
 
 - DONE: artifact URL reported (Actions run 45280230697).
-- UI wiring for the bundle localizer (game picker -> preview -> apply),
-  currently library-level only.
-- Split APK rebuild support (their issue #2); Bergamot wiring (#6);
-  font catalog (#5). IL2CPP remains unsupported, research only.
-- APK-level integration: locate the UnityFS bundle inside an APK, run the
-  localizer, and rebuild a signed debug APK (library + tests first, UI
-  wiring after).
+- DONE: APK-level integration of the UnityFS bundle localizer (38f80c3).
+- UI wiring for the bundle stage (game picker -> preview -> apply):
+  UnityMonoLocalizer.localize is called from MainActivity; the new bundle
+  counts already flow into its report, but preview/dry-run of bundled
+  TextAssets in the UI is still missing.
 - Split APK rebuild support (their issue #2).
 - Bergamot offline engine wiring (their issue #6) - currently ML Kit only,
   model downloads once then works offline.
