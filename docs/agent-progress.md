@@ -57,16 +57,18 @@ all new heads; build green.
 
 ## Next up (in order)
 
-- FIXTURE GAP (found via UnityPy, next priority): our hand-built
-  SerializedFile fixtures are self-consistent (our reader/patcher accept
-  them) but UnityPy 1.25.4 fails to read object payloads from them
-  ("read_str out of bounds"). The rewritten real bundle DOES load in
-  UnityPy and lists our injected TextAsset object, so the container
-  rewrite is reference-validated; the inner SerializedFile fixture is
-  not. Fix: diff the fixture type tree against the real
-  v22_monoscriptbundle.serializedfile MonoScript tree (dump via UnityPy)
-  - likely node version/metaFlag details - until UnityPy reads the
-  fixture fully. Until then, payload-level claims rest on our own reader.
+- CLOSED fixture gap (`5ae8f19` fix(tests)): the hand-built
+  SerializedFile fixtures were missing trailing metadata and a 4-aligned
+  dataOffset, so UnityPy (whose object payload reader aligns relative to
+  the object start) could not read them. Builders now emit real-layout
+  files. Verified in sandbox with UnityPy 1.25.4: both v17 and v22
+  fixtures read fully (TextAsset names + Arabic scripts), and the
+  rewritten real Unity 6 bundle's injected TextAssets read back correctly.
+  A dump test (FixtureDumpForUnityPyTest) writes fixtures to
+  build/realFixtures/ so the UnityPy check can be re-run any time.
+  Note: the older private builders inside
+  UnityTextAssetSerializedPatcherTest.kt remain self-consistent-only
+  (they predate the shared builders); migrating them is cosmetic.
 - Then APK-level integration library; rebuild debug APK; Actions-artifact
   delivery route.
 - APK-level integration: locate the UnityFS bundle inside an APK, run the
