@@ -40,10 +40,16 @@ feature claims without passing tests, no build artifacts in git.
    Arabic errors, no UI wiring yet. Integration test drives a hand-built
    UnityFS bundle holding a SerializedFile fixture end to end.
    Tests: 249 green (2 pre-existing conditional skips).
+8. `91de60a` test(unity): SerializedFile v22 fixtures for the patcher
+   (48-byte header with 64-bit fileSize/dataOffset, 32-byte TypeTree
+   nodes, i64 object byteStart). Three tests: longer/shorter script patch
+   on v22 and 64-bit dataOffset reading. Tests: 252 green.
+
+CI after batch 7: CodeQL (default setup) and CodeQL-and-Gitleaks green on
+all new heads; build green.
 
 ## Next up (in order)
 
-- v22+ SerializedFile fixture tests for the patcher (64-bit header fields).
 - Real-game fixture: run extract/preview/patch/rewrite on an actual Unity
   Mono game bundle and compare with UnityPy's output (differential test
   like the existing oracle pattern).
