@@ -15,6 +15,12 @@ The complete decoded script is retained in memory only for the already-bounded p
 
 The translator reuses the existing `AssetTextTransformer`, placeholder protection, and translation quality gate. JSON keys and non-string values are not translated; TXT comments and Properties/Strings syntax are preserved by the existing transformer. Values rejected by the quality gate remain unchanged.
 
+## Placeholder integrity gate
+
+Before translated text is accepted, every protected marker must occur exactly once and in its original order. This conservative rule avoids silently swapping positional printf arguments or reversing markup boundaries. The gate also rejects placeholder-like syntax introduced by the translation (for example a new `{enemy}`, `%s`, `<b>`, or escaped newline) when that syntax was not present in the source. Rejected values remain byte-for-byte unchanged in the source text; the translator is not allowed to invent runtime variables or format specifiers.
+
+This is intentionally conservative: a translation that would require moving placeholders is skipped rather than risk changing the meaning of a runtime format string. Named-token reordering can be considered later only with format-specific semantics and tests.
+
 ## Safety boundaries
 
 - Only complete decoded TextAsset scripts are translated; the UI's shortened display preview is never passed as if it were the full source.

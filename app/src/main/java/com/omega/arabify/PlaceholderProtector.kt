@@ -63,4 +63,12 @@ internal object PlaceholderProtector {
             offset = index + token.length
         }
     }
+
+    /**
+     * Detects placeholder-like syntax that a translator introduced instead of
+     * preserving through the protected markers. Such output must not be written
+     * into a game's format string or markup.
+     */
+    fun containsUnprotectedTokens(text: String): Boolean =
+        tokenPattern.containsMatchIn(text)
 }
