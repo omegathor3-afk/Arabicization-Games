@@ -29,8 +29,8 @@ Every row names its verification level. Levels, strongest first:
 | Shattered Pixel Dungeon (libGDX, F-Droid, GPLv3) | messages/*.properties translatable, BUT language list is a hardcoded code enum | BLOCKED (text-only) | needs the per-game language-table tier (code patching) to activate a new language |
 | OpenTTD (native C++, F-Droid, GPLv2) | none needed | ALREADY-ARABIC | ships lang/arabic_egypt.lng inside nested data zip; game supports Arabic natively |
 | Revengate (Godot, F-Droid, GPL) | Godot i18n absent from project.godot; text hardcoded in scenes | UNSUPPORTED | only the dialogue addon has .po; main text needs .tscn/.gd literal rewriting - fragile tier not built |
-| Andor's Trail (native Android, F-Droid, GPL) | Android resources (22,766 strings) | DESIGNED | fits AndroidResourceLocalizer tier; next emulator candidate |
-| Mindustry (libGDX, F-Droid, GPLv3) | Game-native Arabic slot (bundle_ar.properties) | EMULATOR | 91d979b green: pinned F-Droid APK, slot added on-device (deterministic pseudo-Arabic in the device test; ML Kit path covered by Minesweeper test), signed, reinstalled, ar-EG, Arabic script verified on screen |
+| Andor's Trail (native Android, F-Droid, GPL) | Android resources (671 own strings) | ALREADY-ARABIC | ships values-ar with 612 real Arabic strings; device run showed the app correctly respects them (existingArabic) and translated only the ~49 leftovers; story text in res/raw XML - future tier |
+| Mindustry (libGDX/Java, F-Droid, GPLv3) | libGDX bundle slot (bundle_ar.properties) | FONT-BLOCKED | slot injected and APK-verified on emulator (install, launch, key preservation); on-screen Arabic does not render - game font has no Arabic glyphs (labels showed only the digits of the pseudo strings); fix = font-injection tier (issue #5) |
 | Game-native language tables (add "Arabic" slot) | Per-game format research | DESIGNED | - |
 | Universal fallback: screen OCR + translation overlay | On-device OCR + overlay, engine-agnostic | DESIGNED | large separate feature |
 | Games with anti-tamper/DRM/integrity locks | None - reported as blocked | BLOCKED (by policy) | - |

@@ -293,6 +293,24 @@ Tiers (status): see docs/coverage-matrix.md.
     - SuperTuxKart (org.supertuxkart.stk 312, 165MB): not yet downloaded;
       gettext .po tier candidate.
 
+37. `6f45fbb` refactor: AndroidResourceLocalizer accepts a translation
+    lambda (production keeps ML Kit) enabling deterministic device tests.
+38. `0e94806`+`4b80e1f` test(resources): Andor's Trail emulator tier.
+    First run found the app's OWN package has 670 default strings (the
+    22k aapt total counts library packages); story text lives in res/raw
+    XML (future tier). Thresholds aligned.
+39. `37758bd` ci: Mindustry launch retry x3 + logcat annotation (pidof
+    flake on 0e94806). `681f7d1` ci: emulator screenshots uploaded to
+    0x0.st (transfer.sh fallback) with URLs as public ::notice
+    annotations - the user asked to SEE the Arabicized games; fetch URLs
+    from annotations on the next run and attach images to parent.
+40. SuperTuxKart: ALREADY-ARABIC (assets/data/po/ar.po + Arabic fonts) -
+    second already-Arabic game. Apple Flinger: no i18n at all,
+    UNSUPPORTED. Pixel Wheels: gettext tier candidate - assets/po/*.po
+    (16 locales, no ar), text languages.xml picker, messages.pot
+    template; BLOCKER: no Arabic font in game (fontSet system), would
+    render boxes without font injection (issue #5, not implemented).
+
 ## Environment notes (for the next agent run)
 
 - Clone of this branch with build toolchain lives in the agent sandbox:
@@ -315,3 +333,56 @@ Tiers (status): see docs/coverage-matrix.md.
 - IL2CPP, Unreal, Godot: unsupported.
 - The Android UI does not yet expose the patcher/rewriter; they are
   library-level and test-verified only.
+
+## 41. Andor's Trail: already Arabic (completion mode)
+Deep APK inspection (JVM scratch test, since deleted): the app package ships 622
+values-ar entries with 612 real Arabic strings of 671 total. The first device run's
+"apparent failure" was the localizer CORRECTLY respecting existing Arabic
+(existingArabic ~= 600) and translating only the ~49 leftovers. Test rewritten to
+assert completion mode (existingArabic > 500). Matrix: ALREADY-ARABIC (3rd such
+game after OpenTTD and SuperTuxKart). Story text in res/raw XML remains a future tier.
+
+## 42. Screenshot upload diagnostics (1de88c0)
+All 4 uploads failed on 681f7d1; the helper had swallowed curl errors. Rewritten:
+tries 0x0.st, catbox.moe, temp.sh in order, prints each host's error into the
+notice annotation. Next CI run either yields image URLs or the exact failure chain.
+If Actions egress blocks all free hosts, the honest blocker gets reported to parent.
+
+## 43. Matrix: three already-Arabic games
+OpenTTD, SuperTuxKart, Andor's Trail all ship Arabic. Substitutes being evaluated:
+Pixel Wheels (.po tier, no Arabic font in game - blocker documented), Vector
+Pinball (not on F-Droid; legit source search), Ren'Py itch.io titles (browser
+download check needed). Apple Flinger UNSUPPORTED (no i18n). Honesty rule stands:
+do not claim support before implemented and device-tested.
+
+## 44. Mindustry on-screen Arabic: FONT-BLOCKED (honest downgrade)
+The 1de88c0 run published the Mindustry screenshot (temp.sh). Inspection: menu
+labels rendered as bare digits ("8", "9", "11") - the test's pseudo-Arabic
+("عر"+length) lost its Arabic letters because the game's bundled font has no
+Arabic glyphs. The bundle_ar slot itself is injected and APK-verified (keys
+preserved, game launches, process alive). Also learned: uiautomator dumps never
+contain an OpenGL game's text, so the old hierarchy-Arabic gate was
+flaky-passing off Arabic system UI; the gate now gates on install+launch+slot
+content and publishes the screenshot for human visual verification. Matrix:
+FONT-BLOCKED, fix = font-injection tier (issue #5, same class as Pixel Wheels).
+Upload route facts: 0x0.st and catbox.moe fail from Actions runners; temp.sh
+works; download requires POST to the file URL (GET returns an HTML viewer).
+
+## 45. All five user screenshots delivered (1de88c0 CI run)
+temp.sh route worked (POST to download). Verified visually and forwarded to
+parent as attachments: arabify-app-screen (app's own Arabic RTL UI),
+minesweeper-arabic-screen (localized game fully Arabic - the flagship proof),
+andorstrail-arabic-screen (game's own shipped Arabic), unciv-arabic-screen
+(system dialog Arabic over Unciv picker - labelled honestly),
+mindustry-arabic-screen (font-blocker evidence).
+
+## 46. Font-injection tier design (Mindustry first)
+Mindustry ships assets/fonts/font.woff; Fonts.java swaps fonts only for
+Japanese (font_jp.woff, hardcoded `ja` check) - no generic per-locale lookup,
+so adding font_ar.woff alone does nothing. Viable asset-only plan: merge an OFL
+Arabic font (Noto Naskh Arabic, includes presentation forms) into font.woff
+(fontTools merge; FreeType sniffs content, extension irrelevant) and pre-shape
+bundle_ar values to Arabic Presentation Forms-B in visual order (libGDX has no
+shaper/bidi). No dex patching. Open work: Kotlin reshaper + bidi-lite,
+font-merge pipeline in CI (pip fonttools + brotli), screenshot visual verify.
+Docs must state shaping is approximated, not full HarfBuzz.
