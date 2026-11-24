@@ -21,8 +21,10 @@ internal data class FontChoice(
 
 /**
  * Automatic, explainable Arabic font selection. Hard requirement: the font
- * must cover the Arabic core and Presentation Forms-B (needed by engines
- * without a shaper). Then score style match, weight distance and
+ * must cover the Arabic core and every codepoint ArabicShaper can emit
+ * ([ArabicShaper.emittedCodepoints]) - a font missing some of them renders
+ * incomplete words, because libGDX's FreeType rasterizer silently drops
+ * missing glyphs. Then score style match, weight distance and
  * proportional-vs-monospace fit. Every choice carries a human-readable reason,
  * and a weak match says so instead of pretending.
  */
@@ -74,7 +76,7 @@ internal object FontSelector {
         val wanted = inferStyle(game)
         val scored = catalog.mapNotNull { f ->
             val p = coverage(f)
-            if (!p.hasArabicCore || p.presentationFormsB < 80) return@mapNotNull null
+            if (!p.hasArabicCore || !ArabicShaper.emittedCodepoints.all(p::supports)) return@mapNotNull null
             val styleScore = if (f.style == wanted) 60 else 0
             val weightScore = 40 - minOf(40, kotlin.math.abs(f.weight - game.weightClass) / 10)
             f to (styleScore + weightScore)

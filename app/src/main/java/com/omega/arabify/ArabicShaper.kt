@@ -24,6 +24,17 @@ internal object ArabicShaper {
         r(0x0649, 0xFEEF); d(0x064A, 0xFEF1)
     }
     private val lamAlef = mapOf(0x0622 to 0xFEF5, 0x0623 to 0xFEF7, 0x0625 to 0xFEF9, 0x0627 to 0xFEFB)
+
+    /**
+     * Every codepoint [toVisual] can emit: contextual presentation forms plus lam-alef
+     * ligatures (isolated and final). A replacement/merge font must cover ALL of these or
+     * glyphs silently vanish at rasterization (libGDX FreeType drops missing glyphs instead
+     * of showing tofu). Tajawal, Cairo and Almarai omit the isolated forms (U+FE8D etc.) and
+     * fail this requirement; Amiri, Noto Naskh and Rooyin cover the full set.
+     */
+    val emittedCodepoints: Set<Int> =
+        forms.values.flatMap { it.asIterable() }.toSet() +
+            lamAlef.values.flatMap { listOf(it, it + 1) }.toSet() + 0xFE80
     private val placeholder = Regex("""\{[^}]*\}|%(\d+\$)?[-#+ 0,(]*\d*(\.\d+)?[sdfxXc%]|\\n|\n""")
     private val mirror = mapOf('(' to ')', ')' to '(', '[' to ']', ']' to '[', '<' to '>', '>' to '<', '«' to '»', '»' to '«')
 

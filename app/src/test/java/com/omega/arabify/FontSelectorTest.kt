@@ -11,12 +11,43 @@ class FontSelectorTest {
     private fun game(family: String, weight: Int, bitmap: Boolean = false, mono: Boolean = false) =
         FontAnalyzer.FontProfile("TTF", family, "Regular", weight, false, false, mono, bitmap, 1000, 0, 0, 0, emptyList())
 
+    private val shapingCapable = setOf("amiri-regular", "noto-naskh", "rooyin-regular", "rooyin-bold")
+    private val coreOnly = setOf("tajawal-regular", "tajawal-bold", "cairo", "almarai-regular", "almarai-bold")
+
     @Test
-    fun everyCatalogFontPassesCoverageRequirement() {
+    fun catalogIsFullyClassifiedByShapingCapability() {
+        assertEquals(
+            FontSelector.catalog.map { it.id }.toSet(),
+            shapingCapable + coreOnly,
+        )
+        FontSelector.catalog.forEach { f ->
+            assertEquals("OFL-1.1", f.licenseId)
+            val p = cov(f)
+            assertTrue("${f.id} must cover the Arabic core", p.hasArabicCore)
+        }
+    }
+
+    // A font missing any codepoint ArabicShaper emits renders incomplete words at
+    // runtime (libGDX drops missing glyphs silently). Tajawal/Cairo/Almarai omit the
+    // isolated forms (U+FE8D etc.), so the gate must exclude them.
+    @Test
+    fun onlyFontsCoveringTheFullShaperEmitSetAreSelectable() {
         FontSelector.catalog.forEach { f ->
             val p = cov(f)
-            assertTrue("${f.id} pfB=${p.presentationFormsB}", p.hasArabicCore && p.presentationFormsB >= 80)
-            assertEquals("OFL-1.1", f.licenseId)
+            val complete = ArabicShaper.emittedCodepoints.all(p::supports)
+            assertEquals("${f.id} shaping capability", f.id in shapingCapable, complete)
+        }
+    }
+
+    @Test
+    fun selectionNeverReturnsAFontMissingShapedForms() {
+        listOf(
+            game("fontello-like", 400),
+            game("Xolonium", 700),
+            game("Pixel Operator", 400, bitmap = true),
+        ).forEach { g ->
+            val c = FontSelector.selectForMerge(g, ::cov)
+            assertTrue(c.font.id in shapingCapable)
         }
     }
 
@@ -28,10 +59,12 @@ class FontSelectorTest {
     }
 
     @Test
-    fun boldSansGameGetsBoldSansFont() {
+    fun boldSansGameFallsBackWithHonestReason() {
+        // No SANS_MODERN catalog font covers the full shaper emit set, so a bold sans
+        // game gets the closest shaping-capable font and the reason says so.
         val c = FontSelector.select(game("Xolonium", 700), ::cov)
-        assertEquals(FontStyleTag.SANS_MODERN, c.font.style)
-        assertEquals(700, c.font.weight)
+        assertTrue(c.font.id in shapingCapable)
+        assertTrue(c.reason.contains("no catalog font of that style"))
     }
 
     @Test

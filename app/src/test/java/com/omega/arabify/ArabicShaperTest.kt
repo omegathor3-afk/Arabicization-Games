@@ -42,4 +42,31 @@ class ArabicShaperTest {
     @Test fun newlinesPreserved() {
         assertEquals(2, ArabicShaper.toVisual("با\nبا").split("\n").size)
     }
+
+    // Regression: Mindustry rendered "لعربية" instead of "العربية" because the merged
+    // font lacked FE8D and libGDX silently dropped it. Pin the exact forms emitted.
+    @Test fun wordStartingWithAlefKeepsIsolatedAlefForm() {
+        val v = ArabicShaper.toVisual("العربية")
+        assertTrue(v.contains(cp(0xFE8D)))
+        assertEquals(cp(0xFE8D), v.last().toString())
+    }
+
+    // Regression: "الإعدادات" lost its leading alef AND the lam-hamza ligature forms.
+    @Test fun wordWithLamHamzaLigatureKeepsLeadingAlef() {
+        val v = ArabicShaper.toVisual("الإعدادات")
+        assertTrue(v.contains(cp(0xFE8D)))
+        assertTrue(v.contains(cp(0xFEF9)) || v.contains(cp(0xFEFA)))
+    }
+
+    @Test fun everyShapedFormCodepointIsInEmitSet() {
+        listOf("العربية", "الإعدادات", "لعبة الملاحظات", "مرحبا بالعالم", "تادادعإلأ", "مستوى 8")
+            .forEach { text ->
+                ArabicShaper.toVisual(text).codePoints().forEach { c ->
+                    if (c in 0xFE70..0xFEFF) {
+                        assertTrue("emit set must contain U+%04X (from %s)".format(c, text),
+                            c in ArabicShaper.emittedCodepoints)
+                    }
+                }
+            }
+    }
 }
