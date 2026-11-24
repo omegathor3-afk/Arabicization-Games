@@ -143,6 +143,18 @@ all new heads; build green.
   da4fe7e (includes ALL recent code) completed SUCCESS - emulator step
   passed in ~4 min. Verdict: flake, not a regression.
 
+21. `9f5d7a8` test(unity): UnityMonoPipelineInstrumentedTest - the Unity
+    Mono production path runs ON the CI emulator (offline translation,
+    on-device signing, Arabic read-back through the strict parsers).
+22. `5464e62` fix(unity): REAL BUG the new emulator test caught on its
+    first run - the final integrity check compared the ORIGINAL APK to
+    the signed output, so any game with a localized bundle failed at the
+    last step on device ("Unity resource bytes changed"). Fixed: final
+    check compares the bundle stage's output; the bundle stage verifies
+    itself with an allowlist of exactly its rewritten entries
+    (rewrittenEntryNames). JVM regression test. 272 green.
+    On-device confirmation pending CI on 5464e62.
+
 ## New user direction (Nov 24, ~02:20 EET)
 
 User wants the app to Arabicize ANY game, verified by real testing.
@@ -187,6 +199,37 @@ Tiers (status): see docs/coverage-matrix.md.
 - Font catalog/matching (issue #5); Arabic shaping review for games
   without proper text layout.
 - IL2CPP: research only; not supported and not claimed.
+
+## 2026-11-24 late-night batch (run continued)
+
+21. `9f5d7a8` UnityMonoPipelineInstrumentedTest - Unity Mono text-asset
+    path running on the CI emulator (shared fixtures in sharedTestFixtures).
+22. `5464e62` fix(unity): REAL device bug - final verifyUnchanged compared
+    the original APK against the signed output and rejected legitimately
+    localized bundles. Fixed with an allowlist, stage-1 self-verification
+    and rewrittenEntryNames tracking; 272 JVM tests green. NOTE: the CI
+    emulator step still failed on this commit; cause under diagnosis (see 25).
+23. `09809d7` feat(locale): LocaleSlotLocalizer - game-native Arabic slot
+    for libGDX bundle.properties games (Mindustry tier). Adds
+    bundle_ar.properties, translates base values, keeps every other entry
+    byte-identical, refuses when a slot exists or no bundle is present.
+    Verified locally against the REAL pinned F-Droid Mindustry APK
+    (io.anuke.mindustry_1115, sha256 64bf33...9f44): 2,849 values
+    translated, 652 skipped, all 748 other entries byte-identical.
+24. `f6a54e1` feat(locale): PlaceholderProtector now protects
+    square-bracket markup ([red], [#ff8800], []) used by libGDX/Mindustry.
+    278 JVM tests green.
+25. `a36a78c` test(locale): Mindustry locale-slot emulator tier -
+    MindustryLocaleSlotInstrumentedTest + mindustry-slot.yml workflow +
+    run-mindustry-slot.sh. Installs pinned F-Droid Mindustry on the CI
+    emulator, adds the Arabic slot (deterministic pseudo-Arabic stand-in;
+    ML Kit offline translation is covered by the Minesweeper test), signs,
+    reinstalls, switches emulator to ar-EG, launches, requires Arabic
+    script on screen.
+26. `DIAG` ci: run-real-game-localization.sh now emits failing connected
+    -test assertions as public ::error annotations because Actions logs
+    return 403 anonymously but annotations are readable. Next CI run will
+    show exactly why the emulator step failed on 5464e62.
 
 ## Environment notes (for the next agent run)
 
