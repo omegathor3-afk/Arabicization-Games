@@ -13,9 +13,6 @@ note_failure() {
 }
 
 
-# Upload a captured screenshot to a free no-auth file host and emit the URL
-# as a public ::notice annotation so the evidence is fetchable without
-# GitHub artifact access. Only game/app screens are uploaded - no user data.
 run_connected_test() {
   local test_class="$1"
   gradle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class="$test_class" --stacktrace && return 0

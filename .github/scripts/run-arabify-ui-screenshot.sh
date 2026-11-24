@@ -40,7 +40,6 @@ adb shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
 adb shell am force-stop com.omega.arabify >/dev/null 2>&1 || true
 adb shell am start -W -n com.omega.arabify/.MainActivity > build/arabify-ui/launch.txt 2>&1 || { note_failure "Arabify launch failed: $(tail -c 300 build/arabify-ui/launch.txt)"; exit 1; }
 
-status=0
 for attempt in $(seq 1 30); do
   fg="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'topResumedActivity|mResumedActivity' | tail -n 1 | tr -d '\r')"
   [[ "$fg" == *"com.omega.arabify"* ]] && break
@@ -72,7 +71,31 @@ for attempt in 1 2 3; do
   adb shell input swipe 540 2100 540 320 900 || true
   sleep 2
   dump_hierarchy build/arabify-ui/after-scroll.xml || { note_failure "could not capture the post-scroll accessibility hierarchy"; exit 1; }
-  if ! cmp -s build/arabify-ui/before-scroll.xml build/arabify-ui/after-scroll.xml; then
+  if python3 - build/arabify-ui/before-scroll.xml build/arabify-ui/after-scroll.xml <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+def visible_app_nodes(path):
+    root = ET.parse(path).getroot()
+    return tuple(
+        (
+            node.get("class", ""),
+            node.get("resource-id", ""),
+            node.get("text", ""),
+            node.get("content-desc", ""),
+            node.get("bounds", ""),
+        )
+        for node in root.iter("node")
+        if node.get("package") == "com.omega.arabify"
+    )
+
+before = visible_app_nodes(sys.argv[1])
+after = visible_app_nodes(sys.argv[2])
+if not before or not after:
+    raise SystemExit("Could not identify ARABIFY nodes in both accessibility hierarchies")
+raise SystemExit(0 if before != after else 1)
+PY
+  then
     scrolled=1
     break
   fi
@@ -99,4 +122,4 @@ for name in ("arabify-ui-top.png", "arabify-ui-scrolled.png"):
         raise SystemExit(f"{name} has implausible dimensions: {width}x{height}")
     print(f"{name}: {width}x{height}, {len(data)} bytes")
 PY
-
+exit 0

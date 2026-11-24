@@ -13,9 +13,6 @@ note_failure() {
 }
 
 
-# Upload a captured screenshot to a free no-auth file host and emit the URL
-# as a public ::notice annotation so the evidence is fetchable without
-# GitHub artifact access. Only game/app screens are uploaded - no user data.
 run_connected_test() {
   local test_class="$1"
   gradle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class="$test_class" --stacktrace && return 0
@@ -164,8 +161,6 @@ if [[ -s "$GENERATED_APK" ]]; then
             game_lines="$(grep -E '/anuke\.mindustry\(|/Mindustry\(|io\.anuke\.mindustry' build/test-game/localized/game-exit-logcat.txt | grep -vE 'ApkAssets|ImeTracker|InputManager|nativeloader|ActivityTaskManager|WindowManager' | tail -45 | cut -c1-210 | tr '\n' '|' | cut -c1-4200)"
             sys_lines="$(grep -E 'FATAL EXCEPTION IN SYSTEM PROCESS|lowmemorykiller|Low on memory|am_kill|am_proc_died|ANR in|has died|Killing [0-9]+:io' build/test-game/localized/game-exit-logcat.txt | tail -8 | cut -c1-200 | tr '\n' '|')"
             logcat_tail="GAME[${game_lines}] SYSTEM[${sys_lines}]"
-            if [[ -s "build/test-game/localized/mindustry-last-foreground.png" ]]; then
-            fi
             note_failure "Mindustry left the foreground ($(cat build/test-game/localized/game-exit-tick.txt 2>/dev/null)) before screenshot capture; pid=$game_pid foreground=$foreground :: logcat: ${logcat_tail:-unavailable}"
           else
             printf 'pid=%s\nforeground=%s\n' "$game_pid" "$foreground" > build/test-game/localized/game-process.txt
@@ -197,8 +192,7 @@ PY
             then
               final_foreground="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'topResumedActivity|mResumedActivity' | tail -n 1 | tr -d '\r')"
               final_pid="$(adb shell pidof io.anuke.mindustry 2>/dev/null | tr -d '\r')"
-              if [[ -n "$final_pid" && "$final_foreground" == *"io.anuke.mindustry"* ]]; then
-              else
+              if [[ -z "$final_pid" || "$final_foreground" != *"io.anuke.mindustry"* ]]; then
                 launch_status=1
                 note_failure "Mindustry exited or lost foreground during screenshot capture; refusing to publish non-game screenshot"
               fi
