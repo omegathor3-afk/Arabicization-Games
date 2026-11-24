@@ -120,10 +120,24 @@ all new heads; build green.
     when no member translates. Tests: 264 green.
     `be185da` added signSet: one-key signing for every rebuilt member via
     the persisted AndroidKeyStore key (device-only, CI emulator covers it).
-    Remaining for #3: MainActivity wiring - run localizeSet + signSet for
-    split apps, then hand the signed set to the install session (candidate
-    route: wrap the signed set in the existing verified ARABIFY ZIP format
-    so the restore installer path serves it).
+    `8c204af` wired #3 into MainActivity: split apps use the asset text
+    path end to end - localizeSet + localizeAndSignSet (PackageManager
+    extractNativeLibs per member), wrapped via ApkBackupManager.createBackup
+    into the verified ARABIFY ZIP, exported through a new zip save
+    launcher, installed from the existing restore section (one session).
+    The values-ar resource path still refuses splits, deliberately.
+    Tests: 264 green; assembleDebugAndroidTest green.
+    #3 is DONE at the text-asset scope; UnityFS bundles inside split sets
+    are not translated (UnityMonoLocalizer stays single-APK).
+
+## CI incidents
+
+- Android CI emulator step FAILED once on 40e6701 (~4 min in, no logs
+  accessible without repo admin auth). assembleDebugAndroidTest + 264 JVM
+  tests pass locally on that tree; the instrumented test exercises
+  AndroidResourceLocalizer, untouched by recent work. Retriggered via
+  empty commit 87eccde; the real second sample is the Android CI run on
+  8c204af. If it fails again the same way, treat as structural and bisect.
 
 ## Issue mapping (corrected - earlier entries here had wrong numbers)
 
