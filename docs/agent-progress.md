@@ -563,3 +563,22 @@ New agent run (fresh sandbox; toolchain re-provisioned; baseline suite green bef
 - Exact SHA `42089a71a43cec736e27ede1eaa260850b3a9068` CI: CodeQL push + PR passed; Andors Trail and Mindustry emulator jobs passed; Unciv stopped at dependency resolution because Maven Central returned HTTP 429 (26 dependency fetches); Firebase Test Lab jobs were skipped by their configured condition. The Android CI workflow did not appear in the seven runs attached to this SHA, so the Andors Trail workflow is being amended to execute the JVM unit suite as a reliable push-triggered gate.
 - Known product gap confirmed by current `MainActivity`: `LocaleSlotLocalizer` and `GettextPoLocalizer` are implemented/tested but are not yet selected from the Android UI flow. Wire the libGDX/Gettext strategies into the user-facing localization path before claiming those game families are supported in the app.
 - Backlog remains: update stale README claims against the current coverage matrix; run unit tests on the exact current SHA; finish real Unity SerializedFile/UnityFS write-back and validate it in a Unity Player; test Bergamot on ARM64 hardware before exposing it as a user translator.
+
+## 60. Glossary loop closes; screenshot channel restored (c4e0071..77c0604)
+- Omega's b344ec4 routes gettext through AssetTextTransformer (glossary +
+  placeholder protection + quality gate) - the gettext glossary gap is closed,
+  with his placeholder tests. His change broke one legacy test whose fixture
+  string became glossary-owned; retargeted to a non-glossary msgid (c4e0071).
+- Glossary gained Exit/Options/About/Resume/Pause after ML Kit's استقال-for-Quit
+  class of error; Unity bundle fixtures now use "Shop" so they keep measuring
+  the translator callback instead of the glossary fast path (dd37cd6).
+- 259472f/cfe2a57 (authored by omegathor3-afk like every commit tonight) made
+  all CI screenshots private artifacts. Omega says he did not remove the
+  channel and chose to restore it: upload_shot is back in all six CI scripts
+  (77c0604), his private-artifact and hierarchy checks untouched.
+- The real-translation menu report now reflects what ships: glossary lookups
+  first, raw ML Kit only for the rest, glossary hits marked (20ad9ca).
+- Unciv failure annotations now quote the visible screen text from the captured
+  hierarchy, since screenshots need repo auth (26400ea).
+- Open: Unciv on-screen check failed on ef81d34 ("no Arabic entry visible") -
+  next run's annotation will show the actual screen content.
