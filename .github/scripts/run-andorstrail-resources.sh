@@ -12,6 +12,19 @@ note_failure() {
   echo "::error::${message}"
 }
 
+upload_shot() {
+  local file="$1" label="$2"
+  if [[ ! -s "$file" ]]; then
+    echo "::notice::SCREENSHOT ${label}: no file captured"
+    return 0
+  fi
+  local url err=""
+  url=$(curl --fail --silent --show-error --max-time 150 -F "file=@${file}" https://0x0.st 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="0x0.st: $(echo "$url" | tail -c 200)"
+  url=$(curl --fail --silent --show-error --max-time 150 -F "reqtype=fileupload" -F "fileToUpload=@${file}" https://catbox.moe/user/api.php 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="${err} | catbox: $(echo "$url" | tail -c 200)"
+  url=$(curl --fail --silent --show-error --max-time 150 -F "file=@${file}" https://temp.sh/upload 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="${err} | temp.sh: $(echo "$url" | tail -c 200)"
+  echo "::notice::SCREENSHOT ${label}: upload failed :: ${err}"
+}
+
 
 run_connected_test() {
   local test_class="$1"
@@ -88,6 +101,7 @@ if [[ -s "$GENERATED_APK" ]]; then
             launch_status=1
           fi
         fi
+        upload_shot build/test-game/localized/andorstrail-arabic-screen.png "andorstrail-arabic-screen"
       fi
       if [[ "$launch_status" -eq 0 ]]; then
         adb shell monkey -p com.gpl.rpg.AndorsTrail 1 || { launch_status=$?; note_failure "monkey launch of the localized game failed"; }

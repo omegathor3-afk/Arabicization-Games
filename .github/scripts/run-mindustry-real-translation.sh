@@ -16,6 +16,19 @@ note_failure() {
   echo "::error::${message}"
 }
 
+upload_shot() {
+  local file="$1" label="$2"
+  if [[ ! -s "$file" ]]; then
+    echo "::notice::SCREENSHOT ${label}: no file captured"
+    return 0
+  fi
+  local url err=""
+  url=$(curl --fail --silent --show-error --max-time 150 -F "file=@${file}" https://0x0.st 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="0x0.st: $(echo "$url" | tail -c 200)"
+  url=$(curl --fail --silent --show-error --max-time 150 -F "reqtype=fileupload" -F "fileToUpload=@${file}" https://catbox.moe/user/api.php 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="${err} | catbox: $(echo "$url" | tail -c 200)"
+  url=$(curl --fail --silent --show-error --max-time 150 -F "file=@${file}" https://temp.sh/upload 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="${err} | temp.sh: $(echo "$url" | tail -c 200)"
+  echo "::notice::SCREENSHOT ${label}: upload failed :: ${err}"
+}
+
 mkdir -p build/test-game/localized/real
 
 # Standalone-capable: install the pinned game APK (no-op if already installed).
@@ -71,6 +84,7 @@ adb pull /sdcard/Download/ARABIFY/mindustry-report-real.txt build/test-game/loca
 GENERATED_APK="build/test-game/localized/real/mindustry-arabic-real.apk"
 if [[ ! -s "$GENERATED_APK" ]]; then
   note_failure "real-translation Mindustry APK was not exported"
+  [[ -s "$last_ok_shot" ]] && upload_shot "$last_ok_shot" "mindustry-real-last-foreground-frame-tick-${last_ok_tick}"
   exit 1
 fi
 
@@ -161,4 +175,5 @@ if [[ -z "$final_pid" || "$final_foreground" != *"io.anuke.mindustry"* ]]; then
   note_failure "Mindustry exited during real-translation screenshot capture; refusing to publish"
   exit 1
 fi
+upload_shot build/test-game/localized/real/mindustry-real-translation-screen.png "mindustry-real-translation-screen"
 exit 0

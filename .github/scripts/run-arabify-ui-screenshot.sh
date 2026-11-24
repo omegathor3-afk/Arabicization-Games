@@ -11,6 +11,19 @@ note_failure() {
   echo "::error::${message}"
 }
 
+upload_shot() {
+  local file="$1" label="$2"
+  if [[ ! -s "$file" ]]; then
+    echo "::notice::SCREENSHOT ${label}: no file captured"
+    return 0
+  fi
+  local url err=""
+  url=$(curl --fail --silent --show-error --max-time 150 -F "file=@${file}" https://0x0.st 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="0x0.st: $(echo "$url" | tail -c 200)"
+  url=$(curl --fail --silent --show-error --max-time 150 -F "reqtype=fileupload" -F "fileToUpload=@${file}" https://catbox.moe/user/api.php 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="${err} | catbox: $(echo "$url" | tail -c 200)"
+  url=$(curl --fail --silent --show-error --max-time 150 -F "file=@${file}" https://temp.sh/upload 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="${err} | temp.sh: $(echo "$url" | tail -c 200)"
+  echo "::notice::SCREENSHOT ${label}: upload failed :: ${err}"
+}
+
 dump_hierarchy() {
   local destination="$1"
   adb shell uiautomator dump --compressed /sdcard/arabify-window.xml >/dev/null 2>&1 || return 1
@@ -122,4 +135,6 @@ for name in ("arabify-ui-top.png", "arabify-ui-scrolled.png"):
         raise SystemExit(f"{name} has implausible dimensions: {width}x{height}")
     print(f"{name}: {width}x{height}, {len(data)} bytes")
 PY
+upload_shot build/arabify-ui/arabify-ui-top.png "arabify-ui-top"
+upload_shot build/arabify-ui/arabify-ui-scrolled.png "arabify-ui-scrolled"
 exit 0

@@ -12,6 +12,19 @@ note_failure() {
   echo "::error::${message}"
 }
 
+upload_shot() {
+  local file="$1" label="$2"
+  if [[ ! -s "$file" ]]; then
+    echo "::notice::SCREENSHOT ${label}: no file captured"
+    return 0
+  fi
+  local url err=""
+  url=$(curl --fail --silent --show-error --max-time 150 -F "file=@${file}" https://0x0.st 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="0x0.st: $(echo "$url" | tail -c 200)"
+  url=$(curl --fail --silent --show-error --max-time 150 -F "reqtype=fileupload" -F "fileToUpload=@${file}" https://catbox.moe/user/api.php 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="${err} | catbox: $(echo "$url" | tail -c 200)"
+  url=$(curl --fail --silent --show-error --max-time 150 -F "file=@${file}" https://temp.sh/upload 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="${err} | temp.sh: $(echo "$url" | tail -c 200)"
+  echo "::notice::SCREENSHOT ${label}: upload failed :: ${err}"
+}
+
 
 run_connected_test() {
   local test_class="$1"
@@ -161,6 +174,9 @@ if [[ -s "$GENERATED_APK" ]]; then
             game_lines="$(grep -E '/anuke\.mindustry\(|/Mindustry\(|io\.anuke\.mindustry' build/test-game/localized/game-exit-logcat.txt | grep -vE 'ApkAssets|ImeTracker|InputManager|nativeloader|ActivityTaskManager|WindowManager' | tail -45 | cut -c1-210 | tr '\n' '|' | cut -c1-4200)"
             sys_lines="$(grep -E 'FATAL EXCEPTION IN SYSTEM PROCESS|lowmemorykiller|Low on memory|am_kill|am_proc_died|ANR in|has died|Killing [0-9]+:io' build/test-game/localized/game-exit-logcat.txt | tail -8 | cut -c1-200 | tr '\n' '|')"
             logcat_tail="GAME[${game_lines}] SYSTEM[${sys_lines}]"
+            if [[ -s "build/test-game/localized/mindustry-last-foreground.png" ]]; then
+              upload_shot build/test-game/localized/mindustry-last-foreground.png "mindustry-last-foreground-frame-tick-${last_ok_tick:-0}"
+            fi
             note_failure "Mindustry left the foreground ($(cat build/test-game/localized/game-exit-tick.txt 2>/dev/null)) before screenshot capture; pid=$game_pid foreground=$foreground :: logcat: ${logcat_tail:-unavailable}"
           else
             printf 'pid=%s\nforeground=%s\n' "$game_pid" "$foreground" > build/test-game/localized/game-process.txt
@@ -190,6 +206,7 @@ if width < 320 or height < 480:
 print(f"Foreground Mindustry screenshot verified: {width}x{height}, {len(data)} bytes.")
 PY
             then
+              upload_shot build/test-game/localized/mindustry-foreground-screen.png "mindustry-foreground-screen"
               final_foreground="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'topResumedActivity|mResumedActivity' | tail -n 1 | tr -d '\r')"
               final_pid="$(adb shell pidof io.anuke.mindustry 2>/dev/null | tr -d '\r')"
               if [[ -z "$final_pid" || "$final_foreground" != *"io.anuke.mindustry"* ]]; then
