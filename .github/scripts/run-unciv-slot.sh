@@ -159,7 +159,26 @@ PY
             echo "Accessibility hierarchy captured; the game lists Arabic in its own language UI." > build/test-game/localized/ui-smoke-validation.txt
           else
             echo "No Arabic text or Arabic language entry was visible in the accessibility hierarchy." >&2
-            note_failure "no Arabic text and no Arabic language entry visible on the Unciv screen (hierarchy captured)"
+            # Screenshots are private artifacts, so quote the visible screen
+            # text in the public annotation: it shows which screen the game
+            # was actually on when the check failed.
+            visible_text=$(python3 - "$HIERARCHY_HOST_PATH" <<'PYVIS'
+import re
+import sys
+try:
+    xml = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+except OSError:
+    xml = ""
+texts = []
+for value in re.findall(r'text="([^"]*)"', xml):
+    value = value.strip()
+    if value and value not in texts:
+        texts.append(value)
+summary = " | ".join(texts)[:1200]
+print(summary if summary else "<no visible text nodes>")
+PYVIS
+)
+            note_failure "no Arabic text and no Arabic language entry visible on the Unciv screen. Visible screen text: ${visible_text}"
             launch_status=1
           fi
         else
