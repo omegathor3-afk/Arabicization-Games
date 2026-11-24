@@ -24,6 +24,22 @@ upload_shot() {
   url=$(curl --fail --silent --show-error --max-time 150 -F "file=@${file}" https://temp.sh/upload 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="${err} | temp.sh: $(echo "$url" | tail -c 200)"
   url=$(curl --fail --silent --show-error --max-time 150 -F "file=@${file}" https://file.io 2>&1 | python3 -c 'import json,sys; print(json.load(sys.stdin).get("link",""))' 2>/dev/null) && [[ -n "$url" ]] && { echo "::notice::SCREENSHOT ${label}: ${url} (single-download link - fetch once)"; return 0; } || err="${err} | file.io: $(echo "$url" | tail -c 200)"
   url=$(curl --fail --silent --show-error --max-time 150 --upload-file "$file" "https://transfer.sh/$(basename "$file")" 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="${err} | transfer.sh: $(echo "$url" | tail -c 200)"
+  # Last resort: external file hosts are unreachable from GitHub runners
+  # (observed 2026-11-24: 0x0.st 503, catbox 412, temp.sh 500, file.io empty,
+  # transfer.sh TCP timeout). Embed a downscaled JPEG as base64 inside the
+  # annotation itself - annotations are public and need no egress.
+  local small="build/.upload-shot-small.jpg"
+  if command -v ffmpeg >/dev/null 2>&1; then
+    local scale b64
+    for scale in 720 540 400; do
+      ffmpeg -y -loglevel error -i "$file" -vf "scale=${scale}:-1" -q:v 5 "$small" || continue
+      b64=$(base64 -w0 "$small" 2>/dev/null || base64 "$small" | tr -d '\n')
+      if [[ -n "$b64" && ${#b64} -le 60000 ]]; then
+        echo "::notice::SCREENSHOT-B64 ${label} (JPEG ${scale}px, base64): ${b64}"
+        return 0
+      fi
+    done
+  fi
   echo "::notice::SCREENSHOT ${label}: upload failed :: ${err}"
 }
 
