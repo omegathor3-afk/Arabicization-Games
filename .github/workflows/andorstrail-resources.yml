@@ -21,6 +21,8 @@ jobs:
    - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
      with:
       gradle-version: "8.13"
+   - name: Run JVM unit tests
+     run: gradle :app:testDebugUnitTest
    - name: Download pinned Andors Trail APK from F-Droid
      run: |
       set -euo pipefail
