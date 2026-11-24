@@ -107,83 +107,84 @@ if [[ -s "$GENERATED_APK" ]]; then
       fi
       if [[ "$launch_status" -eq 0 ]]; then
         launch_ok=0
+        # The pinned F-Droid manifest declares this exact exported MAIN/LAUNCHER
+        # activity. monkey -p reported "No activities found" on API 35 even
+        # though the APK installed, so launch the manifest component directly.
+        LAUNCH_COMPONENT="io.anuke.mindustry/mindustry.android.AndroidLauncher"
         for attempt in 1 2 3; do
-          adb shell monkey -p io.anuke.mindustry 1 || true
-          sleep 12
-          if adb shell pidof io.anuke.mindustry > build/test-game/localized/game-process.txt && [[ -s build/test-game/localized/game-process.txt ]]; then
-            launch_ok=1
-            break
-          fi
-          sleep 6
+          adb shell am force-stop io.anuke.mindustry >/dev/null 2>&1 || true
+          start_output="$(adb shell am start -W -n "$LAUNCH_COMPONENT" 2>&1 || true)"
+          printf '%s\n' "$start_output" > build/test-game/localized/launch-attempt-"$attempt".txt
+          for wait_attempt in $(seq 1 30); do
+            game_pid="$(adb shell pidof io.anuke.mindustry 2>/dev/null | tr -d '\r')"
+            foreground="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'topResumedActivity|mResumedActivity' | tail -n 1 | tr -d '\r')"
+            if [[ -n "$game_pid" && "$foreground" == *"io.anuke.mindustry"* ]]; then
+              launch_ok=1
+              printf 'pid=%s\nforeground=%s\n' "$game_pid" "$foreground" > build/test-game/localized/game-process.txt
+              break
+            fi
+            sleep 2
+          done
+          [[ "$launch_ok" -eq 1 ]] && break
+          sleep 3
         done
         if [[ "$launch_ok" -eq 0 ]]; then
           launch_status=1
-          logcat_tail=$(adb logcat -d -t 500 2>/dev/null | grep -iE 'mindustry|AndroidRuntime|FATAL|libc' | tail -20 | tr '\n' ' ' | cut -c1-800)
-          note_failure "game process not running after 3 launch attempts :: logcat: ${logcat_tail:-unavailable}"
-        fi
-        HIERARCHY_DEVICE_PATH="/data/local/tmp/arabify-mindustry-window.xml"
-        HIERARCHY_HOST_PATH="build/test-game/localized/mindustry-window.xml"
-        # Mindustry either opens its first-run language picker (listing
-        # العربية from the new bundle_ar) or boots its menu in Arabic. The
-        # game can take a while to build its first screen after install;
-        # poll the hierarchy for Arabic for up to 90 seconds instead of
-        # taking a single early snapshot.
-        hierarchy_ready=0
-        arabic_found=0
-        for attempt in $(seq 1 18); do
-          adb shell rm -f "$HIERARCHY_DEVICE_PATH" || true
-          adb shell uiautomator dump --compressed "$HIERARCHY_DEVICE_PATH" >/tmp/arabify-uiautomator-dump.log 2>&1 || true
-          if adb shell test -s "$HIERARCHY_DEVICE_PATH"; then
-            if adb pull "$HIERARCHY_DEVICE_PATH" "$HIERARCHY_HOST_PATH" >/dev/null 2>&1 && [[ -s "$HIERARCHY_HOST_PATH" ]]; then
-              hierarchy_ready=1
-              if grep -qP '[\x{0600}-\x{06FF}]' "$HIERARCHY_HOST_PATH"; then
-                arabic_found=1
-                break
-              fi
-            fi
-          fi
-          sleep 5
-        done
-        # Honesty note: libGDX renders all text in OpenGL, so the uiautomator
-        # hierarchy NEVER contains Mindustry's in-game strings. Gating on
-        # Arabic in the dump was flaky-passing off Arabic system UI. The slot
-        # content itself is verified by the instrumentation test; on-screen
-        # rendering is a known font blocker (no Arabic glyphs in the game's
-        # bundled font) and is verified visually via the published screenshot.
-        if [[ "$hierarchy_ready" -eq 1 ]]; then
-          if [[ "$arabic_found" -eq 0 ]]; then
-            echo "::notice::No Arabic in the uiautomator dump - expected for an OpenGL game; slot content is verified by the instrumentation test and the screenshot is published for visual check"
+          activity_dump="$(adb shell dumpsys package io.anuke.mindustry 2>/dev/null | grep -E -A2 -B2 'mindustry.android.AndroidLauncher|android.intent.action.MAIN|android.intent.category.LAUNCHER' | head -30 | tr '\n' ' ' | cut -c1-1200)"
+          logcat_tail="$(adb logcat -d -t 700 2>/dev/null | grep -iE 'mindustry|AndroidRuntime|FATAL|libc|ActivityTaskManager' | tail -30 | tr '\n' ' ' | cut -c1-1200)"
+          note_failure "Mindustry did not remain in the foreground after explicit activity launch; component=$LAUNCH_COMPONENT :: activities=$activity_dump :: logcat=$logcat_tail"
+        else
+          # A live process alone is insufficient: only capture evidence while
+          # Android reports the game package as the resumed foreground app.
+          sleep 8
+          foreground="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'topResumedActivity|mResumedActivity' | tail -n 1 | tr -d '\r')"
+          game_pid="$(adb shell pidof io.anuke.mindustry 2>/dev/null | tr -d '\r')"
+          if [[ -z "$game_pid" || "$foreground" != *"io.anuke.mindustry"* ]]; then
+            launch_status=1
+            note_failure "Mindustry left the foreground before screenshot capture; pid=$game_pid foreground=$foreground"
           else
-            echo "Accessibility hierarchy captured; Arabic text visible (system UI)." > build/test-game/localized/ui-smoke-validation.txt
-          fi
-        else
-          echo "::notice::UIAutomator exposed no hierarchy; relying on screenshot + process checks (not counted as failure)"
-          echo "WARNING: Android UIAutomator did not expose a hierarchy for the launched game. The instrumentation test verified the slot content, APK signature and install; screenshot and foreground-process checks remain required." > build/test-game/localized/ui-smoke-validation.txt
-          cat /tmp/arabify-uiautomator-dump.log >> build/test-game/localized/ui-smoke-validation.txt 2>/dev/null || true
-        fi
-        adb exec-out screencap -p > build/test-game/localized/mindustry-arabic-screen.png || launch_status=$?
-        if [[ ! -s build/test-game/localized/mindustry-arabic-screen.png ]]; then
-          echo "Localized game screenshot is missing or empty." >&2
-          note_failure "localized Mindustry screenshot missing or empty after launch"
-          launch_status=1
-        else
-          python3 - <<'PY'
+            printf 'pid=%s\nforeground=%s\n' "$game_pid" "$foreground" > build/test-game/localized/game-process.txt
+            echo "foreground_package=io.anuke.mindustry" > build/test-game/localized/ui-smoke-validation.txt
+            echo "foreground_activity=$foreground" >> build/test-game/localized/ui-smoke-validation.txt
+            echo "uiautomator_note=libGDX renders game text in OpenGL; Android accessibility text is not evidence of in-game Arabic." >> build/test-game/localized/ui-smoke-validation.txt
+            echo "visual_arabic_check=required; this workflow only proves the screenshot belongs to the foreground game." >> build/test-game/localized/ui-smoke-validation.txt
+            HIERARCHY_DEVICE_PATH="/data/local/tmp/arabify-mindustry-window.xml"
+            HIERARCHY_HOST_PATH="build/test-game/localized/mindustry-window.xml"
+            adb shell uiautomator dump --compressed "$HIERARCHY_DEVICE_PATH" >/tmp/arabify-uiautomator-dump.log 2>&1 || true
+            adb pull "$HIERARCHY_DEVICE_PATH" "$HIERARCHY_HOST_PATH" >/dev/null 2>&1 || true
+            adb exec-out screencap -p > build/test-game/localized/mindustry-arabic-screen.png || launch_status=$?
+            if [[ ! -s build/test-game/localized/mindustry-arabic-screen.png ]]; then
+              note_failure "localized Mindustry screenshot missing or empty after foreground verification"
+              launch_status=1
+            elif python3 - <<'PY'
 from pathlib import Path
 import struct
 
 path = Path("build/test-game/localized/mindustry-arabic-screen.png")
 data = path.read_bytes()
 if len(data) < 24 or data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
-    raise SystemExit("Localized game screenshot is not a valid PNG.")
+    raise SystemExit("Localized Mindustry screenshot is not a valid PNG.")
 width, height = struct.unpack(">II", data[16:24])
 if width < 320 or height < 480:
-    raise SystemExit(f"Localized game screenshot dimensions are too small: {width}x{height}.")
-print(f"Localized game screenshot verified: {width}x{height}, {len(data)} bytes.")
+    raise SystemExit(f"Localized Mindustry screenshot dimensions are too small: {width}x{height}.")
+print(f"Foreground Mindustry screenshot verified: {width}x{height}, {len(data)} bytes.")
 PY
-          if [[ "$?" -ne 0 ]]; then launch_status=1; fi
+            then
+              final_foreground="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'topResumedActivity|mResumedActivity' | tail -n 1 | tr -d '\r')"
+              final_pid="$(adb shell pidof io.anuke.mindustry 2>/dev/null | tr -d '\r')"
+              if [[ -n "$final_pid" && "$final_foreground" == *"io.anuke.mindustry"* ]]; then
+                upload_shot build/test-game/localized/mindustry-arabic-screen.png "mindustry-arabic-screen"
+              else
+                launch_status=1
+                note_failure "Mindustry exited or lost foreground during screenshot capture; refusing to publish non-game screenshot"
+              fi
+            else
+              launch_status=1
+              note_failure "Mindustry screenshot PNG validation failed"
+            fi
+            adb logcat -d -v time > build/test-game/localized/game-launch-logcat.txt || true
+          fi
         fi
-        adb logcat -d -v time > build/test-game/localized/game-launch-logcat.txt || true
-        upload_shot build/test-game/localized/mindustry-arabic-screen.png "mindustry-arabic-screen"
       fi
     fi
   fi

@@ -20,10 +20,13 @@ import java.util.zip.ZipFile
  * game (F-Droid build) installed on the emulator by the CI script.
  *
  * Translation uses a deterministic pseudo-Arabic stand-in so the test is
- * reproducible: ML Kit offline translation of Android resources is covered by
- * RealGameLocalizationInstrumentedTest, while this test proves the slot
- * mechanics on a real game - slot addition, byte-identical preservation of
- * every other entry, signing, install and Arabic rendering under ar-EG.
+ * reproducible. This instrumentation test proves APK-level mechanics only:
+ * locale-slot creation, byte-identical preservation of unrelated entries,
+ * font replacement, and signature verification. It does not launch Mindustry
+ * or prove that Arabic glyphs render on screen; the CI script separately
+ * launches the exact output and only captures a screenshot while the game is
+ * confirmed as the resumed foreground activity. Visual glyph verification
+ * remains a separate human review gate because libGDX renders through OpenGL.
  */
 @RunWith(AndroidJUnit4::class)
 class MindustryLocaleSlotInstrumentedTest {
