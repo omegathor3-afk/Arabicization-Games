@@ -50,11 +50,12 @@ class AndorsTrailResourceInstrumentedTest {
                 )
                 Log.i("AndorsTrail", "Localized ${report.translatedStrings}/${report.discoveredStrings} strings")
                 assertEquals(gamePackage, report.packageName)
-                // The app's own package holds ~670 default strings; the aapt
-                // total of ~22k includes library packages. Story text lives
-                // in res/raw XML files - a separate future tier.
+                // Andor's Trail already ships real Arabic values-ar entries
+                // for ~612 of its ~671 own strings; the localizer must
+                // RESPECT them (existingArabic) and only complete the rest.
+                // Story text lives in res/raw XML - a separate future tier.
                 assertTrue("Too few Andor's Trail strings discovered: ${report.discoveredStrings}", report.discoveredStrings > 300)
-                assertTrue("Too few Andor's Trail strings translated: ${report.translatedStrings}", report.translatedStrings > 300)
+                assertTrue("Shipped Arabic entries were not respected: existing=${report.existingArabicStrings}", report.existingArabicStrings > 500)
                 assertTrue("The translated APK was not created", output.isFile && output.length() > 0L)
 
                 val module = ApkModule.loadApkFile(output)
