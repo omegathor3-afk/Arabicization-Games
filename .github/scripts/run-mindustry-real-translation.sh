@@ -115,12 +115,13 @@ if [[ -s build/test-game/localized/real/mindustry-report-real.txt ]]; then
 from pathlib import Path
 
 lines = Path("build/test-game/localized/real/mindustry-report-real.txt").read_text(encoding="utf-8").splitlines()
+counts = [l for l in lines if l.startswith(("translatedStrings=", "skippedStrings=", "skipReasons="))]
 try:
     start = lines.index("menuTranslations:") + 1
 except ValueError:
     start = len(lines)
 labels = [l for l in lines[start:] if l.strip()][:20]
-encoded = "%0A".join(l.replace("%", "%25") for l in labels)
+encoded = "%0A".join(l.replace("%", "%25") for l in counts + ["---"] + labels)
 print(f"::notice::TRANSLATIONS%0A{encoded}")
 PYANN
 fi

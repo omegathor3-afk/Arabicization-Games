@@ -22,7 +22,7 @@ internal data class AssetLocalizationReport(
 )
 
 internal object AssetTextTransformer {
- data class Result(val text:String,val translated:Int,val skipped:Int)
+ data class Result(val text:String,val translated:Int,val skipped:Int,val skipReasons:Map<String,Int> = emptyMap())
 
  suspend fun transform(
   path:String,
@@ -40,7 +40,7 @@ internal object AssetTextTransformer {
   value:String,
   translate:suspend (String)->String
  ):SingleResult {
-  if(!looksTranslatable(value))return SingleResult(value,false)
+  if(!looksTranslatable(value))return SingleResult(value,false,"not_translatable")
   val glossaryHit=ArabicUiGlossary.translateExact(value)
   if(glossaryHit!=null){
    val prefix=value.takeWhile{it.isWhitespace()}
@@ -51,16 +51,16 @@ internal object AssetTextTransformer {
   return try {
    val result=translate(protected.text)
    val quality=TranslationQualityGate.review(value,result,protected.markers)
-   if(!quality.accepted)SingleResult(value,false)
+   if(!quality.accepted)SingleResult(value,false,"quality_gate:"+quality.reason)
    else {
     val restored=PlaceholderProtector.restore(result,protected)
-    if(restored.isBlank())SingleResult(value,false)else SingleResult(restored,true)
+    if(restored.isBlank())SingleResult(value,false,"blank_after_restore")else SingleResult(restored,true)
    }
   }catch(cancelled:CancellationException){throw cancelled}
-  catch(_:Exception){SingleResult(value,false)}
+  catch(_:Exception){SingleResult(value,false,"translator_error")}
  }
 
- data class SingleResult(val text:String,val translated:Boolean)
+ data class SingleResult(val text:String,val translated:Boolean,val reason:String? = null)
 
  suspend fun transform(
   path:String,

@@ -43,7 +43,8 @@ internal object LocaleSlotLocalizer {
         val stringsSkipped: Int,
         val outputApk: File,
         val fontReplaced: String? = null,
-        val fontReason: String? = null
+        val fontReason: String? = null,
+        val skipReasons: Map<String, Int> = emptyMap()
     )
 
     private val mainFontPattern = Regex("(^|/)fonts/font\\.(woff|ttf|otf)$")
@@ -209,7 +210,7 @@ internal object LocaleSlotLocalizer {
                 out.write(slotBytes)
                 out.closeEntry()
             }
-            return SlotReport(base, slotPath, result.translated, result.skipped, outputApk, fontEntryName, fontReason)
+            return SlotReport(base, slotPath, result.translated, result.skipped, outputApk, fontEntryName, fontReason, result.skipReasons)
         }
     }
 
@@ -261,6 +262,10 @@ internal object LocaleSlotLocalizer {
         val output = mutableListOf<String>()
         var translated = 0
         var skipped = 0
+        val skipReasons = mutableMapOf<String, Int>()
+        fun countSkip(reason: String) {
+            skipReasons[reason] = (skipReasons[reason] ?: 0) + 1
+        }
         for (line in source.split("\n")) {
             val trimmed = line.trim()
             if (trimmed.isEmpty() || trimmed.startsWith("#") || trimmed.startsWith("!")) {
@@ -270,6 +275,7 @@ internal object LocaleSlotLocalizer {
             val separator = line.indexOf('=')
             if (separator < 0) {
                 skipped++
+                countSkip("malformed_line")
                 output += line
                 continue
             }
@@ -287,9 +293,10 @@ internal object LocaleSlotLocalizer {
                 output += "$key = ${result.text}"
             } else {
                 skipped++
+                countSkip(result.reason ?: "unknown")
                 output += if (value.isEmpty()) "$key = " else line
             }
         }
-        return AssetTextTransformer.Result(output.joinToString("\n"), translated, skipped)
+        return AssetTextTransformer.Result(output.joinToString("\n"), translated, skipped, skipReasons)
     }
 }

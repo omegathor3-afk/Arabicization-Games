@@ -189,6 +189,8 @@ class MindustryLocaleSlotInstrumentedTest {
                         "slotEntry=${report.addedEntry}\n" +
                         "translatedStrings=${report.stringsTranslated}\n" +
                         "skippedStrings=${report.stringsSkipped}\n" +
+                        "skipReasons=" + report.skipReasons.entries.sortedByDescending { it.value }
+                            .joinToString(", ") { (reason, count) -> "$reason:$count" } + "\n" +
                         "fontReplaced=${report.fontReplaced}\n" +
                         "fontReason=${report.fontReason}\n" +
                         "signatureVerified=${verification.isVerified}\n" +
