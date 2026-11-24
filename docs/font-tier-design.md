@@ -35,10 +35,10 @@ Seed candidates (all OFL, verify coverage in a JVM test before listing):
 - Tajawal (modern sans, light) - ui
 - Almarai (modern sans) - ui
 - Reem Kufi / Aref Ruqaa (display) - titles
-- Pixel-style Arabic: NO confirmed OFL pixel Arabic font found yet; search
-  continues. Until one is verified, pixel-style games get the nearest style
-  with an explicit "no pixel Arabic font available" reason - never silently
-  claim a pixel match.
+- Rooyin (pixel-style Arabic, OFL 1.1, github.com/MohamadDarvishi/Rooyin) -
+  pixel/retro games; coverage (Arabic + presentation forms) must pass the
+  catalog JVM test before use. Alternatives to verify later: chahar, Unixel,
+  Sorena, Noqte (licenses unconfirmed).
 
 ### 2. FontAnalyzer (game font introspection)
 
