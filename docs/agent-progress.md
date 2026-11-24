@@ -597,3 +597,25 @@ New agent run (fresh sandbox; toolchain re-provisioned; baseline suite green bef
 - Unciv language picker sorts by translation completion descending: swipe 4 = 96-82%, swipe 6 = 56-42%. Arabic (fresh slot) sits below swipe 6, so captures raised from 6 to 12 swipes (1fe40c8).
 - Learned: the real-translation workflow ignores docs-only pushes.
 - Next: the 0f31fac run names the dominant skip rule behind the 656 Mindustry skips; that decides the P1 repair-instead-of-reject target.
+
+## Entry 63 — Repair tiers live at scale; Unciv picker root cause; CI self-diagnosis (2026-11-25 ~02:00 EET)
+
+**Placeholder repair, measured on the real game (twice, stable):** real-translation CI on 4d8db10 and b1526a0 both report `translatedStrings=3424` (was 2845), `skippedStrings=77` (was 656), `repairedStrings=579` → `repairReasons=segmented_placeholders:305, marker_recovered:274`. `placeholder_lost` collapsed 624→7. Coverage ~97.9% of Mindustry's 3,496 strings. Both tiers are generic (no game names, no per-game tuning).
+
+**Bug the repair itself had:** segmented re-assembly ate boundary whitespace ("Collect %s" → "اجمع%s") because translators collapse it. Fix (b1526a0): `translateSegmented` re-wraps the translated core with the segment's own leading/trailing whitespace. Test updated: `lostPlaceholderIsRepairedBySegmentedTranslation` now expects "مرحبا {player}".
+
+**Stale-policy test caused Android CI red on 760c516:** `gettextUsesReviewedGlossaryAndProtectsFormatTokens` still expected a dropped placeholder to be REJECTED (stringsSkipped=1). Under the repair policy it is repaired ("اجمع %s", translated=3, skipped=0). Updated in b1526a0; verified locally 17/17. CI on 760c516+ needed the fix to go green.
+
+**Local full-suite replication (gradle cold-start too slow for sandbox):** standalone K2JVMCompiler from ~/.gradle caches + JUnitCore. Recipe keys: add jetbrains `annotations-23.0.0.jar` to the COMPILER classpath (codegen NoClassDefFoundError otherwise); `-module-name app_debug` so internal `$app_debug` mangled names link against the stale build output; `-Xfriend-paths` for internal access; jars: junit4, hamcrest, coroutines, stdlib, reflect, json-20250517, xz, lz4-java, android.jar; run from `app/` (font catalog paths are relative); exclude `OfflineArabicTranslatorTest` (mlkit not in local caches); Unity fixture "missing fixture" failures are resource-classpath artifacts of the hand-rolled run, not real. Result: 326 tests, only those 6 env fixture failures → suite is green for real.
+
+**CI still red on b1526a0 unit tests despite local green** → android.yml now emits `::notice::TEST-FAIL <class>.<test>: <msg>` annotations from the JUnit XML on failure (be64376) because CI logs need auth and annotations don't. Next run names the failing test.
+
+**Unciv: why العربية never appears (root-caused from upstream source):**
+- `Translations.getLanguagesWithTranslationFile()` = `LocaleCode.getSupportedLanguages()` filtered by file existence; `getSupportedLanguages()` **filters out `unused` entries**; `LocaleCode.Arabic("ar-IQ", "العربية", unused = true)` → Arabic can NEVER appear in the picker in this version, no matter what we inject. (Screenshot proof: 12-swipe list bottoms out at Navajo 32%.)
+- BUT `tryReadTranslationForCurrentLanguage()` reads `jsons/translations/<settings.language>.properties` directly with NO unused filter → forcing the language via the settings file works.
+- The file name must be the enum's **languageName**: `العربية.properties`, NOT `Arabic.properties` — our current injection writes `Arabic.properties`, which the game will never read. Bug queued.
+- Settings file: `/data/data/com.unciv.app/files/GameSettings.json`, key `"language": "العربية"` (writable via adb/run-as in CI; on-device needs debuggable repackage + run-as, still blocked without root, or dex-patching `unused=false`).
+- **Font is NOT the blocker on Android**: Unciv renders via `AndroidFont` = `android.graphics.Typeface.DEFAULT` + Canvas (system fonts, real Arabic shaping). The bundled TTF question is moot on Android.
+- GitHub annotation cap (10/check-run) fixed: all 12 swipe captures now in ONE combined annotation (760c516).
+
+**Follow-ups queued:** surface repaired counts in GettextPoLocalizer.PoReport; rename Unciv slot file to العربية.properties; seed GameSettings.json in CI to prove Arabic in-game; decide the on-device activation route (debuggable manifest + run-as vs dex patch).
