@@ -100,8 +100,12 @@ internal object UnityMonoLocalizer {
             // stage's APK directly instead of failing on missing loose text.
             val noLooseText = failure.message?.startsWith("لم يتم العثور على نصوص قابلة للترجمة") == true
             if (bundleReport == null || !noLooseText) throw failure
-            ApkSigningService.signAndVerify(context, bundleStageApk, signedApk)
-            AssetLocalizationReport(
+            try {
+                ApkSigningService.signAndVerify(context, bundleStageApk, signedApk)
+            } finally {
+                bundleStageApk.delete()
+            }
+            return AssetLocalizationReport(
                 null,
                 bundleReport.bundlesProcessed,
                 bundleReport.textAssetsTranslated,
@@ -111,8 +115,6 @@ internal object UnityMonoLocalizer {
                 bundleFilesTranslated = bundleReport.textAssetsTranslated,
                 bundleStringsTranslated = bundleReport.stringsTranslated
             )
-        } finally {
-            if (bundleReport != null) bundleStageApk.delete()
         }
         val merged = if (bundleReport != null) {
             report.copy(
@@ -128,8 +130,14 @@ internal object UnityMonoLocalizer {
         }
         // Stage 2 (loose text) must leave every protected Unity binary
         // untouched; compare against the bundle stage's output when it ran,
-        // since that stage legitimately rewrote the localized bundles.
-        UnityAssetIntegrityVerifier.verifyUnchanged(looseInput, merged.outputApk)
+        // since that stage legitimately rewrote the localized bundles. The
+        // bundle-stage intermediate must survive until this check finishes,
+        // so it is deleted only here, after verification.
+        try {
+            UnityAssetIntegrityVerifier.verifyUnchanged(looseInput, merged.outputApk)
+        } finally {
+            if (bundleReport != null) bundleStageApk.delete()
+        }
         return merged
     }
 
