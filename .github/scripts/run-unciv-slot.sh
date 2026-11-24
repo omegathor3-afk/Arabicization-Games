@@ -90,6 +90,11 @@ if [[ -s "$GENERATED_APK" ]]; then
         fi
       fi
       if [[ "$launch_status" -eq 0 ]]; then
+        # Android's "Viewing full screen" first-launch dialog covers the game
+        # and blocks the Arabic hierarchy check; pre-confirm it (as the
+        # Mindustry script does).
+        adb shell settings put secure immersive_mode_confirmations confirmed >/dev/null 2>&1 || true
+        adb shell settings put global policy_control immersive.confirmations=confirmed >/dev/null 2>&1 || true
         adb shell monkey -p com.unciv.app 1 || { launch_status=$?; note_failure "monkey launch of the localized game failed"; }
         sleep 12
         adb shell pidof com.unciv.app > build/test-game/localized/game-process.txt || { launch_status=$?; note_failure "game process not running after launch (pidof empty)"; }
