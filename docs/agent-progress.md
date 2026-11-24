@@ -426,3 +426,44 @@ Baseline head `d1b7e41`:
 - Implemented a fail-safe for the next head: detect known icon-font families, preserve them rather than replacing them with text fonts, refuse direct FontSelector replacement, and pre-shape only when a catalog font was actually injected. Added regression tests for Fontello preservation and native Arabic-font shaping.
 - Renamed the Mindustry screenshot artifact to `mindustry-foreground-screen.png` and save a filtered logcat when the game exits before capture. Updated the Unity coverage matrix and research doc to distinguish the on-device synthetic write-back proof from a real Unity Player install/launch. The matrix remains FONT-BLOCKED for Mindustry until real in-game Arabic is visually verified.
 - Next: rerun unit tests, Android instrumentation, Mindustry foreground check and lint on the new commit; then prioritize per-string review wiring and a real Unity Player fixture.
+
+## 53. HANDOFF (written 4:10 PM EET Nov 24 2026 by the outgoing agent; read this first)
+
+### Current state
+- Branch: feat/unity-mono-streamingassets ONLY. Head when written: 8c7b61e (all pushed; Omega also pushes in parallel, always `git fetch` + fast-forward/rebase, never force-push, never rewrite history).
+- CI on 8c7b61e: build, andorstrail-resources, unciv-slot, mindustry-slot, CodeQL all SUCCESS.
+- Rules (user's, verbatim spirit): never main, no merge, no Release; no pirated/cracked APKs, no DRM bypass; no paid services; do not claim AssetBundle/IL2CPP/Unreal support before implemented+tested; never commit build/cache/log/screenshot files; stage files by name (never `git add -A`); one granular conventional commit per change, pushed separately; honest matrix; history cleanup of 881 old artifact blobs needs force-push = NOT without explicit user approval (still unanswered).
+
+### Mindustry (resolved launch problem, font problem still open)
+- Launch failure chain, in order found: (1) monkey found no launcher -> Omega's 72c8108 starts mindustry.android.AndroidLauncher explicitly; (2) screenshot after 8s showed only the loading screen -> wait added; (3) Android "viewing full screen" dialog stole focus (frame proved it) -> pre-confirmed via settings (harmless, kept); (4) game's own last_log.txt showed only "[pause]", then it exits status 0 right after logcat "ApplicationInfo updating" -> `cmd package compile -m speed -f` before launch (8c7b61e). That run PASSED and the menu screenshot is a real in-game frame. Single run only: if flakes return, suspect dexopt/emulator timing again.
+- FONT BLOCKER (still the real issue): last real in-game frame (CI screenshot annotation `mindustry-foreground-screen`) shows menu labels as bare digits ("8","9","11"). The slot strings are "العربية N"; the Arabic letters do not render. Mindustry fonts/font.woff is family Fontello (icon font merged with Latin, WOFF1, 0 Arabic glyphs). d041e9d refuses to replace icon fonts (replacing broke launch assumptions and icons) so currently NO Arabic glyphs are provided. Matrix: FONT-BLOCKED. Move to EMULATOR only when a CI screenshot visibly shows connected Arabic.
+- NEXT STEPS for Mindustry Arabic: (a) Kotlin glyph-merge: parse game font tables (glyf/loca/cmap/hmtx/hhea/maxp/post), append glyphs for U+0600-06FF and U+FE70-FEFF from a catalog TTF (Tajawal/Amiri; catalog TTFs are in app/src/main/assets/fonts/catalog), remap composite glyph ids, rebuild cmap format 4/12, keep every original glyph byte-identical, write as TTF (FreeType sniffs content; extension irrelevant) or re-wrap WOFF1; JVM tests: FontAnalyzer on result hasArabicCore, original cmap entries unchanged, original glyph bytes unchanged. Needs attention to Mindustry's FreeType loading (Fonts.java loads fonts/font.woff via FreeTypeFontGenerator; there may be a separate fallback font mechanism; read Fonts.java before building). (b) Wire into LocaleSlotLocalizer.addArabicLocaleSlotWithFont as a "merge" mode for icon fonts (shaping via ArabicShaper post-pass already exists). (c) Emulator check via CI screenshot. Alternative cheaper experiment: Mindustry's loadExtraFonts swaps in font_jp.woff only for Locale ja; game code cannot be patched without dex work.
+
+### Font tier code (all JVM-tested; only Mindustry emulator pending)
+- FontAnalyzer.kt (TTF/OTF/WOFF1, Omega hardened it: size budgets, adversarial fixtures), FontSelector.kt (9-font OFL catalog, style+weight scoring, reason string, refuses icon fonts), ArabicShaper.kt (presentation forms B + bidi-lite, golden tests), LocaleSlotLocalizer.addArabicLocaleSlotWithFont (replace font if lacks Arabic and not icon font; shape values post-translation because glossary hits bypass tx). Older ArabicFontAnalyzer/ArabicFontCatalog (Amiri only) coexist.
+- Catalog fonts bundled: Amiri, Noto Naskh Arabic (var), Cairo (var), Tajawal reg/bold, Almarai reg/bold, Rooyin Free reg/bold (pixel style, OFL 1.1). TODO: per-font OFL notices in assets/fonts/licenses (only OFL-rooyin.txt and OFL-google-fonts.txt (Amiri) exist; Noto/Cairo/Tajawal/Almarai OFL.txt are in google/fonts ofl/<family>/OFL.txt). Selector style inference is crude (no serif/naskh detection from tables). Variable fonts (Cairo, Noto Naskh) are bundled whole: default instance only.
+
+### 10-game list status (honest)
+| Game | Engine | Status |
+| --- | --- | --- |
+| Minesweeper | Android resources | EMULATOR (real ML Kit Arabic, screenshot verified) |
+| Mindustry | libGDX | FONT-BLOCKED (launch fixed, glyph-merge needed) |
+| Unciv | translation folder | slot tier green on emulator; the screenshot only shows Android system Arabic + language picker; in-game Arabic NOT visually proven |
+| Andor's Trail | Android resources | ALREADY-ARABIC (612 shipped Arabic strings); app completes ~49 leftovers (emulator test green) |
+| OpenTTD | native | ALREADY-ARABIC |
+| SuperTuxKart | native | ALREADY-ARABIC |
+| Apple Flinger | libGDX | UNSUPPORTED (no i18n) |
+| Revengate | Godot | UNSUPPORTED (no i18n in project.godot) |
+| Shattered Pixel Dungeon | libGDX | BLOCKED (language list hardcoded enum) |
+| Pixel Wheels | libGDX + gettext po | blocked on font + po tier unbuilt (no Arabic font in game) |
+Substitute candidates: Vector Pinball (F-Droid com.dozingcatsoftware.bouncy_43.apk, native Android, no -ar configs, 1450 strings -> Android resources tier fits; pinned locally as /downloads/vectorpinball.apk sha ffda0d9c..., re-download from https://f-droid.org/repo/com.dozingcatsoftware.bouncy_43.apk), Ren'Py itch.io titles (need browser download check + tl/ folder tier), Pixel Wheels .po tier. Need story-driven games: Andor's Trail res/raw XML story tier, Ren'Py. Full table: docs/coverage-matrix.md. Real tier gap list: IL2CPP, Unreal, Ren'Py, gettext, res/raw story XML, SPD.
+
+### How CI works here (no admin rights: Actions logs/artifacts are 403 anonymously)
+- Check runs: GET https://api.github.com/repos/omegathor3-afk/Arabicization-Games/commits/<sha>/check-runs ; then .../check-runs/<id>/annotations (anonymous 200). Scripts in .github/scripts/*.sh emit `::error::` (failures, incl. logcat and Mindustry's own files) and `::notice::SCREENSHOT <label>: <url>`.
+- Jobs: build (+ app + Minesweeper screenshots), instrumented-offline (Unity Mono device path), mindustry-slot, unciv-slot, andorstrail-resources, plus CodeQL/Gitleaks. A push cancels in-progress runs of the same workflow, so avoid pushing while you need a sample; a full cycle is ~10-12 minutes.
+- Screenshots: the scripts upload to temp.sh (0x0.st and catbox.moe fail from Actions runners). Download needs POST: `curl -sL -X POST -o f.png <url>` (GET returns an HTML page). Verify by LOOKING at the image (tools read); deliver to the parent agent as attachments (agent_message --attachments with comma-separated paths). Never commit screenshots.
+- Local checks: JDK17 /downloads/toolchain/jdk17, SDK /downloads/toolchain/sdk, Gradle /downloads/toolchain/gradle/bin (may need re-provisioning; /downloads is temporary). `gradle testDebugUnitTest --console=plain --no-daemon -Dorg.gradle.jvmargs='-Xmx1g'` and `assembleDebugAndroidTest`. No emulator/KVM locally: CI is the device oracle.
+- Push uses the repo deploy key on the agent box via GIT_SSH_COMMAND (key stays on that machine; never put it in messages). Commit identity: Instinct Agent <instinct-agent@users.noreply.github.com>.
+
+### Lessons
+CI green is not proof; look at the pixels. uiautomator never sees OpenGL text. Check for existing Arabic before building a tier (3 games already ship it). Glossary hits bypass the translate callback. Context-bound device paths are invisible to JVM tests. Check for Omega's parallel commits before every push.
