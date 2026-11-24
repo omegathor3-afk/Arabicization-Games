@@ -130,14 +130,27 @@ all new heads; build green.
     #3 is DONE at the text-asset scope; UnityFS bundles inside split sets
     are not translated (UnityMonoLocalizer stays single-APK).
 
+20. `da4fe7e` feat(fonts): license-aware Arabic font catalog + per-role
+    matching (issue #5, first pass). Amiri (OFL 1.1) bundled with license
+    text; load-time license validation; match() recommends per role only
+    when game fonts fail coverage/shaping, Arabic reason strings, no
+    injection. Real-TTF fixture tests. Tests: 271 green.
+
 ## CI incidents
 
 - Android CI emulator step FAILED once on 40e6701 (~4 min in, no logs
-  accessible without repo admin auth). assembleDebugAndroidTest + 264 JVM
-  tests pass locally on that tree; the instrumented test exercises
-  AndroidResourceLocalizer, untouched by recent work. Retriggered via
-  empty commit 87eccde; the real second sample is the Android CI run on
-  8c204af. If it fails again the same way, treat as structural and bisect.
+  accessible without repo admin auth). Second sample: run 45294493537 on
+  da4fe7e (includes ALL recent code) completed SUCCESS - emulator step
+  passed in ~4 min. Verdict: flake, not a regression.
+
+## New user direction (Nov 24, ~02:20 EET)
+
+User wants the app to Arabicize ANY game, verified by real testing.
+Design push: tiered strategies per engine/format, preferred UX = Arabic
+added to the game's own language list, else direct translation. Never
+claim "any game"; keep a verified-vs-designed matrix; no DRM/anti-tamper
+bypass - a game that blocks modification gets an honest "blocked".
+Tiers (status): see docs/coverage-matrix.md.
 
 ## Issue mapping (corrected - earlier entries here had wrong numbers)
 
