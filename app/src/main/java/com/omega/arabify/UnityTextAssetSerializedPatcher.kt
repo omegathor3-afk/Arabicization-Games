@@ -4,6 +4,8 @@ import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 internal data class UnityTextAssetPatchReport(
     val pathId: Long,
@@ -63,7 +65,7 @@ internal object UnityTextAssetSerializedPatcher {
         reviewedScript: String
     ): UnityTextAssetPatchReport {
         require(input.isFile) { "ملف SerializedFile الأصلي غير موجود." }
-        require(input.absoluteFile != output.absoluteFile) { "لا يمكن الكتابة فوق الملف الأصلي نفسه." }
+        require(input.canonicalFile != output.canonicalFile) { "لا يمكن الكتابة فوق الملف الأصلي نفسه، حتى عبر مسار بديل." }
         require(header.fileSize == input.length()) { "حجم SerializedFile لا يطابق ترويسة الملف." }
         require(reviewedScript.isNotEmpty()) { "النص المراجعة فارغ." }
         val reviewedBytes = reviewedScript.toByteArray(Charsets.UTF_8)
@@ -108,10 +110,9 @@ internal object UnityTextAssetSerializedPatcher {
         require(entries.size == objectTable.objects.size) { "تعذر مطابقة جدول الكائنات مع مواضع الحقول." }
         val patchedMetadata = patchObjectTable(metadata, entries, target, newPayload.size.toLong(), delta, order)
 
-        output.parentFile?.mkdirs()
-        writePatchedFile(input, output, header, newFileSize, patchedMetadata,
-            absoluteObjectOffset, target.byteSize, newPayload)
-
+        val originalNameBytes = spans.singleOrNull { it.name == "m_Name" }
+            ?.let { payload.copyOfRange(it.dataOffset, it.dataOffset + it.dataLength) }
+            ?: error("حقل m_Name غير موجود في TextAsset.")
         val report = UnityTextAssetPatchReport(
             pathId = pathId,
             oldObjectBytes = target.byteSize,
@@ -119,17 +120,32 @@ internal object UnityTextAssetSerializedPatcher {
             deltaBytes = delta,
             shiftedObjectCount = objectTable.objects.count { it.byteStart > target.byteStart }
         )
-        val originalNameBytes = spans.singleOrNull { it.name == "m_Name" }
-            ?.let { payload.copyOfRange(it.dataOffset, it.dataOffset + it.dataLength) }
-            ?: error("حقل m_Name غير موجود في TextAsset.")
-        try {
-            verifyPatchedFile(input, output, header, objectTable, target,
-                fields, originalNameBytes, reviewedBytes, newPayload.size.toLong(), delta)
-        } catch (failure: Throwable) {
-            output.delete()
-            throw failure
+
+        // Never expose a partially written or not-yet-verified SerializedFile.
+        // The temporary sibling guarantees the final rename stays on one filesystem.
+        val outputParent = output.absoluteFile.parentFile
+            ?: error("مجلد الملف الناتج غير صالح.")
+        require(outputParent.isDirectory || outputParent.mkdirs()) {
+            "تعذر تجهيز مجلد الملف الناتج."
         }
-        return report
+        val temporaryOutput = Files.createTempFile(
+            outputParent.toPath(), ".arabify-serialized-", ".tmp"
+        ).toFile()
+        try {
+            writePatchedFile(input, temporaryOutput, header, newFileSize, patchedMetadata,
+                absoluteObjectOffset, target.byteSize, newPayload)
+            verifyPatchedFile(input, temporaryOutput, header, objectTable, target,
+                fields, originalNameBytes, reviewedBytes, newPayload.size.toLong(), delta)
+            Files.move(
+                temporaryOutput.toPath(),
+                output.absoluteFile.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING
+            )
+            return report
+        } finally {
+            temporaryOutput.delete()
+        }
     }
 
     /** Walks the known string fields exactly like the strict reader, recording spans. */

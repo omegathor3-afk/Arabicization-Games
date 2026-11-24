@@ -1,6 +1,7 @@
 package com.omega.arabify
 
 import java.io.File
+import java.io.IOException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -123,6 +124,46 @@ class UnityTextAssetSerializedPatcherTest {
   assertFalse(output.length() > 0L)
   fixture.file.delete()
   output.delete()
+ }
+
+ @Test fun rejectsOutputPathThatAliasesInputThroughDotSegments() {
+  val fixture = buildFixture()
+  val original = fixture.file.readBytes()
+  val alias = File(fixture.file.parentFile, "missing-parent/../${fixture.file.name}")
+  assertThrows(IllegalArgumentException::class.java) {
+   UnityTextAssetSerializedPatcher.patch(
+    fixture.file, alias, fixture.header, fixture.typeTable, fixture.objectTable,
+    pathId = 1L, reviewedScript = "نص بديل"
+   )
+  }
+  assertTrue("The original SerializedFile must remain byte-identical", fixture.file.readBytes().contentEquals(original))
+  fixture.file.delete()
+ }
+
+ @Test fun failedAtomicReplacementKeepsExistingDestinationAndCleansTemporaryOutput() {
+  val fixture = buildFixture()
+  val parent = File.createTempFile("arabify-atomic-parent", ".tmp")
+  assertTrue(parent.delete())
+  assertTrue(parent.mkdirs())
+  val outputDirectory = File(parent, "existing-output")
+  assertTrue(outputDirectory.mkdir())
+  val sentinel = File(outputDirectory, "keep.txt")
+  sentinel.writeText("do not replace")
+  val original = fixture.file.readBytes()
+
+  assertThrows(IOException::class.java) {
+   UnityTextAssetSerializedPatcher.patch(
+    fixture.file, outputDirectory, fixture.header, fixture.typeTable, fixture.objectTable,
+    pathId = 1L, reviewedScript = "نص عربي بديل"
+   )
+  }
+
+  assertEquals("do not replace", sentinel.readText())
+  assertTrue("The source file must remain byte-identical", fixture.file.readBytes().contentEquals(original))
+  assertFalse("Temporary patch files must be cleaned up",
+   parent.listFiles().orEmpty().any { it.name.startsWith(".arabify-serialized-") })
+  fixture.file.delete()
+  parent.deleteRecursively()
  }
 
  @Test fun fixtureRoundTripsThroughExistingReader() {
