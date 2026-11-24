@@ -231,6 +231,27 @@ Tiers (status): see docs/coverage-matrix.md.
     return 403 anonymously but annotations are readable. Next CI run will
     show exactly why the emulator step failed on 5464e62.
 
+27. `7cdf7f0` test(unity): Unity fixture APK borrows the app's real binary
+    AndroidManifest - apksig MinSdkVersionException fixed (device failure
+    #1 on the Unity emulator tier, diagnosed via annotations).
+28. `e926c10` ci: annotation diagnostics added to run-mindustry-slot.sh.
+29. `0c78ec1` fix(unity): REAL device bug #2 - use-after-delete of the
+    bundle-stage intermediate APK (verifyUnchanged ran after the finally
+    deleted it). Found only on device; Context-bound path. Fix: delete
+    after verification in both code paths.
+30. `91d979b` test(locale): Mindustry slot test now asserts full bundle
+    key-set equality (the guessed 'menu.new' key does not exist in the
+    real bundle - the real bundle has 3,501 keys like workshop.menu).
+    Head: 91d979b. CI on 91d979b pending; UNPUSHED local edit of this doc.
+
+31. CI on 91d979b FULLY GREEN: Android CI build (Minesweeper real-game
+    + Unity Mono on-device pipeline instrumented tests) and the new
+    Mindustry locale-slot tier (pinned F-Droid APK, slot added, signed,
+    reinstalled, ar-EG, Arabic script verified on screen). The Unity Mono
+    EMULATOR tier is now CONFIRMED, and Mindustry is the first full
+    game-level end-to-end verification beyond the Minesweeper fixture.
+    Head: 91d979b.
+
 ## Environment notes (for the next agent run)
 
 - Clone of this branch with build toolchain lives in the agent sandbox:

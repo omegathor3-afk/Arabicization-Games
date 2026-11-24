@@ -25,7 +25,7 @@ Every row names its verification level. Levels, strongest first:
 | Godot - .pck / CSV translations | CSV translation import is text; pck repack | DESIGNED | loose CSVs already covered by asset path |
 | Cocos2d - JSON/plist strings | Mostly JSON text assets | PARTIAL via asset path | covered when stored as supported text |
 | libGDX - i18n properties bundles | Java .properties text | IMPLEMENTED (LocaleSlotLocalizer) | 09809d7; local real-APK run on Mindustry: 2,849 values translated, all other entries byte-identical |
-| Mindustry (libGDX, F-Droid, GPLv3) | Game-native Arabic slot (bundle_ar.properties) | EMULATOR pending | a36a78c adds CI emulator tier with pinned F-Droid APK; local JVM pipeline run verified, on-device launch not yet proven |
+| Mindustry (libGDX, F-Droid, GPLv3) | Game-native Arabic slot (bundle_ar.properties) | EMULATOR | 91d979b green: pinned F-Droid APK, slot added on-device (deterministic pseudo-Arabic in the device test; ML Kit path covered by Minesweeper test), signed, reinstalled, ar-EG, Arabic script verified on screen |
 | Game-native language tables (add "Arabic" slot) | Per-game format research | DESIGNED | - |
 | Universal fallback: screen OCR + translation overlay | On-device OCR + overlay, engine-agnostic | DESIGNED | large separate feature |
 | Games with anti-tamper/DRM/integrity locks | None - reported as blocked | BLOCKED (by policy) | - |
