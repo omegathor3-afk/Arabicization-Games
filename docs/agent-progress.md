@@ -252,6 +252,25 @@ Tiers (status): see docs/coverage-matrix.md.
     game-level end-to-end verification beyond the Minesweeper fixture.
     Head: 91d979b.
 
+32. `b18399b` feat(locale): translation-folder strategy (Unciv layout,
+    assets/jsons/translations/<Language>.properties). Split on '=' only
+    (189 keys contain ':'), translate the KEY when the value is empty or
+    identity, fixed Arabic header directives (spaces kept, no capitals,
+    conditionals after body, diacritics empty). Verified against the real
+    pinned F-Droid Unciv APK (com.unciv.app 1286, sha256 721d3f...):
+    5,448 translated, key set == template's 6,579 keys, all other entries
+    byte-identical. 280 JVM tests green.
+33. `d1df88a` test(locale): Unciv CI emulator tier (workflow + script +
+    instrumented test). Screen check: Arabic script visible OR "Arabic"
+    listed in the game's own language picker. CI pending.
+34. SPD finding: Shattered Pixel Dungeon (F-Droid 922, x86_64, 9 message
+    groups, 21 locales, NO Arabic) keeps its language list in a HARDCODED
+    code enum, so a text-only slot cannot activate Arabic - moved to the
+    per-game language-table tier (needs code patching). Replaced as game
+    #2 by Unciv, whose language list is folder-driven. Pinned SPD APK in
+    sandbox at /downloads/spd.apk (sha256 ceef4cdd...); Unciv APK at
+    /downloads/unciv.apk.
+
 ## Environment notes (for the next agent run)
 
 - Clone of this branch with build toolchain lives in the agent sandbox:
