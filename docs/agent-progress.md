@@ -271,6 +271,28 @@ Tiers (status): see docs/coverage-matrix.md.
     sandbox at /downloads/spd.apk (sha256 ceef4cdd...); Unciv APK at
     /downloads/unciv.apk.
 
+35. `c8b2656`+`a7e9b21` ci/docs: every launch-section failure point in
+    both slot scripts now emits public annotations (mindustry-slot failed
+    on d1df88a with no annotation - narrowed to locale-switch/reboot/
+    launch area; rerun will tell flake vs real).
+36. Game inspections (pinned APKs in /downloads):
+    - Andor's Trail (com.gpl.rpg.AndorsTrail 91, 115MB, sha256 a8c755d2):
+      classic Android resources, 22,766 strings in arsc, many locales
+      incl. library-level ar config - fits the AndroidResourceLocalizer
+      (Minesweeper) tier; next emulator candidate. Story-driven.
+    - OpenTTD (org.openttd.fdroid 1410128, 76MB, sha256 355cc302): game
+      data nested in assets/openttd-data-14.1-0.zip.xz (xz-compressed zip);
+      SHIPS lang/arabic_egypt.lng - ALREADY supports Arabic natively.
+      Honest outcome: nothing to do. Matrix: ALREADY-ARABIC. A substitute
+      10th game is needed.
+    - Revengate (org.revengate.revengate 2001300, 84MB, sha256 fd5a43c3):
+      Godot with loose assets, NO internationalization section in
+      project.godot; only the dialogue addon has .po files (en/es/uk/zh).
+      Game text is English-hardcoded in scenes/scripts. UNSUPPORTED
+      without a fragile .tscn/.gd literal-rewrite tier. Matrix updated.
+    - SuperTuxKart (org.supertuxkart.stk 312, 165MB): not yet downloaded;
+      gettext .po tier candidate.
+
 ## Environment notes (for the next agent run)
 
 - Clone of this branch with build toolchain lives in the agent sandbox:

@@ -27,6 +27,9 @@ Every row names its verification level. Levels, strongest first:
 | libGDX - i18n properties bundles | Java .properties text | IMPLEMENTED (LocaleSlotLocalizer) | 09809d7; local real-APK run on Mindustry: 2,849 values translated, all other entries byte-identical |
 | Unciv (libGDX/Kotlin, F-Droid, MPL-2.0) | Translation-folder slot (Arabic.properties); language list is folder-driven | EMULATOR pending | b18399b verified on real APK locally (5,448 strings, key-set equality, others byte-identical); d1df88a adds CI emulator tier |
 | Shattered Pixel Dungeon (libGDX, F-Droid, GPLv3) | messages/*.properties translatable, BUT language list is a hardcoded code enum | BLOCKED (text-only) | needs the per-game language-table tier (code patching) to activate a new language |
+| OpenTTD (native C++, F-Droid, GPLv2) | none needed | ALREADY-ARABIC | ships lang/arabic_egypt.lng inside nested data zip; game supports Arabic natively |
+| Revengate (Godot, F-Droid, GPL) | Godot i18n absent from project.godot; text hardcoded in scenes | UNSUPPORTED | only the dialogue addon has .po; main text needs .tscn/.gd literal rewriting - fragile tier not built |
+| Andor's Trail (native Android, F-Droid, GPL) | Android resources (22,766 strings) | DESIGNED | fits AndroidResourceLocalizer tier; next emulator candidate |
 | Mindustry (libGDX, F-Droid, GPLv3) | Game-native Arabic slot (bundle_ar.properties) | EMULATOR | 91d979b green: pinned F-Droid APK, slot added on-device (deterministic pseudo-Arabic in the device test; ML Kit path covered by Minesweeper test), signed, reinstalled, ar-EG, Arabic script verified on screen |
 | Game-native language tables (add "Arabic" slot) | Per-game format research | DESIGNED | - |
 | Universal fallback: screen OCR + translation overlay | On-device OCR + overlay, engine-agnostic | DESIGNED | large separate feature |
