@@ -12,6 +12,25 @@ note_failure() {
   echo "::error::${message}"
 }
 
+
+# Upload a captured screenshot to a free no-auth file host and emit the URL
+# as a public ::notice annotation so the evidence is fetchable without
+# GitHub artifact access. Only game/app screens are uploaded - no user data.
+upload_shot() {
+  local file="$1" label="$2"
+  [[ -s "$file" ]] || return 0
+  local url
+  url=$(curl --fail --silent --show-error --max-time 150 -F "file=@${file}" https://0x0.st 2>/dev/null || true)
+  if [[ -z "$url" ]]; then
+    url=$(curl --fail --silent --show-error --max-time 150 --upload-file "$file" "https://transfer.sh/${label}.png" 2>/dev/null || true)
+  fi
+  if [[ -n "$url" ]]; then
+    echo "::notice::SCREENSHOT ${label}: ${url}"
+  else
+    echo "::notice::SCREENSHOT ${label}: upload failed"
+  fi
+}
+
 run_connected_test() {
   local test_class="$1"
   gradle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class="$test_class" --stacktrace && return 0
@@ -150,6 +169,7 @@ PY
           if [[ "$?" -ne 0 ]]; then launch_status=1; fi
         fi
         adb logcat -d -v time > build/test-game/localized/game-launch-logcat.txt || true
+        upload_shot build/test-game/localized/andorstrail-arabic-screen.png "andorstrail-arabic-screen"
       fi
     fi
   fi
