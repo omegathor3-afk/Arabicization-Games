@@ -2,12 +2,50 @@
 set -uo pipefail
 cd "$GITHUB_WORKSPACE"
 
+# Surface failures as GitHub check-run annotations so they are readable
+# without Actions log access (annotations are public on public repos).
+note_failure() {
+  local message="$1"
+  message="${message//'%'/'%25'}"
+  message="${message//$'\n'/'%0A'}"
+  message="${message//$'\r'/'%0D'}"
+  echo "::error::${message}"
+}
+
+run_connected_test() {
+  local test_class="$1"
+  gradle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class="$test_class" --stacktrace && return 0
+  local status=$?
+  local details
+  details=$(python3 - <<'PYX'
+import glob
+import xml.etree.ElementTree as ET
+
+messages = []
+for path in sorted(glob.glob('app/build/outputs/androidTest-results/connected/**/*.xml', recursive=True)):
+    try:
+        root = ET.parse(path).getroot()
+    except Exception:
+        continue
+    for testcase in root.iter('testcase'):
+        failures = list(testcase.iter('failure')) + list(testcase.iter('error'))
+        for failure in failures:
+            text = ((failure.get('message') or '') + ' ' + (failure.text or '')).strip()
+            messages.append(f"{testcase.get('classname')}.{testcase.get('name')}: {text[:600]}")
+output = ' || '.join(messages)[:1800] or 'no failure details found in connected test result XML'
+print(output.replace('%', '%25').replace('\n', ' ').replace('\r', ' '))
+PYX
+)
+  note_failure "connected test failed: ${test_class} (exit ${status}) :: ${details}"
+  return "$status"
+}
+
 mkdir -p build/test-game/localized
 adb install build/test-game/minesweeper.apk || exit $?
 
 test_status=0
-gradle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.omega.arabify.RealGameLocalizationInstrumentedTest --stacktrace || test_status=$?
-gradle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.omega.arabify.UnityMonoPipelineInstrumentedTest --stacktrace || test_status=$?
+run_connected_test com.omega.arabify.RealGameLocalizationInstrumentedTest || test_status=$?
+run_connected_test com.omega.arabify.UnityMonoPipelineInstrumentedTest || test_status=$?
 
 # Instrumentation may uninstall the target app during cleanup. The test exports
 # its signed APK and report via MediaStore to the public Downloads collection.
