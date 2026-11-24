@@ -386,3 +386,11 @@ bundle_ar values to Arabic Presentation Forms-B in visual order (libGDX has no
 shaper/bidi). No dex patching. Open work: Kotlin reshaper + bidi-lite,
 font-merge pipeline in CI (pip fonttools + brotli), screenshot visual verify.
 Docs must state shaping is approximated, not full HarfBuzz.
+
+## 47. Font tier step 1-2 done (FontAnalyzer + bundled OFL candidates)
+Existing ArabicFontAnalyzer/ArabicFontCatalog (Amiri only, role-based) kept; new
+FontAnalyzer adds WOFF1 + profile (weight/mono/bitmap/coverage). 7 candidate TTFs bundled under
+assets/fonts/catalog (Amiri, Noto Naskh var, Cairo var, Tajawal, Almarai, Rooyin pixel) - all
+pass Arabic core coverage in JVM test; Rooyin has 139 presentation-forms-B glyphs. Next: wire
+into ArabicFontCatalog (style tags + per-font OFL notices), scoring+reason, ArabicShaper, Mindustry tier.
+Mindustry font.woff is WOFF1 (parsable); Mindustry loads via FreeType.
