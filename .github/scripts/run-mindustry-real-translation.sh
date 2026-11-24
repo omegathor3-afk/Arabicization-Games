@@ -28,6 +28,22 @@ upload_shot() {
   url=$(curl --fail --silent --show-error --max-time 150 -F "file=@${file}" https://temp.sh/upload 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="${err} | temp.sh: $(echo "$url" | tail -c 200)"
   url=$(curl --fail --silent --show-error --max-time 150 -F "file=@${file}" https://file.io 2>&1 | python3 -c 'import json,sys; print(json.load(sys.stdin).get("link",""))' 2>/dev/null) && [[ -n "$url" ]] && { echo "::notice::SCREENSHOT ${label}: ${url} (single-download link - fetch once)"; return 0; } || err="${err} | file.io: $(echo "$url" | tail -c 200)"
   url=$(curl --fail --silent --show-error --max-time 150 --upload-file "$file" "https://transfer.sh/$(basename "$file")" 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="${err} | transfer.sh: $(echo "$url" | tail -c 200)"
+  # Last resort: external file hosts are unreachable from GitHub runners
+  # (observed 2026-11-24: 0x0.st 503, catbox 412, temp.sh 500, file.io empty,
+  # transfer.sh TCP timeout). Embed a downscaled JPEG as base64 inside the
+  # annotation itself - annotations are public and need no egress.
+  local small="build/.upload-shot-small.jpg"
+  if command -v ffmpeg >/dev/null 2>&1; then
+    local scale b64
+    for scale in 720 540 400; do
+      ffmpeg -y -loglevel error -i "$file" -vf "scale=${scale}:-1" -q:v 5 "$small" || continue
+      b64=$(base64 -w0 "$small" 2>/dev/null || base64 "$small" | tr -d '\n')
+      if [[ -n "$b64" && ${#b64} -le 60000 ]]; then
+        echo "::notice::SCREENSHOT-B64 ${label} (JPEG ${scale}px, base64): ${b64}"
+        return 0
+      fi
+    done
+  fi
   echo "::notice::SCREENSHOT ${label}: upload failed :: ${err}"
 }
 
@@ -178,4 +194,46 @@ if [[ -z "$final_pid" || "$final_foreground" != *"io.anuke.mindustry"* ]]; then
   exit 1
 fi
 upload_shot build/test-game/localized/real/mindustry-real-translation-screen.png "mindustry-real-translation-screen"
+
+# In-game screen tour: the main menu alone does not prove in-game Arabic
+# (Omega, 2026-11-24: "all of this only translates the main menu?"). Visit
+# real screens and capture each one for human review. Tap coordinates are
+# measured on the fixed pixel_5 (1080x2340) menu layout.
+tour_status=0
+capture_screen() {
+  local name="$1" wait_s="$2"
+  sleep "$wait_s"
+  local fg
+  fg="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'topResumedActivity|mResumedActivity' | tail -n 1 | tr -d '\r')"
+  if [[ "$fg" != *"io.anuke.mindustry"* ]]; then
+    note_failure "Mindustry left the foreground during the in-game tour before ${name}"
+    tour_status=1
+    return 1
+  fi
+  adb exec-out screencap -p > "build/test-game/localized/real/mindustry-tour-${name}.png" || true
+  if [[ ! -s "build/test-game/localized/real/mindustry-tour-${name}.png" ]]; then
+    note_failure "in-game tour screenshot missing: ${name}"
+    tour_status=1
+    return 1
+  fi
+  upload_shot "build/test-game/localized/real/mindustry-tour-${name}.png" "mindustry-tour-${name}"
+  return 0
+}
+
+# Settings screen: right column, third tile row on the pixel_5 menu grid.
+adb shell input tap 670 1364 || true
+capture_screen settings 6 || true
+adb shell input keyevent KEYCODE_BACK >/dev/null 2>&1 || true
+sleep 3
+# Campaign planet/sector screen: left column, first tile row. The 3D planet
+# needs render time on swiftshader.
+adb shell input tap 411 845 || true
+capture_screen campaign-map 20 || true
+adb shell input keyevent KEYCODE_BACK >/dev/null 2>&1 || true
+sleep 3
+# Custom game map list: left column, second tile row.
+adb shell input tap 411 1105 || true
+capture_screen custom-game-maps 8 || true
+
+[[ "$tour_status" -ne 0 ]] && exit "$tour_status"
 exit 0
