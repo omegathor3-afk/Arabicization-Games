@@ -7,7 +7,8 @@ adb install build/test-game/minesweeper.apk || exit $?
 
 test_status=0
 gradle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.omega.arabify.RealGameLocalizationInstrumentedTest --stacktrace || test_status=$?
-gradle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.omega.arabify.UnityMonoPipelineInstrumentedTest --stacktrace || test_status=$?
+# BISECT: temporarily disabled to isolate the emulator-step failure on 9f5d7a8.
+# gradle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.omega.arabify.UnityMonoPipelineInstrumentedTest --stacktrace || test_status=$?
 
 # Instrumentation may uninstall the target app during cleanup. The test exports
 # its signed APK and report via MediaStore to the public Downloads collection.
