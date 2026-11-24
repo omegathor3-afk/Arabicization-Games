@@ -259,7 +259,27 @@ private fun ArabifyApp(context: Context) {
      val report=withContext(Dispatchers.IO) {
       val input=copyUriToCache(context,uri);val stamp=System.currentTimeMillis()
       if(scan.engine==GameEngine.UNITY) UnityMonoLocalizer.localize(context,input,File(context.cacheDir,"arabify-assets-$stamp-unsigned.apk"),File(context.cacheDir,"arabify-assets-$stamp-signed.apk"),offlineTranslator) { done,total -> scope.launch { assetProgress=done to total } }
-      else AndroidAssetLocalizer.localize(context,input,File(context.cacheDir,"arabify-assets-$stamp-unsigned.apk"),File(context.cacheDir,"arabify-assets-$stamp-signed.apk"),offlineTranslator,onProgress = { done: Int, total: Int -> scope.launch { assetProgress=done to total } })
+      else {
+       // Slot strategy first (libGDX bundle_ar / gettext Arabic.properties):
+       // keeps the game's English files intact and runs the font tier, so
+       // Arabic actually renders instead of tofu. Falls back to in-place
+       // translation for games with no known language-file convention.
+       val slotUnsigned=File(context.cacheDir,"arabify-slot-$stamp-unsigned.apk")
+       val slotSigned=File(context.cacheDir,"arabify-slot-$stamp-signed.apk")
+       val fonts=LocaleSlotLocalizer.FontInjection { f -> context.assets.open(f.assetPath).use { it.readBytes() } }
+       val slotReport=runCatching {
+        LocaleSlotLocalizer.addArabicLocaleSlotWithFont(input,slotUnsigned,fonts) { text ->
+         if(text.isBlank()) text else offlineTranslator.translateEnglishToArabic(text)
+        }
+       }.getOrNull()
+       if(slotReport!=null) {
+        ApkSigningService.signAndVerify(context,slotUnsigned,slotSigned)
+        AssetLocalizationReport(
+         scan.packageName,
+         1,1,slotReport.stringsTranslated,slotReport.stringsSkipped,slotSigned
+        )
+       } else AndroidAssetLocalizer.localize(context,input,File(context.cacheDir,"arabify-assets-$stamp-unsigned.apk"),File(context.cacheDir,"arabify-assets-$stamp-signed.apk"),offlineTranslator,onProgress = { done: Int, total: Int -> scope.launch { assetProgress=done to total } })
+      }
      }
      assetReport=report;generatedApk=report.outputApk
     } catch(e:Exception) { assetError=e.message ?: "تعذر تعريب ملفات النصوص." }
