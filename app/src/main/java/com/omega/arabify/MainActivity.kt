@@ -15,6 +15,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -318,19 +323,23 @@ private fun ArabifyApp(context: Context) {
   Surface(Modifier.fillMaxSize(),color=ArabifyPalette.canvas) {
    LazyColumn(Modifier.fillMaxSize().padding(horizontal=18.dp, vertical=16.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
     item {
-     Card(colors=CardDefaults.cardColors(containerColor=ArabifyPalette.surfaceRaised),shape=RoundedCornerShape(28.dp),border=BorderStroke(1.dp,ArabifyPalette.outline)) {
-      Column(Modifier.fillMaxWidth().padding(22.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
-       Text("OMEGA DEVELOPMENT LAB",color=ArabifyPalette.textMuted,fontSize=9.sp,fontWeight=FontWeight.Bold,letterSpacing=2.sp)
+     Card(colors=CardDefaults.cardColors(containerColor=Color.Transparent),shape=RoundedCornerShape(28.dp),border=BorderStroke(1.dp,ArabifyPalette.outline)) {
+      Column(Modifier.fillMaxWidth().background(ArabifyGradients.hero).padding(24.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+       Text("OMEGA DEVELOPMENT LAB",color=ArabifyPalette.textMuted,fontSize=9.sp,fontWeight=FontWeight.Bold,letterSpacing=2.sp,fontFamily=ArabifyFontFamily)
        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
-        Text("ARABIFY",color=ArabifyPalette.primary,fontSize=28.sp,fontWeight=FontWeight.Black,letterSpacing=2.sp)
-        Text("LOCAL ENGINE  ·  0.2",color=ArabifyPalette.accent,fontSize=10.sp,fontWeight=FontWeight.Bold)
+        Text("ARABIFY",style=TextStyle(fontFamily=ArabifyFontFamily,fontSize=30.sp,fontWeight=FontWeight.Black,letterSpacing=3.sp,brush=ArabifyGradients.wordmark))
+        Text("LOCAL ENGINE  ·  0.2",color=ArabifyPalette.primary,fontSize=10.sp,fontWeight=FontWeight.Bold,fontFamily=ArabifyFontFamily)
        }
-       Text("خلّي ألعابك تتكلم عربي",color=ArabifyPalette.textPrimary,fontSize=21.sp,fontWeight=FontWeight.Bold)
-       Text("محرك لفحص الألعاب والتطبيقات، واكتشاف النصوص والخطوط، وتجربة التعريب بأمان على جهازك.",color=ArabifyPalette.textSecondary,fontSize=13.sp,lineHeight=20.sp)
+       Box(Modifier.fillMaxWidth().height(2.dp).clip(RoundedCornerShape(2.dp)).background(ArabifyGradients.neon))
+       Text("خلّي ألعابك تتكلم عربي",color=ArabifyPalette.textPrimary,fontSize=23.sp,fontWeight=FontWeight.Black,fontFamily=ArabifyFontFamily)
+       Text("محرك لفحص الألعاب والتطبيقات، واكتشاف النصوص والخطوط، وتجربة التعريب بأمان على جهازك.",color=ArabifyPalette.textSecondary,fontSize=13.sp,lineHeight=20.sp,fontFamily=ArabifyFontFamily)
        Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {
-        Text("خصوصية محلية",color=ArabifyPalette.primary,fontSize=10.sp,fontWeight=FontWeight.SemiBold)
-        Text("•",color=ArabifyPalette.accent)
-        Text("فحص قبل التعديل",color=ArabifyPalette.textSecondary,fontSize=10.sp)
+        Box(Modifier.clip(RoundedCornerShape(8.dp)).background(ArabifyGradients.neonSoft).border(1.dp,ArabifyPalette.primary.copy(alpha=0.5f),RoundedCornerShape(8.dp)).padding(horizontal=10.dp,vertical=4.dp)) {
+         Text("خصوصية محلية",color=ArabifyPalette.primary,fontSize=10.sp,fontWeight=FontWeight.SemiBold,fontFamily=ArabifyFontFamily)
+        }
+        Box(Modifier.clip(RoundedCornerShape(8.dp)).background(ArabifyPalette.surfaceRaised).border(1.dp,ArabifyPalette.outline,RoundedCornerShape(8.dp)).padding(horizontal=10.dp,vertical=4.dp)) {
+         Text("فحص قبل التعديل",color=ArabifyPalette.textSecondary,fontSize=10.sp,fontFamily=ArabifyFontFamily)
+        }
        }
       }
      }
@@ -383,7 +392,7 @@ private fun ArabifyApp(context: Context) {
       Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
        Text("نسخة احتياطية آمنة للعبة المختارة",color=ArabifyPalette.accent,fontWeight=FontWeight.Bold,fontSize=17.sp)
        Text("سيتم حفظ APK الأساسي وكل ملفات Split في ملف ZIP واحد، مع manifest يحتوي SHA-256 والحجم لكل ملف. يتم فحص النسخة بعد إنشائها وقبل السماح باستعادتها.",color=ArabifyPalette.textSecondary,fontSize=12.sp)
-       Button(onClick={backupLauncher.launch("arabify-${selectedInstalledApp!!.packageName}-backup.zip")},enabled=!backupBusy,modifier=Modifier.fillMaxWidth()) { Text(if(backupBusy) "جارٍ إنشاء النسخة الاحتياطية..." else "إنشاء وحفظ نسخة احتياطية") }
+       ArabifyCtaButton(if(backupBusy) "جارٍ إنشاء النسخة الاحتياطية..." else "إنشاء وحفظ نسخة احتياطية",onClick={backupLauncher.launch("arabify-${selectedInstalledApp!!.packageName}-backup.zip")},enabled=!backupBusy)
        backupMessage?.let { Text(it,color=ArabifyPalette.success,fontSize=12.sp) }
        backupError?.let { Text(it,color=ArabifyPalette.danger,fontSize=12.sp) }
       }
@@ -394,11 +403,11 @@ private fun ArabifyApp(context: Context) {
       Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
        Text("استعادة نسخة APK احتياطية",color=ArabifyPalette.accent,fontWeight=FontWeight.Bold,fontSize=17.sp)
        Text("اختر ملف ARABIFY ZIP. سيتحقق التطبيق من manifest والأحجام وSHA-256، ثم يرسل كل ملفات APK إلى مُثبّت Android في جلسة واحدة، بما فيها ملفات Split.",color=ArabifyPalette.textSecondary,fontSize=12.sp)
-       Button(onClick={
+       ArabifyCtaButton(if(restoreBusy) "جارٍ التحقق والاستعادة..." else "اختيار نسخة احتياطية واستعادتها",onClick={
         if(!context.packageManager.canRequestPackageInstalls()) {
          context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } else restorePicker.launch(arrayOf("application/zip","application/octet-stream"))
-       },enabled=!restoreBusy,modifier=Modifier.fillMaxWidth()) { Text(if(restoreBusy) "جارٍ التحقق والاستعادة..." else "اختيار نسخة احتياطية واستعادتها") }
+       },enabled=!restoreBusy)
        restoreMessage?.let { Text(it,color=ArabifyPalette.success,fontSize=12.sp) }
        restoreError?.let { Text(it,color=ArabifyPalette.danger,fontSize=12.sp) }
       }
@@ -409,23 +418,23 @@ private fun ArabifyApp(context: Context) {
       Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
        Text("محرك الترجمة المحلي",color=Color.White,fontSize=18.sp,fontWeight=FontWeight.Bold)
        Text("تنبيه بوضوح: النسخة الحالية تستخدم نموذج ML Kit يتم تنزيله عند الطلب، وليس حزمة عربية/إنجليزية مضمّنة بالكامل. بعد التنزيل تعمل الترجمة النصية دون اتصال، لكن ذلك لا يعني تعريب كل ملفات اللعبة تلقائيًا.",color=ArabifyPalette.textSecondary,fontSize=12.sp)
-       Button(onClick={
+       ArabifyCtaButton(if(modelReady) "النموذج الحالي جاهز" else "تنزيل نموذج الترجمة (مرة واحدة)",onClick={
         translationBusy=true;translationError=null
         scope.launch {
          try { withContext(Dispatchers.IO){offlineTranslator.prepareForOfflineUse()};modelReady=true }
          catch(e:Exception){translationError=e.message ?: "تعذر تجهيز نموذج الترجمة."}
          finally{translationBusy=false}
         }
-       },enabled=!translationBusy,modifier=Modifier.fillMaxWidth()){Text(if(modelReady) "النموذج الحالي جاهز" else "تنزيل نموذج الترجمة (مرة واحدة)")}
+       },enabled=!translationBusy)
        OutlinedTextField(value=translationInput,onValueChange={translationInput=it},label={Text("اختبر المحرك بجملة قصيرة")},modifier=Modifier.fillMaxWidth())
-       Button(onClick={
+       ArabifyCtaButton("اختبار الترجمة المحلية",onClick={
         translationBusy=true;translationError=null;translatedText=null
         scope.launch {
          try { translatedText=withContext(Dispatchers.IO){offlineTranslator.translateEnglishToArabic(translationInput)} }
          catch(e:Exception){translationError=e.message ?: "فشلت الترجمة."}
          finally{translationBusy=false}
         }
-       },enabled=modelReady&&!translationBusy&&translationInput.isNotBlank(),modifier=Modifier.fillMaxWidth()){Text("اختبار الترجمة المحلية")}
+       },enabled=modelReady&&!translationBusy&&translationInput.isNotBlank())
        if(translationBusy) CircularProgressIndicator()
        translatedText?.let{Text(it,color=ArabifyPalette.accent,fontSize=17.sp)}
        translationError?.let{Text(it,color=ArabifyPalette.danger,fontSize=12.sp)}
@@ -437,7 +446,7 @@ private fun ArabifyApp(context: Context) {
       Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
        Text("أو اختر ملف APK يدويًا",color=Color.White,fontSize=18.sp,fontWeight=FontWeight.Bold)
        Text("هذا الخيار احتياطي للتطبيقات التي لا تظهر في القائمة أو لملف APK خارجي.",color=ArabifyPalette.textSecondary,fontSize=13.sp)
-       Button(onClick={picker.launch(arrayOf("application/vnd.android.package-archive","application/octet-stream"))},enabled=!busy,modifier=Modifier.fillMaxWidth()){Text("اختيار ملف APK")}
+       ArabifyCtaButton("اختيار ملف APK",onClick={picker.launch(arrayOf("application/vnd.android.package-archive","application/octet-stream"))},enabled=!busy)
        if(busy) Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)){CircularProgressIndicator();Text("جارٍ فحص بنية الملف...")}
        error?.let{Text(it,color=ArabifyPalette.danger)}
       }
@@ -488,7 +497,7 @@ private fun ArabifyApp(context: Context) {
          Text("تعريب موارد Android",color=ArabifyPalette.accent,fontWeight=FontWeight.Bold,fontSize=17.sp)
          Text("هذا المسار التجريبي يضيف موارد string عربية إلى resources.arsc. لا يشمل النصوص المخبأة داخل DEX أو محركات الألعاب.",color=ArabifyPalette.textSecondary,fontSize=12.sp)
          Text("يجب تنزيل نموذج الترجمة أولًا. التوقيع الجديد يعني أن تثبيت النسخة المعربة بدل الأصلية قد يتطلب إزالة النسخة الأصلية، وقد يؤدي ذلك لفقد بياناتها.",color=ArabifyPalette.warningText,fontSize=12.sp)
-         Button(onClick={
+         ArabifyCtaButton(if(localizeBusy) "جارٍ التعريب..." else "ابدأ تعريب موارد اللعبة",onClick={
           val uri=selectedUri
           if(uri!=null) {
            localizeBusy=true;localizationError=null;localizationProgress=0 to 0;localizationReport=null
@@ -508,9 +517,7 @@ private fun ArabifyApp(context: Context) {
             finally { localizeBusy=false }
            }
           }
-         },enabled=modelReady&&!localizeBusy&&selectedUri!=null&&(selectedInstalledApp?.splitCount ?: 0)==0,modifier=Modifier.fillMaxWidth()) {
-          Text(if(localizeBusy) "جارٍ التعريب..." else "ابدأ تعريب موارد اللعبة")
-         }
+         },enabled=modelReady&&!localizeBusy&&selectedUri!=null&&(selectedInstalledApp?.splitCount ?: 0)==0)
          if(localizeBusy) {
           val fraction=if(localizationProgress.second>0) localizationProgress.first.toFloat()/localizationProgress.second.toFloat() else 0f
           LinearProgressIndicator(progress={fraction.coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth())
@@ -518,7 +525,7 @@ private fun ArabifyApp(context: Context) {
          }
          localizationReport?.let { report ->
           Text("اكتمل إنشاء الموارد العربية: ${report.translatedStrings} نصًا من ${report.discoveredStrings}.",color=ArabifyPalette.success,fontSize=13.sp)
-          Button(onClick={saveLauncher.launch("arabify_arabic.apk")},modifier=Modifier.fillMaxWidth()){Text("الخطوة الأخيرة: حفظ APK المعرب")}
+          ArabifyCtaButton("الخطوة الأخيرة: حفظ APK المعرب",onClick={saveLauncher.launch("arabify_arabic.apk")})
          }
          localizationError?.let{Text(it,color=ArabifyPalette.danger,fontSize=12.sp)}
          exportError?.let{Text(it,color=ArabifyPalette.danger,fontSize=12.sp)}
@@ -534,7 +541,7 @@ private fun ArabifyApp(context: Context) {
          Text("يعالج هذا المسار ملفات JSON وTXT وProperties وStrings الموجودة داخل assets أو res/raw أو مجلدات localization/strings. يحافظ على مفاتيح JSON وخصائص الإعدادات والمتغيرات المعروفة.",color=ArabifyPalette.textSecondary,fontSize=12.sp)
          Text("لا يترجم ملفات Unreal أو ملفات Unity الثنائية خارج النطاق الموضح. لا تعتبر النتيجة تعريبًا كاملًا للعبة.",color=ArabifyPalette.warningText,fontSize=12.sp)
          if(scan.engine==GameEngine.UNITY) Text(UnityMonoLocalizer.supportedScope,color=ArabifyPalette.warningText,fontSize=12.sp)
-         Button(onClick={
+         ArabifyCtaButton(if(assetBusy) "جارِ تعريب ملفات النصوص..." else if((selectedInstalledApp?.splitCount ?: 0)>0) "تعريب مجموعة Split وإنشاء ZIP" else "تعريب ملفات النصوص وإنشاء APK",onClick={
           val uri=selectedUri
           if(uri!=null) {
            assetBusy=true;assetError=null;assetReport=null;assetProgress=0 to 0
@@ -573,9 +580,7 @@ private fun ArabifyApp(context: Context) {
             finally { assetBusy=false }
            }
           }
-         },enabled=modelReady&&!assetBusy&&selectedUri!=null,modifier=Modifier.fillMaxWidth()) {
-          Text(if(assetBusy) "جارِ تعريب ملفات النصوص..." else if((selectedInstalledApp?.splitCount ?: 0)>0) "تعريب مجموعة Split وإنشاء ZIP" else "تعريب ملفات النصوص وإنشاء APK")
-         }
+         },enabled=modelReady&&!assetBusy&&selectedUri!=null)
          if(assetBusy) {
           val fraction=if(assetProgress.second>0) assetProgress.first.toFloat()/assetProgress.second.toFloat() else 0f
           LinearProgressIndicator(progress={fraction.coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth())
@@ -585,10 +590,10 @@ private fun ArabifyApp(context: Context) {
           Text("الملفات: ${report.filesTranslated} / ${report.filesDiscovered} • النصوص المترجمة: ${report.stringsTranslated} • المتروكة: ${report.stringsSkipped}",color=ArabifyPalette.success,fontSize=13.sp)
           if((report.bundleStringsTranslated ?: 0) > 0) Text("منها داخل حزم UnityFS: ${report.bundleFilesTranslated} ملف نصي، ${report.bundleStringsTranslated} نصًا مترجمًا.",color=ArabifyPalette.success,fontSize=11.sp)
           if(report.outputApk.extension=="zip") {
-           Button(onClick={saveZipLauncher.launch("arabify_splitset_arabic.zip")},modifier=Modifier.fillMaxWidth()){Text("الخطوة الأخيرة: حفظ ZIP مجموعة Split المعربة")}
+           ArabifyCtaButton("الخطوة الأخيرة: حفظ ZIP مجموعة Split المعربة",onClick={saveZipLauncher.launch("arabify_splitset_arabic.zip")})
            Text("ثبّت المجموعة من قسم الاستعادة أدناه؛ سيُرسل كل ملفات APK إلى مُثبّت Android في جلسة واحدة.",color=ArabifyPalette.textSecondary,fontSize=11.sp)
           } else {
-           Button(onClick={saveLauncher.launch("arabify_assets_arabic.apk")},modifier=Modifier.fillMaxWidth()){Text("الخطوة الأخيرة: حفظ APK بعد التعريب")}
+           ArabifyCtaButton("الخطوة الأخيرة: حفظ APK بعد التعريب",onClick={saveLauncher.launch("arabify_assets_arabic.apk")})
           }
          }
          assetError?.let{Text(it,color=ArabifyPalette.danger,fontSize=12.sp)}
@@ -708,7 +713,7 @@ private fun ArabifyApp(context: Context) {
        Text("التقرير الكامل — جاهز للنسخ والإرسال",color=ArabifyPalette.accent,fontWeight=FontWeight.Bold,fontSize=17.sp)
        Text("يجمع بيانات التطبيق ونتائج الفحص والخطوط والنصوص والملاحظات وأخطاء ونتائج التعريب في نص واحد.",color=ArabifyPalette.textSecondary,fontSize=12.sp)
        OutlinedTextField(value=activityReport,onValueChange={},readOnly=true,modifier=Modifier.fillMaxWidth(),minLines=8,maxLines=18,label={Text("كل تفاصيل العملية")})
-       Button(onClick={clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(activityReport))},modifier=Modifier.fillMaxWidth()){Text("نسخ التقرير الكامل")}
+       ArabifyCtaButton("نسخ التقرير الكامل",onClick={clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(activityReport))})
       }
      }
     }
