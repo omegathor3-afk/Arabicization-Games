@@ -196,12 +196,14 @@ PY
             echo "NOTE: hierarchy carried no text nodes; Arabic presence verified visually via screenshots." > build/test-game/localized/ui-smoke-validation.txt
             # Scroll the language list so the (completion-sorted) Arabic entry
             # has a chance to be visible in a capture.
+            # The list is sorted by translation completion and Arabic's rank is
+            # unknown, so capture every scroll position: one of them contains it.
             for swipe in 1 2 3 4 5 6; do
               adb shell input swipe 1170 800 1170 300 400 >/dev/null 2>&1 || true
-              sleep 1
+              sleep 2
+              adb exec-out screencap -p > "build/test-game/localized/unciv-language-list-${swipe}.png" || true
+              [[ -s "build/test-game/localized/unciv-language-list-${swipe}.png" ]] && upload_shot "build/test-game/localized/unciv-language-list-${swipe}.png" "unciv-language-list-${swipe}"
             done
-            adb exec-out screencap -p > build/test-game/localized/unciv-arabic-screen-scrolled.png || true
-            [[ -s build/test-game/localized/unciv-arabic-screen-scrolled.png ]] && upload_shot build/test-game/localized/unciv-arabic-screen-scrolled.png "unciv-language-list-scrolled"
           else
             echo "No Arabic text or Arabic language entry was visible in the accessibility hierarchy." >&2
             # Screenshots are private artifacts, so quote the visible screen
