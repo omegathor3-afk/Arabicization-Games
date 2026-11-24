@@ -72,8 +72,10 @@ internal object AssetTextTransformer {
   var translated=0
   var skipped=0
   var translationCandidates=0
+  val skipReasons=mutableMapOf<String,Int>()
+  fun countSkip(reason:String){skipReasons[reason]=(skipReasons[reason] ?: 0)+1}
   suspend fun tx(value:String):String {
-   if(!looksTranslatable(value)){skipped++;return value}
+   if(!looksTranslatable(value)){skipped++;countSkip("not_translatable");return value}
    val glossaryHit=ArabicUiGlossary.translateExact(value)
    if(glossaryHit!=null){
     translated++
@@ -81,20 +83,20 @@ internal object AssetTextTransformer {
     val suffix=value.takeLastWhile{it.isWhitespace()}
     return prefix+glossaryHit+suffix
    }
-   if(translationCandidates>=maxTranslationCandidates){skipped++;return value}
+   if(translationCandidates>=maxTranslationCandidates){skipped++;countSkip("candidate_cap");return value}
    translationCandidates++
    val protected=PlaceholderProtector.protect(value)
    return try {
     val result=translate(protected.text)
     val expectedTokens=protected.markers
     val quality=TranslationQualityGate.review(value,result,expectedTokens)
-    if(!quality.accepted){skipped++;value}
+    if(!quality.accepted){skipped++;countSkip("quality_gate:"+quality.reason);value}
     else {
      val restored=PlaceholderProtector.restore(result,protected)
-     if(restored.isBlank()){skipped++;value}else{translated++;restored}
+     if(restored.isBlank()){skipped++;countSkip("blank_after_restore");value}else{translated++;restored}
     }
    }catch(cancelled:CancellationException){throw cancelled}
-   catch(_:Exception){skipped++;value}
+   catch(_:Exception){skipped++;countSkip("translator_error");value}
   }
 
   return when(path.substringAfterLast('.',"").lowercase()) {
@@ -103,11 +105,11 @@ internal object AssetTextTransformer {
     val output=when {
      root.startsWith("{") -> transformObject(JSONObject(root),::tx).toString(2)
      root.startsWith("[") -> transformArray(JSONArray(root),::tx).toString(2)
-     else -> source.also{skipped++}
+     else -> source.also{skipped++;countSkip("unsupported_json_root")}
     }
-    Result(output,translated,skipped)
+    Result(output,translated,skipped,skipReasons)
    }catch(cancelled:CancellationException){throw cancelled}
-   catch(_:Exception){Result(source,0,1)}
+   catch(_:Exception){Result(source,0,1,mapOf("unparseable" to 1))}
    "properties" -> {
     val output=mutableListOf<String>()
     for(line in source.split("\n")) {
@@ -115,7 +117,7 @@ internal object AssetTextTransformer {
      if(trimmed.isEmpty()||trimmed.startsWith("#")||trimmed.startsWith("!")) output+=line
      else {
       val index=line.indexOfFirst{it=='='||it==':'}
-      if(index<0){skipped++;output+=line}
+      if(index<0){skipped++;countSkip("malformed_line");output+=line}
       else {
        val prefix=line.substring(0,index+1)
        val value=line.substring(index+1)
@@ -126,15 +128,15 @@ internal object AssetTextTransformer {
     Result(output.joinToString("\n"),translated,skipped)
    }
    "csv" -> {
-    val output=transformCsv(source,::tx){skipped++}
-    Result(output,translated,skipped)
+    val output=transformCsv(source,::tx){skipped++;countSkip("csv_structure")}
+    Result(output,translated,skipped,skipReasons)
    }
    "strings" -> {
     val pattern=Regex("^(\\s*\"(?:\\\\.|[^\"])*\"\\s*=\\s*\")(.*?)(\"\\s*;\\s*)$")
     val output=mutableListOf<String>()
     for(line in source.split("\n")) {
      val match=pattern.matchEntire(line)
-     if(match==null){if(line.trim().isNotEmpty()&&!line.trim().startsWith("//"))skipped++;output+=line}
+     if(match==null){if(line.trim().isNotEmpty()&&!line.trim().startsWith("//")){skipped++;countSkip("malformed_line")};output+=line}
      else output+=match.groupValues[1]+tx(match.groupValues[2])+match.groupValues[3]
     }
     Result(output.joinToString("\n"),translated,skipped)
