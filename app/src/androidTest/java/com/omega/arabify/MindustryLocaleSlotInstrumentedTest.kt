@@ -20,8 +20,12 @@ import java.util.zip.ZipFile
  * End-to-end test of the libGDX locale-slot tier against the real Mindustry
  * game (F-Droid build) installed on the emulator by the CI script.
  *
- * Translation uses a deterministic pseudo-Arabic stand-in so the test is
- * reproducible. This instrumentation test proves APK-level mechanics only:
+ * Translation mode comes from the instrumentation argument "translationMode":
+ * "pseudo" (default) uses a deterministic pseudo-Arabic stand-in so the
+ * mechanics test is reproducible; "real" translates every string through the
+ * production OfflineArabicTranslator (ML Kit English-Arabic model downloaded
+ * on the emulator) so CI can screenshot the real translation quality.
+ * This instrumentation test proves APK-level mechanics only:
  * locale-slot creation, byte-identical preservation of unrelated entries
  * including the recognized icon font, and signature verification. It does not launch Mindustry
  * or prove that Arabic glyphs render on screen; the CI script separately
@@ -59,13 +63,27 @@ class MindustryLocaleSlotInstrumentedTest {
             val signed = File(context.cacheDir, "mindustry-slot-ar.apk")
             unsigned.delete()
             signed.delete()
+            val mode = InstrumentationRegistry.getArguments().getString("translationMode", "pseudo")
+            val translator = if (mode == "real") OfflineArabicTranslator(context) else null
             try {
+                if (translator != null) {
+                    Log.i("MindustrySlot", "translationMode=real: downloading the ML Kit English-Arabic model")
+                    translator.prepareForOfflineUse(requireWifi = false)
+                    assertTrue(
+                        "ML Kit Arabic model is unavailable on this emulator; cannot produce a real-translation build",
+                        translator.isArabicModelDownloaded()
+                    )
+                }
                 val fonts = LocaleSlotLocalizer.FontInjection { f ->
                     context.assets.open(f.assetPath).use { it.readBytes() }
                 }
                 val report = LocaleSlotLocalizer.addArabicLocaleSlotWithFont(installedGameApk, unsigned, fonts) { text ->
-                    val trimmed = text.trim()
-                    if (trimmed.length >= 3) "العربية ${trimmed.length}" else text
+                    if (translator != null) {
+                        if (text.isBlank()) text else translator.translateEnglishToArabic(text)
+                    } else {
+                        val trimmed = text.trim()
+                        if (trimmed.length >= 3) "العربية ${trimmed.length}" else text
+                    }
                 }
                 Log.i("MindustrySlot", "font=${report.fontReplaced} reason=${report.fontReason}")
                 assertEquals("Fontello icon font must be merged in place, never replaced",
@@ -120,21 +138,57 @@ class MindustryLocaleSlotInstrumentedTest {
                 val verification = ApkVerifier.Builder(signed).build().verify()
                 assertTrue("Signed Mindustry APK failed verification: ${verification.errors}", verification.isVerified)
 
+                // Quote the translated menu labels in the report so translation
+                // quality gets human review. Real mode re-translates the base
+                // bundle's English values with the production translator (logical
+                // order, readable); pseudo mode quotes the pre-shaped slot values.
+                val menuKeys = listOf("play", "newgame", "loadgame", "joingame", "customgame", "campaign",
+                    "tutorial", "editor", "maps", "mods", "database", "schematics", "settings", "credits", "load", "quit")
+                fun bundleValues(zip: ZipFile, entryName: String): Map<String, String> {
+                    val entry = zip.getEntry(entryName) ?: error("bundle entry missing: $entryName")
+                    return zip.getInputStream(entry).use { it.readBytes() }.toString(Charsets.UTF_8)
+                        .split('\n')
+                        .mapNotNull { line ->
+                            val index = line.indexOfFirst { it == '=' || it == ':' }
+                            if (index < 0) null else line.substring(0, index).trim() to line.substring(index + 1).trim()
+                        }
+                        .toMap()
+                }
+                val menuTranslations = if (translator != null) {
+                    val base = ZipFile(installedGameApk).use { bundleValues(it, report.baseEntry) }
+                    menuKeys.mapNotNull { key ->
+                        base[key]?.let { english ->
+                            val arabic = try {
+                                translator.translateEnglishToArabic(english)
+                            } catch (error: Exception) {
+                                "<translation failed: ${error.message}>"
+                            }
+                            "$key | $english => $arabic"
+                        }
+                    }
+                } else {
+                    val slot = ZipFile(unsigned).use { bundleValues(it, report.addedEntry) }
+                    menuKeys.mapNotNull { key -> slot[key]?.let { "$key => $it" } }
+                }
+
                 // Publish evidence for the CI script: it installs this exact APK,
                 // switches the emulator to ar-EG and checks Arabic on screen.
                 val evidenceDir = File(context.filesDir, "mindustry-slot-test")
                 check(evidenceDir.mkdirs() || evidenceDir.isDirectory)
-                val preservedApk = File(evidenceDir, "mindustry-arabic.apk")
+                val suffix = if (mode == "real") "-real" else ""
+                val preservedApk = File(evidenceDir, "mindustry-arabic$suffix.apk")
                 signed.copyTo(preservedApk, overwrite = true)
-                val reportFile = File(evidenceDir, "mindustry-report.txt")
+                val reportFile = File(evidenceDir, "mindustry-report$suffix.txt")
                 reportFile.writeText(
                     "gamePackage=$gamePackage\n" +
+                        "translationMode=$mode\n" +
                         "slotEntry=${report.addedEntry}\n" +
                         "translatedStrings=${report.stringsTranslated}\n" +
                         "skippedStrings=${report.stringsSkipped}\n" +
                         "fontReplaced=${report.fontReplaced}\n" +
                         "fontReason=${report.fontReason}\n" +
-                        "signatureVerified=${verification.isVerified}\n"
+                        "signatureVerified=${verification.isVerified}\n" +
+                        "menuTranslations:\n" + menuTranslations.joinToString("\n") + "\n"
                 )
 
                 fun publishToDownloads(source: File, displayName: String, mimeType: String) {
@@ -157,10 +211,11 @@ class MindustryLocaleSlotInstrumentedTest {
                         throw error
                     }
                 }
-                publishToDownloads(preservedApk, "mindustry-arabic.apk", "application/vnd.android.package-archive")
-                publishToDownloads(reportFile, "mindustry-report.txt", "text/plain")
-                Log.i("MindustrySlot", "Published signed localized Mindustry APK and report to Downloads/ARABIFY")
+                publishToDownloads(preservedApk, "mindustry-arabic$suffix.apk", "application/vnd.android.package-archive")
+                publishToDownloads(reportFile, "mindustry-report$suffix.txt", "text/plain")
+                Log.i("MindustrySlot", "Published signed localized Mindustry APK and report to Downloads/ARABIFY (mode=$mode)")
             } finally {
+                translator?.close()
                 unsigned.delete()
                 signed.delete()
             }
