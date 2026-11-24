@@ -125,7 +125,7 @@ internal object AssetTextTransformer {
       }
      }
     }
-    Result(output.joinToString("\n"),translated,skipped)
+    Result(output.joinToString("\n"),translated,skipped,skipReasons)
    }
    "csv" -> {
     val output=transformCsv(source,::tx){skipped++;countSkip("csv_structure")}
@@ -139,16 +139,16 @@ internal object AssetTextTransformer {
      if(match==null){if(line.trim().isNotEmpty()&&!line.trim().startsWith("//")){skipped++;countSkip("malformed_line")};output+=line}
      else output+=match.groupValues[1]+tx(match.groupValues[2])+match.groupValues[3]
     }
-    Result(output.joinToString("\n"),translated,skipped)
+    Result(output.joinToString("\n"),translated,skipped,skipReasons)
    }
    "txt" -> {
     val output=mutableListOf<String>()
     for(line in source.split("\n")) {
      output+=if(line.isBlank()||line.trimStart().startsWith("#"))line else tx(line)
     }
-    Result(output.joinToString("\n"),translated,skipped)
+    Result(output.joinToString("\n"),translated,skipped,skipReasons)
    }
-   else -> Result(source,0,1)
+   else -> Result(source,0,1,mapOf("unsupported_extension" to 1))
   }
  }
 
