@@ -56,10 +56,15 @@ class MindustryLocaleSlotInstrumentedTest {
             unsigned.delete()
             signed.delete()
             try {
-                val report = LocaleSlotLocalizer.addArabicLocaleSlot(installedGameApk, unsigned) { text ->
-                    val trimmed = text.trim()
-                    if (trimmed.length >= 3) "عر${trimmed.length}" else text
+                val fonts = LocaleSlotLocalizer.FontInjection { f ->
+                    context.assets.open(f.assetPath).use { it.readBytes() }
                 }
+                val report = LocaleSlotLocalizer.addArabicLocaleSlotWithFont(installedGameApk, unsigned, fonts) { text ->
+                    val trimmed = text.trim()
+                    if (trimmed.length >= 3) "العربية ${trimmed.length}" else text
+                }
+                Log.i("MindustrySlot", "font=${report.fontReplaced} reason=${report.fontReason}")
+                assertEquals("Mindustry main font was not replaced", "assets/fonts/font.woff", report.fontReplaced)
                 Log.i("MindustrySlot", "slot=${report.addedEntry} translated=${report.stringsTranslated} skipped=${report.stringsSkipped}")
                 assertEquals("assets/bundles/bundle_ar.properties", report.addedEntry)
                 assertTrue("Too few Mindustry strings translated: ${report.stringsTranslated}", report.stringsTranslated > 1000)
@@ -79,13 +84,14 @@ class MindustryLocaleSlotInstrumentedTest {
                             }
                             .toSet()
                         assertEquals("Bundle keys were not preserved in the slot", bundleKeys(baseText), bundleKeys(slotText))
-                        assertTrue("Slot contains no Arabic text", slotText.any { it.code in 0x0600..0x06FF })
+                        assertTrue("Slot contains no Arabic text", slotText.any { it.code in 0xFE70..0xFEFF })
                         val originalNames = original.entries().asSequence().map { it.name }.toList()
                         var compared = 0
                         for (name in originalNames) {
                             if (AndroidAssetLocalizer.isOldSignature(name)) continue
                             val originalEntry = original.getEntry(name)
                             if (originalEntry.isDirectory) continue
+                            if (name == report.fontReplaced) continue
                             assertTrue(
                                 "Existing entry bytes changed: $name",
                                 digest(original, name).contentEquals(digest(localized, name))
@@ -112,6 +118,8 @@ class MindustryLocaleSlotInstrumentedTest {
                         "slotEntry=${report.addedEntry}\n" +
                         "translatedStrings=${report.stringsTranslated}\n" +
                         "skippedStrings=${report.stringsSkipped}\n" +
+                        "fontReplaced=${report.fontReplaced}\n" +
+                        "fontReason=${report.fontReason}\n" +
                         "signatureVerified=${verification.isVerified}\n"
                 )
 
