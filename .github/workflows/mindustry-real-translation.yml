@@ -6,6 +6,10 @@ on:
    - "app/src/androidTest/java/com/omega/arabify/MindustryLocaleSlotInstrumentedTest.kt"
    - "app/src/main/java/com/omega/arabify/OfflineArabicTranslator.kt"
    - "app/src/main/java/com/omega/arabify/AndroidResourceLocalizer.kt"
+   - "app/src/main/java/com/omega/arabify/AndroidAssetLocalizer.kt"
+   - "app/src/main/java/com/omega/arabify/LocaleSlotLocalizer.kt"
+   - "app/src/main/java/com/omega/arabify/TranslationQualityGate.kt"
+   - "app/src/main/java/com/omega/arabify/PlaceholderProtector.kt"
    - ".github/scripts/run-mindustry-real-translation.sh"
    - ".github/workflows/mindustry-real-translation.yml"
  workflow_dispatch:
