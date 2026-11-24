@@ -111,6 +111,11 @@ if [[ -s "$GENERATED_APK" ]]; then
         # activity. monkey -p reported "No activities found" on API 35 even
         # though the APK installed, so launch the manifest component directly.
         LAUNCH_COMPONENT="io.anuke.mindustry/mindustry.android.AndroidLauncher"
+        # Android shows a "Viewing full screen" confirmation over a fullscreen
+        # game on first launch; it takes window focus and Mindustry stops. The
+        # 11:29 failure frame proved it. Pre-confirm it before launching.
+        adb shell settings put secure immersive_mode_confirmations confirmed >/dev/null 2>&1 || true
+        adb shell settings put global policy_control immersive.confirmations=confirmed >/dev/null 2>&1 || true
         for attempt in 1 2 3; do
           adb shell am force-stop io.anuke.mindustry >/dev/null 2>&1 || true
           start_output="$(adb shell am start -W -n "$LAUNCH_COMPONENT" 2>&1 || true)"
