@@ -166,6 +166,8 @@ if [[ -s "$GENERATED_APK" ]]; then
             launch_status=1
             adb logcat -d -v time > build/test-game/localized/game-exit-logcat.txt || true
             adb logcat -d -b crash -v time >> build/test-game/localized/game-exit-logcat.txt 2>/dev/null || true
+            game_files="$( (adb shell 'ls -R /sdcard/Android/data/io.anuke.mindustry/files 2>/dev/null | head -40'; for f in $(adb shell 'ls /sdcard/Android/data/io.anuke.mindustry/files/crashes/* /sdcard/Android/data/io.anuke.mindustry/files/last_log.txt /sdcard/Android/data/io.anuke.mindustry/files/logs/* 2>/dev/null' | tr -d '\r' | head -3); do echo "== $f"; adb shell "tail -n 40 $f" 2>/dev/null; done) | cut -c1-200 | tr '\n' '|' | cut -c1-4500)"
+            echo "::error::MINDUSTRY-OWN-FILES ${game_files:-none}"
             game_lines="$(grep -E '/anuke\.mindustry\(|/Mindustry\(|io\.anuke\.mindustry' build/test-game/localized/game-exit-logcat.txt | grep -vE 'ApkAssets|ImeTracker|InputManager|nativeloader|ActivityTaskManager|WindowManager' | tail -45 | cut -c1-210 | tr '\n' '|' | cut -c1-4200)"
             sys_lines="$(grep -E 'FATAL EXCEPTION IN SYSTEM PROCESS|lowmemorykiller|Low on memory|am_kill|am_proc_died|ANR in|has died|Killing [0-9]+:io' build/test-game/localized/game-exit-logcat.txt | tail -8 | cut -c1-200 | tr '\n' '|')"
             logcat_tail="GAME[${game_lines}] SYSTEM[${sys_lines}]"
