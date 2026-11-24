@@ -259,10 +259,36 @@ class LocaleSlotLocalizerTest {
     }
 
     @Test
-    fun preservesRecognizedIconFontAndLeavesArabicUnshaped() {
+    fun mergesArabicGlyphsIntoIconFontAndShapesSlot() {
         runBlocking {
             val dir = createTempDir()
-            val gameFont = latinOnlyFont("fontello")
+            val gameFont = TinyFont.build("fontello")
+            val input = buildLibGdxFontApk(dir, gameFont)
+            val output = File(dir, "icon-font-merged-out.apk")
+            val assets = File("src/main/assets")
+            val fonts = LocaleSlotLocalizer.FontInjection { f -> File(assets, f.assetPath).readBytes() }
+
+            val report = LocaleSlotLocalizer.addArabicLocaleSlotWithFont(input, output, fonts) { fakeArabic(it) }
+
+            assertEquals("assets/fonts/font.ttf", report.fontReplaced)
+            assertTrue(report.fontReason!!.contains("دمج"))
+            val merged = readEntry(output, "assets/fonts/font.ttf")!!
+            val profile = FontAnalyzer.analyze(merged)
+            assertEquals("fontello", profile.familyName)
+            assertTrue(profile.hasArabicCore)
+            assertTrue("icons preserved", profile.supports(0xE800))
+            assertTrue(profile.supports(0x41))
+            val slot = String(readEntry(output, "assets/bundles/bundle_ar.properties")!!, Charsets.UTF_8)
+            assertTrue("slot must be pre-shaped", slot.any { it.code in 0xFE70..0xFEFF })
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun preservesRecognizedIconFontWhenMergeIsImpossible() {
+        runBlocking {
+            val dir = createTempDir()
+            val gameFont = latinOnlyFont("fontello") // no glyf/loca tables: merge must honestly fail
             val input = buildLibGdxFontApk(dir, gameFont)
             val output = File(dir, "icon-font-out.apk")
             val assets = File("src/main/assets")
