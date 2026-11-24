@@ -24,6 +24,19 @@ internal object AndroidResourceLocalizer {
   translator: OfflineArabicTranslator,
   context: android.content.Context,
   onProgress: (Int, Int) -> Unit = { _, _ -> }
+ ): AndroidLocalizationReport = localizeEnglishStrings(
+  inputApk, outputApk, unsignedApk,
+  { text -> translator.translateEnglishToArabic(text) },
+  context, onProgress
+ )
+
+ suspend fun localizeEnglishStrings(
+  inputApk: File,
+  outputApk: File,
+  unsignedApk: File,
+  translate: suspend (String) -> String,
+  context: android.content.Context,
+  onProgress: (Int, Int) -> Unit = { _, _ -> }
  ): AndroidLocalizationReport {
   require(inputApk.isFile) { "ملف اللعبة الأصلي غير موجود." }
   val module = ApkModule.loadApkFile(inputApk)
@@ -68,7 +81,7 @@ internal object AndroidResourceLocalizer {
     val protected = PlaceholderProtector.protect(source)
     try {
      val translatedText = ArabicUiGlossary.translateExact(source)
-      ?: translator.translateEnglishToArabic(protected.text)
+      ?: translate(protected.text)
      val expectedTokens = protected.markers
      val quality = TranslationQualityGate.review(source, translatedText, expectedTokens)
      if (!quality.accepted) {
