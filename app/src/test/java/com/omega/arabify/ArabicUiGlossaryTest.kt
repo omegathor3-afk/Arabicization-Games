@@ -28,6 +28,17 @@ class ArabicUiGlossaryTest {
     }
 
     @Test
+    fun gameTermsFoundWrongInRealTranslationRunAreOverridden() {
+        // Real-translation CI evidence (bb58a25): ML Kit produced استقال for
+        // Quit, الاعتمادات for Credits, تعديل for Mods, noun لعب for Play.
+        assertEquals("خروج", ArabicUiGlossary.translateExact("Quit"))
+        assertEquals("العب", ArabicUiGlossary.translateExact("Play"))
+        assertEquals("فريق العمل", ArabicUiGlossary.translateExact("Credits"))
+        assertEquals("إضافات", ArabicUiGlossary.translateExact("Mods"))
+        assertEquals("انضم للعبة", ArabicUiGlossary.translateExact("Join Game"))
+    }
+
+    @Test
     fun longerSentencesAreNotReplacedBySubstringMatches() {
         assertNull(ArabicUiGlossary.translateExact("Create a new profile"))
         assertNull(ArabicUiGlossary.translateExact("Continue playing where you left off"))

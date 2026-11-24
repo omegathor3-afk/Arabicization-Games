@@ -133,6 +133,11 @@ internal object AndroidResourceLocalizer {
 internal object ArabicUiGlossary {
     private val exactTranslations = mapOf(
         "create" to "إنشاء",
+        "play" to "العب",
+        "quit" to "خروج",
+        "credits" to "فريق العمل",
+        "mods" to "إضافات",
+        "join game" to "انضم للعبة",
         "new game" to "لعبة جديدة",
         "settings" to "الإعدادات",
         "easy" to "سهل",
