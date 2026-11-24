@@ -198,7 +198,7 @@ PY
             # has a chance to be visible in a capture.
             # The list is sorted by translation completion and Arabic's rank is
             # unknown, so capture every scroll position: one of them contains it.
-            for swipe in 1 2 3 4 5 6; do
+            for swipe in 1 2 3 4 5 6 7 8 9 10 11 12; do
               adb shell input swipe 1170 800 1170 300 400 >/dev/null 2>&1 || true
               sleep 2
               adb exec-out screencap -p > "build/test-game/localized/unciv-language-list-${swipe}.png" || true
