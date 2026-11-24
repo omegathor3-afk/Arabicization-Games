@@ -197,7 +197,10 @@ msgstr[1] ""
             val report = GettextPoLocalizer.addArabicGettextSlot(input, output, fonts) { value ->
                 val marker = Regex("__ARABIFY_TOKEN_\\d+__").find(value)?.value
                 when {
-                    value.startsWith("Collect") -> "اجمع" // Deliberately drops %s; must be rejected.
+                    // Deliberately drops the placeholder: the repair tier must
+                    // recover it by translating the bare segment instead of
+                    // rejecting the whole string.
+                    value.startsWith("Collect") -> "اجمع"
                     marker != null -> "اضرب $marker مركبات"
                     else -> "اضرب مركبة واحدة"
                 }
@@ -205,11 +208,11 @@ msgstr[1] ""
 
             val arPo = String(readEntry(output, "assets/po/ar.po")!!, Charsets.UTF_8)
             assertTrue(arPo.contains("msgid \"Quit\"\nmsgstr \"خروج\""))
-            assertTrue(arPo.contains("msgid \"Collect %s\"\nmsgstr \"Collect %s\""))
+            assertTrue(arPo.contains("msgid \"Collect %s\"\nmsgstr \"اجمع %s\""))
             assertTrue(arPo.contains("msgid_plural \"Hit %# vehicles\"\nmsgstr[0] \"اضرب %# مركبات\""))
             assertFalse(arPo.contains("__ARABIFY_TOKEN_"))
-            assertEquals(2, report.stringsTranslated)
-            assertEquals(1, report.stringsSkipped)
+            assertEquals(3, report.stringsTranslated)
+            assertEquals(0, report.stringsSkipped)
             dir.deleteRecursively()
         }
     }

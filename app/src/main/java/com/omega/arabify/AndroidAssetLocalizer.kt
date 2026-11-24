@@ -58,7 +58,12 @@ internal object AssetTextTransformer {
    val out=StringBuilder()
    for(i in parts.indices){
     val segment=parts[i]
-    val translated=if(segment.isBlank()) segment else try{translate(segment)}catch(cancelled:CancellationException){throw cancelled}catch(_:Exception){return null}
+    // Keep the segment's boundary whitespace: translators often collapse it,
+    // but it is structural ("Collect %s" must not become "اجمع%s").
+    val translated=if(segment.isBlank()) segment else try{
+     val core=translate(segment).trim()
+     segment.takeWhile{it.isWhitespace()}+core+segment.takeLastWhile{it.isWhitespace()}
+    }catch(cancelled:CancellationException){throw cancelled}catch(_:Exception){return null}
     out.append(translated)
     if(i<protected.markers.size) out.append(protected.markers[i])
    }

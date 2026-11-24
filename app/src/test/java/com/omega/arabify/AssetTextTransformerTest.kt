@@ -48,7 +48,8 @@ class AssetTextTransformerTest {
   // back in place instead of rejecting.
   val source="Hello {player}"
   val result=AssetTextTransformer.transform("assets/dialogue.txt",source){"مرحبا"}
-  assertEquals("مرحبا{player}",result.text)
+  // Boundary whitespace around the placeholder is structural and survives.
+  assertEquals("مرحبا {player}",result.text)
   assertEquals(1,result.translated)
   assertEquals(0,result.skipped)
   assertEquals(1,result.repaired)
