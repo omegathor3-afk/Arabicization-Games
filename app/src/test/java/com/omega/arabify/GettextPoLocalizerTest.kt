@@ -62,13 +62,17 @@ msgid "Quit"
 msgstr ""
 """
 
-    private fun buildGameApk(dir: File): File {
+    private fun buildGameApk(
+        dir: File,
+        potText: String = pot,
+        languageXmlText: String = languagesXml,
+    ): File {
         val apk = File(dir, "pw.apk")
         writeApk(apk, linkedMapOf(
             "classes.dex" to byteArrayOf(100, 101, 120, 10),
-            "assets/po/messages.pot" to pot.toByteArray(),
+            "assets/po/messages.pot" to potText.toByteArray(),
             "assets/po/de.po" to "msgid \"\"\nmsgstr \"\"\n".toByteArray(),
-            "assets/ui/languages.xml" to languagesXml.toByteArray(),
+            "assets/ui/languages.xml" to languageXmlText.toByteArray(),
             "assets/fonts/Xolonium-Regular.ttf" to TinyFont.build("Xolonium"),
             "assets/fonts/Xolonium-Bold.ttf" to TinyFont.build("Xolonium Bold"),
         ))
@@ -155,4 +159,50 @@ msgstr ""
             dir.deleteRecursively()
         }
     }
+
+    @Test
+    fun gettextUsesReviewedGlossaryAndProtectsFormatTokens() {
+        runBlocking {
+            val customPot = """msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "Quit"
+msgstr ""
+
+msgid "Collect %s"
+msgstr ""
+
+msgid "Hit one vehicle"
+msgid_plural "Hit %# vehicles"
+msgstr[0] ""
+msgstr[1] ""
+"""
+            val dir = createTempDir()
+            val input = buildGameApk(dir, customPot, "<Languages/>")
+            val output = File(dir, "reviewed-out.apk")
+            val fonts = GettextPoLocalizer.FontInjection {
+                throw AssertionError("A missing FontSet must not request a replacement font.")
+            }
+
+            val report = GettextPoLocalizer.addArabicGettextSlot(input, output, fonts) { value ->
+                val marker = Regex("__ARABIFY_TOKEN_\\d+__").find(value)?.value
+                when {
+                    value.startsWith("Collect") -> "اجمع" // Deliberately drops %s; must be rejected.
+                    marker != null -> "اضرب $marker مركبات"
+                    else -> "اضرب مركبة واحدة"
+                }
+            }
+
+            val arPo = String(readEntry(output, "assets/po/ar.po")!!, Charsets.UTF_8)
+            assertTrue(arPo.contains("msgid \"Quit\"\nmsgstr \"خروج\""))
+            assertTrue(arPo.contains("msgid \"Collect %s\"\nmsgstr \"Collect %s\""))
+            assertTrue(arPo.contains("msgid_plural \"Hit %# vehicles\"\nmsgstr[0] \"اضرب %# مركبات\""))
+            assertFalse(arPo.contains("__ARABIFY_TOKEN_"))
+            assertEquals(2, report.stringsTranslated)
+            assertEquals(1, report.stringsSkipped)
+            dir.deleteRecursively()
+        }
+    }
+
 }
