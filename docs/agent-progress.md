@@ -397,3 +397,6 @@ Mindustry font.woff is WOFF1 (parsable); Mindustry loads via FreeType.
 
 ## 48. FontSelector (scoring + reason) done, JVM-verified only
 FontSelector.kt: 9 catalog fonts with style tag/weight/license/source URL; hard requirement Arabic core + presentation forms B>=80; score = style match 60 + weight closeness 40; reason string per choice, weak matches say so. Style inference is crude (pixel from bitmap/name, mono, else sans) - serif detection not possible from tables. Not yet wired to any localizer. Next: ArabicShaper, then Mindustry integration.
+
+## 49. ArabicShaper (presentation forms B + bidi-lite), JVM-verified only
+ArabicShaper.toVisual: contextual forms for 36 base letters, lam-alef ligatures, marks transparent to joining, placeholders ({0}, %s, \n) atomic, RTL base with Latin/digit runs kept in order, bracket mirroring. Golden tests pass. Known gaps: no kerning/mark positioning, no lam-marks-alef ligature, Persian/Urdu letters unshaped, simplified bidi. Correctness on screen is unproven until Mindustry emulator screenshot. Next: wire into LocaleSlotLocalizer + font replacement (step 5).
