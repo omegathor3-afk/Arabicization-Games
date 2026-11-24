@@ -52,6 +52,11 @@ mkdir -p build/test-game/localized/real
 # Standalone-capable: install the pinned game APK (no-op if already installed).
 adb install build/test-game/mindustry.apk || { note_failure "adb install of pinned Mindustry APK failed"; exit 1; }
 
+# Clear stale published evidence: on a reused AVD the MediaStore renames a
+# duplicate display name on disk, so an unprefixed adb pull would fetch the
+# PREVIOUS run's report (observed: identical stale skipReasons across runs).
+adb shell rm -rf /sdcard/Download/ARABIFY >/dev/null 2>&1 || true
+
 # The emulator should already be in ar-EG from the pseudo pass; if not (for
 # example when this script runs alone), switch and reboot exactly once.
 LOCALE_NOW="$(adb shell settings get system system_locales | tr -d '\r')"
