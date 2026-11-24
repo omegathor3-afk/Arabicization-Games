@@ -144,13 +144,17 @@ if [[ -s "$GENERATED_APK" ]]; then
           fi
           sleep 5
         done
+        # Honesty note: libGDX renders all text in OpenGL, so the uiautomator
+        # hierarchy NEVER contains Mindustry's in-game strings. Gating on
+        # Arabic in the dump was flaky-passing off Arabic system UI. The slot
+        # content itself is verified by the instrumentation test; on-screen
+        # rendering is a known font blocker (no Arabic glyphs in the game's
+        # bundled font) and is verified visually via the published screenshot.
         if [[ "$hierarchy_ready" -eq 1 ]]; then
           if [[ "$arabic_found" -eq 0 ]]; then
-            echo "No Arabic text was visible in the accessibility hierarchy after 90s of polling." >&2
-            note_failure "no Arabic text visible on the Mindustry screen after 90s of hierarchy polling"
-            launch_status=1
+            echo "::notice::No Arabic in the uiautomator dump - expected for an OpenGL game; slot content is verified by the instrumentation test and the screenshot is published for visual check"
           else
-            echo "Accessibility hierarchy captured; Arabic text is visible on the Mindustry screen." > build/test-game/localized/ui-smoke-validation.txt
+            echo "Accessibility hierarchy captured; Arabic text visible (system UI)." > build/test-game/localized/ui-smoke-validation.txt
           fi
         else
           echo "::notice::UIAutomator exposed no hierarchy; relying on screenshot + process checks (not counted as failure)"
