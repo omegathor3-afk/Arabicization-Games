@@ -539,3 +539,19 @@ New agent run (fresh sandbox; toolchain re-provisioned; baseline suite green bef
   screenshot after the same foreground verification as the pseudo pass.
 - Motivation: the user asked whether the on-screen Arabic is the correct
   translation; pseudo text could never answer that.
+
+## 59. Real-translation verdict + gamer design v2 (eb81d16..9b676fc)
+- Real-translation CI (Play Store emulator image) produced the actual ML Kit
+  Mindustry menu: 12/16 labels correct, 4 wrong (Quit=>استقال, Credits=>الاعتمادات,
+  Mods=>تعديل clash, Play=>لعب noun). Fixes landed as curated glossary overrides
+  (خروج, فريق العمل, إضافات, العب, انضم للعبة) with a regression test; the
+  glossary feeds the slot pipeline via AssetTextTransformer. Gettext path still
+  bypasses the glossary - known gap.
+- App design v2 on emulator: deep navy + cyan/violet neon, Cairo variable font
+  bundled for all UI Arabic, gradient wordmark hero, ArabifyCtaButton for all
+  primary actions, new neon launcher icon. Verified visually; below-the-fold
+  sections pending a real scrolled capture (script hardened by cfe2a57).
+- Unciv flake root-caused from the screenshot: Android "Viewing full screen"
+  dialog covered the game; immersive pre-confirm added (9b676fc).
+- GitHub unauthenticated API rate limit (60/hr) bit during CI polling; pace
+  annotation reads.
