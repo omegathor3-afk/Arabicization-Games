@@ -138,17 +138,36 @@ if [[ -s "$GENERATED_APK" ]]; then
           # Android reports the game package as the resumed foreground app.
           # The first captured frame (8s) was Mindustry's asset-loading screen,
           # not the menu. Give the game time to reach its first interactive screen.
-          sleep 60
+          # Keep the screen on (a screen timeout can destroy the activity; Mindustry
+          # then calls System.exit(0)) and capture frames while the game is alive,
+          # so a late exit still leaves genuine last-foreground evidence.
+          adb shell svc power stayon true >/dev/null 2>&1 || true
+          adb shell settings put system screen_off_timeout 1800000 >/dev/null 2>&1 || true
+          adb shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
+          last_ok_shot="build/test-game/localized/mindustry-last-foreground.png"
+          for tick in $(seq 1 12); do
+            sleep 5
+            fg_now="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'topResumedActivity|mResumedActivity' | tail -n 1 | tr -d '\r')"
+            if [[ "$fg_now" == *"io.anuke.mindustry"* ]]; then
+              adb exec-out screencap -p > "$last_ok_shot.tmp" 2>/dev/null && [[ -s "$last_ok_shot.tmp" ]] && mv "$last_ok_shot.tmp" "$last_ok_shot" && last_ok_tick=$tick
+            else
+              echo "game left foreground at tick $tick (~$((tick*5))s)" > build/test-game/localized/game-exit-tick.txt
+              break
+            fi
+          done
           foreground="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'topResumedActivity|mResumedActivity' | tail -n 1 | tr -d '\r')"
           game_pid="$(adb shell pidof io.anuke.mindustry 2>/dev/null | tr -d '\r')"
           if [[ -z "$game_pid" || "$foreground" != *"io.anuke.mindustry"* ]]; then
             launch_status=1
             adb logcat -d -v time > build/test-game/localized/game-exit-logcat.txt || true
             adb logcat -d -b crash -v time >> build/test-game/localized/game-exit-logcat.txt 2>/dev/null || true
-            game_lines="$(grep -E '/anuke\.mindustry\(|/Mindustry|/System\.out|/System\.err|io\.anuke\.mindustry' build/test-game/localized/game-exit-logcat.txt | grep -vE 'ApkAssets|ImeTracker|InputManager|nativeloader|ActivityTaskManager|WindowManager' | tail -45 | cut -c1-210 | tr '\n' '|' | cut -c1-4200)"
+            game_lines="$(grep -E '/anuke\.mindustry\(|/Mindustry\(|io\.anuke\.mindustry' build/test-game/localized/game-exit-logcat.txt | grep -vE 'ApkAssets|ImeTracker|InputManager|nativeloader|ActivityTaskManager|WindowManager' | tail -45 | cut -c1-210 | tr '\n' '|' | cut -c1-4200)"
             sys_lines="$(grep -E 'FATAL EXCEPTION IN SYSTEM PROCESS|lowmemorykiller|Low on memory|am_kill|am_proc_died|ANR in|has died|Killing [0-9]+:io' build/test-game/localized/game-exit-logcat.txt | tail -8 | cut -c1-200 | tr '\n' '|')"
             logcat_tail="GAME[${game_lines}] SYSTEM[${sys_lines}]"
-            note_failure "Mindustry left the foreground before screenshot capture; pid=$game_pid foreground=$foreground :: logcat: ${logcat_tail:-unavailable}"
+            if [[ -s "build/test-game/localized/mindustry-last-foreground.png" ]]; then
+              upload_shot build/test-game/localized/mindustry-last-foreground.png "mindustry-last-foreground-frame-tick-${last_ok_tick:-0}"
+            fi
+            note_failure "Mindustry left the foreground ($(cat build/test-game/localized/game-exit-tick.txt 2>/dev/null)) before screenshot capture; pid=$game_pid foreground=$foreground :: logcat: ${logcat_tail:-unavailable}"
           else
             printf 'pid=%s\nforeground=%s\n' "$game_pid" "$foreground" > build/test-game/localized/game-process.txt
             echo "foreground_package=io.anuke.mindustry" > build/test-game/localized/ui-smoke-validation.txt
