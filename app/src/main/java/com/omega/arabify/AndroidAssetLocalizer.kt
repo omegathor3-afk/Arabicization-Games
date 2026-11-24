@@ -430,7 +430,7 @@ internal object AndroidAssetLocalizer {
   return AssetLocalizationReport(null,discovered,translatedFiles,translatedStrings,skippedStrings,unsignedApk)
  }
 
- private fun isOldSignature(path:String):Boolean {
+ internal fun isOldSignature(path:String):Boolean {
   if(!path.startsWith("META-INF/",true))return false
   val name=path.substringAfterLast('/').uppercase()
   return name.endsWith(".RSA")||name.endsWith(".DSA")||name.endsWith(".EC")||
