@@ -69,7 +69,16 @@ class MindustryLocaleSlotInstrumentedTest {
                     ZipFile(unsigned).use { localized ->
                         val slotEntry = localized.getEntry(report.addedEntry) ?: error("Arabic slot entry missing")
                         val slotText = localized.getInputStream(slotEntry).use { it.readBytes() }.toString(Charsets.UTF_8)
-                        assertTrue("Bundle keys were not preserved in the slot", slotText.contains("menu.new"))
+                        val baseText = original.getInputStream(original.getEntry(report.baseEntry)).use { it.readBytes() }.toString(Charsets.UTF_8)
+                        fun bundleKeys(text: String): Set<String> = text.split('\n')
+                            .map { it.trim() }
+                            .filter { it.isNotEmpty() && !it.startsWith("#") && !it.startsWith("!") }
+                            .mapNotNull { line ->
+                                val index = line.indexOfFirst { it == '=' || it == ':' }
+                                if (index < 0) null else line.substring(0, index).trim()
+                            }
+                            .toSet()
+                        assertEquals("Bundle keys were not preserved in the slot", bundleKeys(baseText), bundleKeys(slotText))
                         assertTrue("Slot contains no Arabic text", slotText.any { it.code in 0x0600..0x06FF })
                         val originalNames = original.entries().asSequence().map { it.name }.toList()
                         var compared = 0
