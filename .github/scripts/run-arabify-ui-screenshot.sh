@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Screenshot the Arabify app's own UI on the emulator (design review evidence).
-set -uo pipefail
+set -euo pipefail
 cd "$GITHUB_WORKSPACE"
 
 note_failure() {
@@ -11,17 +11,11 @@ note_failure() {
   echo "::error::${message}"
 }
 
-upload_shot() {
-  local file="$1" label="$2"
-  if [[ ! -s "$file" ]]; then
-    echo "::notice::SCREENSHOT ${label}: no file captured"
-    return 0
-  fi
-  local url err=""
-  url=$(curl --fail --silent --show-error --max-time 150 -F "file=@${file}" https://0x0.st 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="0x0.st: $(echo "$url" | tail -c 200)"
-  url=$(curl --fail --silent --show-error --max-time 150 -F "reqtype=fileupload" -F "fileToUpload=@${file}" https://catbox.moe/user/api.php 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="${err} | catbox: $(echo "$url" | tail -c 200)"
-  url=$(curl --fail --silent --show-error --max-time 150 -F "file=@${file}" https://temp.sh/upload 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="${err} | temp.sh: $(echo "$url" | tail -c 200)"
-  echo "::notice::SCREENSHOT ${label}: upload failed :: ${err}"
+dump_hierarchy() {
+  local destination="$1"
+  adb shell uiautomator dump --compressed /sdcard/arabify-window.xml >/dev/null 2>&1 || return 1
+  adb exec-out cat /sdcard/arabify-window.xml > "$destination" || return 1
+  [[ -s "$destination" ]]
 }
 
 mkdir -p build/arabify-ui
@@ -58,17 +52,51 @@ if [[ "$fg" != *"com.omega.arabify"* ]]; then
   exit 1
 fi
 
-# Compose needs a beat to lay out and render the first frames.
-sleep 12
-adb exec-out screencap -p > build/arabify-ui/arabify-ui-top.png || status=1
-[[ -s build/arabify-ui/arabify-ui-top.png ]] || { note_failure "top screenshot missing"; status=1; }
+# Confirm the requested Arabic system locale is active before taking evidence.
+locale="$(adb shell settings get system system_locales | tr -d '\r')"
+if [[ "$locale" != *"ar-EG"* ]]; then
+  note_failure "emulator locale is not ar-EG: $locale"
+  exit 1
+fi
 
-# Scroll down for the second section of the home screen.
-adb shell input swipe 540 1700 540 500 700 || true
-sleep 3
-adb exec-out screencap -p > build/arabify-ui/arabify-ui-scrolled.png || status=1
-[[ -s build/arabify-ui/arabify-ui-scrolled.png ]] || { note_failure "scrolled screenshot missing"; status=1; }
+# Capture the initial view and its accessibility hierarchy.
+sleep 8
+dump_hierarchy build/arabify-ui/before-scroll.xml || { note_failure "could not capture the initial accessibility hierarchy"; exit 1; }
+adb exec-out screencap -p > build/arabify-ui/arabify-ui-top.png
+[[ -s build/arabify-ui/arabify-ui-top.png ]] || { note_failure "top screenshot missing"; exit 1; }
 
-upload_shot build/arabify-ui/arabify-ui-top.png "arabify-ui-top"
-upload_shot build/arabify-ui/arabify-ui-scrolled.png "arabify-ui-scrolled"
-exit "$status"
+# Retry the gesture, and do not label a duplicate top-of-screen capture as a
+# scrolled screenshot. The hierarchy must change after the scroll.
+scrolled=0
+for attempt in 1 2 3; do
+  adb shell input swipe 540 2100 540 320 900 || true
+  sleep 2
+  dump_hierarchy build/arabify-ui/after-scroll.xml || { note_failure "could not capture the post-scroll accessibility hierarchy"; exit 1; }
+  if ! cmp -s build/arabify-ui/before-scroll.xml build/arabify-ui/after-scroll.xml; then
+    scrolled=1
+    break
+  fi
+done
+if [[ "$scrolled" -ne 1 ]]; then
+  note_failure "the app accessibility hierarchy did not change after three scroll gestures; refusing to publish a false scrolled screenshot"
+  exit 1
+fi
+
+adb exec-out screencap -p > build/arabify-ui/arabify-ui-scrolled.png
+[[ -s build/arabify-ui/arabify-ui-scrolled.png ]] || { note_failure "scrolled screenshot missing"; exit 1; }
+
+python3 - <<'PY'
+from pathlib import Path
+import struct
+
+for name in ("arabify-ui-top.png", "arabify-ui-scrolled.png"):
+    path = Path("build/arabify-ui") / name
+    data = path.read_bytes()
+    if len(data) < 24 or data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
+        raise SystemExit(f"{name} is not a valid PNG")
+    width, height = struct.unpack(">II", data[16:24])
+    if width < 320 or height < 480:
+        raise SystemExit(f"{name} has implausible dimensions: {width}x{height}")
+    print(f"{name}: {width}x{height}, {len(data)} bytes")
+PY
+

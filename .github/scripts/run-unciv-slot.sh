@@ -16,19 +16,6 @@ note_failure() {
 # Upload a captured screenshot to a free no-auth file host and emit the URL
 # as a public ::notice annotation so the evidence is fetchable without
 # GitHub artifact access. Only game/app screens are uploaded - no user data.
-upload_shot() {
-  local file="$1" label="$2"
-  if [[ ! -s "$file" ]]; then
-    echo "::notice::SCREENSHOT ${label}: no file captured"
-    return 0
-  fi
-  local url err=""
-  url=$(curl --fail --silent --show-error --max-time 150 -F "file=@${file}" https://0x0.st 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="0x0.st: $(echo "$url" | tail -c 200)"
-  url=$(curl --fail --silent --show-error --max-time 150 -F "reqtype=fileupload" -F "fileToUpload=@${file}" https://catbox.moe/user/api.php 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="${err} | catbox: $(echo "$url" | tail -c 200)"
-  url=$(curl --fail --silent --show-error --max-time 150 -F "file=@${file}" https://temp.sh/upload 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="${err} | temp.sh: $(echo "$url" | tail -c 200)"
-  echo "::notice::SCREENSHOT ${label}: upload failed :: ${err}"
-}
-
 run_connected_test() {
   local test_class="$1"
   gradle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class="$test_class" --stacktrace && return 0
@@ -123,6 +110,43 @@ if [[ -s "$GENERATED_APK" ]]; then
           fi
           sleep 2
         done
+        if [[ "$hierarchy_ready" -eq 1 ]] && grep -q 'text="Viewing full screen"' "$HIERARCHY_HOST_PATH"; then
+          # Android 15 shows a system immersive-mode tutorial on first launch.
+          # Dismiss its accessible "Got it" button by reading its actual bounds,
+          # rather than relying on a device-specific hard-coded tap coordinate.
+          tap_point="$(python3 - "$HIERARCHY_HOST_PATH" <<'PY'
+import re
+import sys
+import xml.etree.ElementTree as ET
+
+root = ET.parse(sys.argv[1]).getroot()
+for node in root.iter("node"):
+    if node.get("resource-id") == "android:id/ok" and node.get("text") == "Got it" and node.get("clickable") == "true":
+        match = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.get("bounds", ""))
+        if match:
+            left, top, right, bottom = map(int, match.groups())
+            print((left + right) // 2, (top + bottom) // 2)
+            break
+PY
+)"
+          if [[ -z "$tap_point" ]]; then
+            note_failure "Android immersive tutorial was visible but its accessible Got it button could not be located"
+            launch_status=1
+          else
+            read -r tap_x tap_y <<< "$tap_point"
+            adb shell input tap "$tap_x" "$tap_y" || { launch_status=$?; note_failure "could not dismiss Android immersive tutorial"; }
+            sleep 3
+            adb shell rm -f "$HIERARCHY_DEVICE_PATH" || true
+            adb shell uiautomator dump --compressed "$HIERARCHY_DEVICE_PATH" >/tmp/arabify-uiautomator-dump.log 2>&1 || true
+            if adb shell test -s "$HIERARCHY_DEVICE_PATH"; then
+              adb pull "$HIERARCHY_DEVICE_PATH" "$HIERARCHY_HOST_PATH" >/dev/null 2>&1 || true
+            fi
+            if grep -q 'text="Viewing full screen"' "$HIERARCHY_HOST_PATH"; then
+              note_failure "Android immersive tutorial remained visible after tapping Got it"
+              launch_status=1
+            fi
+          fi
+        fi
         if [[ "$hierarchy_ready" -eq 1 ]]; then
           # Unciv either opens its first-run language picker (listing
           # العربية from the new bundle_ar) or boots its menu in Arabic.
@@ -163,7 +187,6 @@ PY
           if [[ "$?" -ne 0 ]]; then launch_status=1; fi
         fi
         adb logcat -d -v time > build/test-game/localized/game-launch-logcat.txt || true
-        upload_shot build/test-game/localized/unciv-arabic-screen.png "unciv-arabic-screen"
       fi
     fi
   fi
