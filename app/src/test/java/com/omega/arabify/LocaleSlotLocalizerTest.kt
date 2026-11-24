@@ -54,6 +54,62 @@ class LocaleSlotLocalizerTest {
         return apk
     }
 
+    private fun buildTranslationFolderApk(dir: File, withArabic: Boolean = false): File {
+        val apk = File(dir, "folder-game.apk")
+        val entries = linkedMapOf(
+            "classes.dex" to byteArrayOf(100, 101, 120, 10),
+            "assets/jsons/translations/English.properties" to
+                "New Game = New Game\nLoad Game = Load Game\nQuit = Quit\n".toByteArray(),
+            "assets/jsons/translations/French.properties" to
+                "New Game = Nouvelle partie\n".toByteArray()
+        )
+        if (withArabic) {
+            entries["assets/jsons/translations/Arabic.properties"] = "New Game = لعبة جديدة\n".toByteArray()
+        }
+        writeApk(apk, entries)
+        return apk
+    }
+
+    @Test
+    fun addsArabicTranslationFileToTranslationFolderGames() {
+        runBlocking {
+            val dir = createTempDir()
+            val input = buildTranslationFolderApk(dir)
+            val output = File(dir, "folder-game-ar.apk")
+            val report = LocaleSlotLocalizer.addArabicLocaleSlot(input, output, fakeArabic)
+
+            assertEquals("assets/jsons/translations/English.properties", report.baseEntry)
+            assertEquals("assets/jsons/translations/Arabic.properties", report.addedEntry)
+            assertEquals(3, report.stringsTranslated)
+            val slot = readEntry(output, "assets/jsons/translations/Arabic.properties")!!.toString(Charsets.UTF_8)
+            assertTrue(slot.contains("New Game") && slot.contains("لعبة جديدة"))
+            // The French sibling and the English base stay byte-identical.
+            val originalFrench = readEntry(input, "assets/jsons/translations/French.properties")!!
+            val copiedFrench = readEntry(output, "assets/jsons/translations/French.properties")!!
+            assertTrue(originalFrench.contentEquals(copiedFrench))
+            val originalEnglish = readEntry(input, "assets/jsons/translations/English.properties")!!
+            val copiedEnglish = readEntry(output, "assets/jsons/translations/English.properties")!!
+            assertTrue(originalEnglish.contentEquals(copiedEnglish))
+        }
+    }
+
+    @Test
+    fun refusesTranslationFolderGameThatAlreadyHasArabic() {
+        runBlocking {
+            val dir = createTempDir()
+            val input = buildTranslationFolderApk(dir, withArabic = true)
+            val output = File(dir, "folder-game-ar.apk")
+            val failure = try {
+                LocaleSlotLocalizer.addArabicLocaleSlot(input, output, fakeArabic)
+                null
+            } catch (failure: IllegalArgumentException) {
+                failure
+            }
+            assertNotNull(failure)
+            assertTrue(failure!!.message!!.contains("Arabic.properties"))
+        }
+    }
+
     @Test
     fun addsArabicSlotWithoutTouchingOtherEntries() {
         runBlocking {

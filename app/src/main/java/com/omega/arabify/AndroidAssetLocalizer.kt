@@ -30,6 +30,38 @@ internal object AssetTextTransformer {
   translate:suspend (String)->String
  ):Result = transform(path,source,Int.MAX_VALUE,translate)
 
+ /**
+  * Translate a single value through the standard pipeline (translatability
+  * check, reviewed glossary, placeholder protection, quality gate) without
+  * file-level bookkeeping. Used by game-native locale slot writers that
+  * build new language files line by line.
+  */
+ suspend fun transformValue(
+  value:String,
+  translate:suspend (String)->String
+ ):SingleResult {
+  if(!looksTranslatable(value))return SingleResult(value,false)
+  val glossaryHit=ArabicUiGlossary.translateExact(value)
+  if(glossaryHit!=null){
+   val prefix=value.takeWhile{it.isWhitespace()}
+   val suffix=value.takeLastWhile{it.isWhitespace()}
+   return SingleResult(prefix+glossaryHit+suffix,true)
+  }
+  val protected=PlaceholderProtector.protect(value)
+  return try {
+   val result=translate(protected.text)
+   val quality=TranslationQualityGate.review(value,result,protected.markers)
+   if(!quality.accepted)SingleResult(value,false)
+   else {
+    val restored=PlaceholderProtector.restore(result,protected)
+    if(restored.isBlank())SingleResult(value,false)else SingleResult(restored,true)
+   }
+  }catch(cancelled:CancellationException){throw cancelled}
+  catch(_:Exception){SingleResult(value,false)}
+ }
+
+ data class SingleResult(val text:String,val translated:Boolean)
+
  suspend fun transform(
   path:String,
   source:String,

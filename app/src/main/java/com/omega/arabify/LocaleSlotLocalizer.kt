@@ -7,15 +7,21 @@ import java.util.zip.ZipOutputStream
 
 /**
  * Game-native language slot tier: instead of overwriting a game's English
- * text, add a NEW locale file the engine picks up itself. For libGDX-style
- * games (assets/bundles/bundle.properties + per-locale siblings), this
- * writes bundle_ar.properties with the base bundle's values translated,
- * leaving every existing entry byte-identical. The game then lists Arabic
- * in its own language settings or resolves it from the device locale -
- * the preferred "add Arabic to the game's language list" outcome.
+ * text, add a NEW locale file the engine picks up itself, leaving every
+ * existing entry byte-identical. Two engine layouts are detected:
  *
- * Refuses honestly when the game has no libGDX-style bundle or already
- * ships an Arabic bundle.
+ *  - libGDX bundles (assets/bundles/bundle.properties + per-locale
+ *    siblings such as bundle_de.properties): writes bundle_ar.properties.
+ *  - Translation folders (assets/jsons/translations/English.properties +
+ *    one <Language>.properties per language, as in Unciv): writes
+ *    Arabic.properties; the game builds its language list from the folder.
+ *
+ * The game then lists Arabic in its own language settings or resolves it
+ * from the device locale - the preferred "add Arabic to the game's
+ * language list" outcome.
+ *
+ * Refuses honestly when the game matches neither layout or already
+ * ships an Arabic slot.
  */
 internal object LocaleSlotLocalizer {
 
@@ -25,6 +31,7 @@ internal object LocaleSlotLocalizer {
     private const val MAX_SINGLE_REBUILT_ENTRY_BYTES = 2L * 1024L * 1024L * 1024L
 
     private val baseBundlePattern = Regex("(^|/)bundle\\.properties$")
+    private val translationFolderPattern = Regex("(^|/)translations/English\\.properties$")
 
     data class SlotReport(
         val baseEntry: String,
@@ -35,7 +42,11 @@ internal object LocaleSlotLocalizer {
     )
 
     fun arabicSlotPathFor(basePath: String): String =
-        basePath.removeSuffix(".properties") + "_ar.properties"
+        if (translationFolderPattern.containsMatchIn(basePath)) {
+            basePath.removeSuffix("English.properties") + "Arabic.properties"
+        } else {
+            basePath.removeSuffix(".properties") + "_ar.properties"
+        }
 
     suspend fun addArabicLocaleSlot(
         inputApk: File,
@@ -46,13 +57,14 @@ internal object LocaleSlotLocalizer {
         require(inputApk.absoluteFile != outputApk.absoluteFile) { "لا يمكن الكتابة فوق ملف APK الأصلي." }
 
         ZipFile(inputApk).use { zip ->
-            val bases = zip.entries().asSequence()
-                .filter { !it.isDirectory && baseBundlePattern.containsMatchIn(it.name) && it.size in 1..MAX_BASE_BUNDLE_BYTES }
+            val candidates = zip.entries().asSequence()
+                .filter { !it.isDirectory && it.size in 1..MAX_BASE_BUNDLE_BYTES }
                 .map { it.name }
-                .sorted()
                 .toList()
+            val bases = candidates.filter { baseBundlePattern.containsMatchIn(it) }.sorted() +
+                candidates.filter { translationFolderPattern.containsMatchIn(it) }.sorted()
             require(bases.isNotEmpty()) {
-                "لم يتم العثور على حزمة لغة بصيغة libGDX (bundle.properties) داخل اللعبة."
+                "لم يتم العثور على ملفات لغة معروفة داخل اللعبة (لا bundle.properties بصيغة libGDX ولا مجلد ترجمات English.properties)."
             }
             val base = bases.first()
             val slotPath = arabicSlotPathFor(base)
@@ -68,7 +80,11 @@ internal object LocaleSlotLocalizer {
                 "حجم حزمة اللغة الفعلي لا يطابق بيانات ZIP: $base"
             }
             val source = baseBytes.toString(Charsets.UTF_8)
-            val result = AssetTextTransformer.transform(slotPath, source) { value -> tx(value) }
+            val result = if (translationFolderPattern.containsMatchIn(base)) {
+                transformTranslationFolder(source, tx)
+            } else {
+                AssetTextTransformer.transform(slotPath, source) { value -> tx(value) }
+            }
             require(result.translated > 0) { "لم يتم العثور على نصوص قابلة للترجمة في حزمة اللغة." }
 
             outputApk.parentFile?.mkdirs()
@@ -106,5 +122,70 @@ internal object LocaleSlotLocalizer {
             }
             return SlotReport(base, slotPath, result.translated, result.skipped, outputApk)
         }
+    }
+
+    /**
+     * Translation-folder language files (Unciv layout): each line is
+     * "English source = translation". The English template leaves most
+     * values empty (the key is the display text), so the Arabic file
+     * translates the KEY when the value is empty or identical to it.
+     * Header directives configure the language's rules and get fixed
+     * Arabic values: Arabic uses spaces, has no letter case, keeps the
+     * default effect-before-cause order and places conditionals after
+     * the body ("+20% قوة <للوحدات>"). Diacritic entries stay empty.
+     * Lines whose value is already filled keep their line shape; the
+     * separator is always '=' so keys containing ':' stay intact.
+     */
+    private val folderDirectives = mapOf(
+        "\" \"" to "\" \"",
+        "StartWithCapitalLetter" to "false",
+        "EffectBeforeCause" to "true",
+        "ConditionalsPlacement" to "after",
+        "ConditionalsOrder" to "",
+        "diacritics_support" to "",
+        "unicode_block_start_character" to "",
+        "unicode_block_end_character" to "",
+        "left_joining_diacritics" to "",
+        "right_joining_diacritics" to "",
+        "left_and_right_joiners" to ""
+    )
+
+    private suspend fun transformTranslationFolder(
+        source: String,
+        tx: suspend (String) -> String
+    ): AssetTextTransformer.Result {
+        val output = mutableListOf<String>()
+        var translated = 0
+        var skipped = 0
+        for (line in source.split("\n")) {
+            val trimmed = line.trim()
+            if (trimmed.isEmpty() || trimmed.startsWith("#") || trimmed.startsWith("!")) {
+                output += line
+                continue
+            }
+            val separator = line.indexOf('=')
+            if (separator < 0) {
+                skipped++
+                output += line
+                continue
+            }
+            val key = line.substring(0, separator).trim()
+            val directive = folderDirectives[key]
+            if (directive != null) {
+                output += if (directive.isEmpty()) "$key = " else "$key = $directive"
+                continue
+            }
+            val value = line.substring(separator + 1).trim()
+            val sourceText = if (value.isEmpty() || value == key) key else value
+            val result = AssetTextTransformer.transformValue(sourceText, tx)
+            if (result.translated) {
+                translated++
+                output += "$key = ${result.text}"
+            } else {
+                skipped++
+                output += if (value.isEmpty()) "$key = " else line
+            }
+        }
+        return AssetTextTransformer.Result(output.joinToString("\n"), translated, skipped)
     }
 }
