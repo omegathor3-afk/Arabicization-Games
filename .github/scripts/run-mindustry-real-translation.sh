@@ -87,13 +87,23 @@ if [[ ! -s "$GENERATED_APK" ]]; then
   exit 1
 fi
 
-# Surface the translated menu labels as a public annotation so translation
-# quality is reviewable without artifact access.
+# Surface the translated menu labels as ONE public annotation so translation
+# quality is reviewable without artifact access. GitHub stores at most 10
+# notice annotations per check run, so per-label notices would silently drop
+# the labels and the screenshot URL.
 if [[ -s build/test-game/localized/real/mindustry-report-real.txt ]]; then
-  MENU_LINES="$(sed -n '/^menuTranslations:/,$p' build/test-game/localized/real/mindustry-report-real.txt | tail -n +2 | head -20)"
-  while IFS= read -r line; do
-    [[ -n "$line" ]] && echo "::notice::TRANSLATION ${line}"
-  done <<< "$MENU_LINES"
+  python3 - <<'PYANN'
+from pathlib import Path
+
+lines = Path("build/test-game/localized/real/mindustry-report-real.txt").read_text(encoding="utf-8").splitlines()
+try:
+    start = lines.index("menuTranslations:") + 1
+except ValueError:
+    start = len(lines)
+labels = [l for l in lines[start:] if l.strip()][:20]
+encoded = "%0A".join(l.replace("%", "%25") for l in labels)
+print(f"::notice::TRANSLATIONS%0A{encoded}")
+PYANN
 fi
 
 APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n1)"
