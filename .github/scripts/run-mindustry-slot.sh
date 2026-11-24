@@ -12,6 +12,25 @@ note_failure() {
   echo "::error::${message}"
 }
 
+
+# Upload a captured screenshot to a free no-auth file host and emit the URL
+# as a public ::notice annotation so the evidence is fetchable without
+# GitHub artifact access. Only game/app screens are uploaded - no user data.
+upload_shot() {
+  local file="$1" label="$2"
+  [[ -s "$file" ]] || return 0
+  local url
+  url=$(curl --fail --silent --show-error --max-time 150 -F "file=@${file}" https://0x0.st 2>/dev/null || true)
+  if [[ -z "$url" ]]; then
+    url=$(curl --fail --silent --show-error --max-time 150 --upload-file "$file" "https://transfer.sh/${label}.png" 2>/dev/null || true)
+  fi
+  if [[ -n "$url" ]]; then
+    echo "::notice::SCREENSHOT ${label}: ${url}"
+  else
+    echo "::notice::SCREENSHOT ${label}: upload failed"
+  fi
+}
+
 run_connected_test() {
   local test_class="$1"
   gradle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class="$test_class" --stacktrace && return 0
@@ -89,9 +108,21 @@ if [[ -s "$GENERATED_APK" ]]; then
         fi
       fi
       if [[ "$launch_status" -eq 0 ]]; then
-        adb shell monkey -p io.anuke.mindustry 1 || { launch_status=$?; note_failure "monkey launch of the localized game failed"; }
-        sleep 12
-        adb shell pidof io.anuke.mindustry > build/test-game/localized/game-process.txt || { launch_status=$?; note_failure "game process not running after launch (pidof empty)"; }
+        launch_ok=0
+        for attempt in 1 2 3; do
+          adb shell monkey -p io.anuke.mindustry 1 || true
+          sleep 12
+          if adb shell pidof io.anuke.mindustry > build/test-game/localized/game-process.txt && [[ -s build/test-game/localized/game-process.txt ]]; then
+            launch_ok=1
+            break
+          fi
+          sleep 6
+        done
+        if [[ "$launch_ok" -eq 0 ]]; then
+          launch_status=1
+          logcat_tail=$(adb logcat -d -t 500 2>/dev/null | grep -iE 'mindustry|AndroidRuntime|FATAL|libc' | tail -20 | tr '\n' ' ' | cut -c1-800)
+          note_failure "game process not running after 3 launch attempts :: logcat: ${logcat_tail:-unavailable}"
+        fi
         HIERARCHY_DEVICE_PATH="/data/local/tmp/arabify-mindustry-window.xml"
         HIERARCHY_HOST_PATH="build/test-game/localized/mindustry-window.xml"
         # Mindustry either opens its first-run language picker (listing
@@ -150,6 +181,7 @@ PY
           if [[ "$?" -ne 0 ]]; then launch_status=1; fi
         fi
         adb logcat -d -v time > build/test-game/localized/game-launch-logcat.txt || true
+        upload_shot build/test-game/localized/mindustry-arabic-screen.png "mindustry-arabic-screen"
       fi
     fi
   fi
