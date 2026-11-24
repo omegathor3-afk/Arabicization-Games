@@ -198,12 +198,20 @@ PY
             # has a chance to be visible in a capture.
             # The list is sorted by translation completion and Arabic's rank is
             # unknown, so capture every scroll position: one of them contains it.
+            # GitHub caps stored annotations at 10 per check run, so the swipe
+            # captures upload quietly and land in ONE combined notice.
+            swipe_links=""
             for swipe in 1 2 3 4 5 6 7 8 9 10 11 12; do
               adb shell input swipe 1170 800 1170 300 400 >/dev/null 2>&1 || true
               sleep 2
               adb exec-out screencap -p > "build/test-game/localized/unciv-language-list-${swipe}.png" || true
-              [[ -s "build/test-game/localized/unciv-language-list-${swipe}.png" ]] && upload_shot "build/test-game/localized/unciv-language-list-${swipe}.png" "unciv-language-list-${swipe}"
+              if [[ -s "build/test-game/localized/unciv-language-list-${swipe}.png" ]]; then
+                shot_out=$(upload_shot "build/test-game/localized/unciv-language-list-${swipe}.png" "unciv-language-list-${swipe}")
+                shot_url=$(echo "$shot_out" | grep -o 'https://[^ ]*' | head -1)
+                [[ -n "$shot_url" ]] && swipe_links="${swipe_links}list-${swipe}: ${shot_url} | "
+              fi
             done
+            echo "::notice::SCREENSHOTS unciv-language-list (12 swipes): ${swipe_links}"
           else
             echo "No Arabic text or Arabic language entry was visible in the accessibility hierarchy." >&2
             # Screenshots are private artifacts, so quote the visible screen
