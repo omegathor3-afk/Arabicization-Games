@@ -505,3 +505,26 @@ New agent run (fresh sandbox; toolchain re-provisioned; baseline suite green bef
   instead of base letters; fixed in 16bc286.
 - a623254 adds JVM coverage of the icon-font merge path (merge success with a
   synthetic fontello-family TTF; honest preservation fallback when no glyf).
+
+## 56. Dropped-alef fix: full shaper-emit coverage gate (c3999c1)
+- Parent review of the 16bc286 screenshot caught "لعربية" instead of "العربية":
+  the leading isolated alef vanished. Root cause was neither the shaper nor the
+  merge: Tajawal/Cairo/Almarai omit the ISOLATED presentation forms (U+FE8D,
+  U+FE87, ...) and libGDX's FreeType rasterizer silently drops missing glyphs.
+- ArabicShaper now exposes `emittedCodepoints` (every codepoint it can emit,
+  forms + lam-alef ligatures); FontSelector requires full coverage of it.
+  Amiri, Noto Naskh and Rooyin pass; modern sans styles fall back with an
+  honest reason. Golden tests pin the emitted forms for "العربية"/"الإعدادات".
+- Emulator-verified on c3999c1 CI: "العربية" and "الإعدادات" render complete
+  with the leading alef; font is now Amiri (naskh) for Mindustry.
+
+## 57. Gettext tier for Pixel Wheels (cda1394)
+- GettextPoLocalizer: ar.po translated from messages.pot with the Arabic
+  6-form plural header, Arabic Language + FontSet registered in languages.xml,
+  Arabic glyphs merged into copies of the referenced fonts (-Ar.ttf, originals
+  byte-identical), msgstr pre-shaped to presentation forms.
+- Verified against the real Pixel Wheels v26 APK (scratch run, deleted after):
+  188 msgids translated, 3 plural entries with all 6 forms, merged Xolonium
+  fonts cover the full shaper emit set (Amiri), Kwajong-Italic.otf (CFF/OTF)
+  honestly excluded. Not yet emulator-verified.
+
