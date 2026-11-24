@@ -50,11 +50,6 @@ jobs:
       disable-animations: true
       script: |
        bash .github/scripts/run-mindustry-slot.sh
-       slot_status=$?
-       bash .github/scripts/run-mindustry-real-translation.sh
-       real_status=$?
-       if [ "$slot_status" -ne 0 ]; then exit "$slot_status"; fi
-       exit "$real_status"
    - name: Upload Mindustry locale slot test reports
      if: always()
      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

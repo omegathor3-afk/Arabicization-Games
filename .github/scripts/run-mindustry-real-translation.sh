@@ -31,6 +31,9 @@ upload_shot() {
 
 mkdir -p build/test-game/localized/real
 
+# Standalone-capable: install the pinned game APK (no-op if already installed).
+adb install build/test-game/mindustry.apk || { note_failure "adb install of pinned Mindustry APK failed"; exit 1; }
+
 # The emulator should already be in ar-EG from the pseudo pass; if not (for
 # example when this script runs alone), switch and reboot exactly once.
 LOCALE_NOW="$(adb shell settings get system system_locales | tr -d '\r')"
@@ -52,7 +55,26 @@ gradle connectedDebugAndroidTest \
   --stacktrace
 test_status=$?
 if [[ "$test_status" -ne 0 ]]; then
-  note_failure "real-translation Mindustry test failed (exit $test_status): ML Kit model download or translation unavailable on this emulator"
+  details=$(python3 - <<'PYX'
+import glob
+import xml.etree.ElementTree as ET
+
+messages = []
+for path in sorted(glob.glob('app/build/outputs/androidTest-results/connected/**/*.xml', recursive=True)):
+    try:
+        root = ET.parse(path).getroot()
+    except Exception:
+        continue
+    for testcase in root.iter('testcase'):
+        failures = list(testcase.iter('failure')) + list(testcase.iter('error'))
+        for failure in failures:
+            text = ((failure.get('message') or '') + ' ' + (failure.text or '')).strip()
+            messages.append(f"{testcase.get('classname')}.{testcase.get('name')}: {text[:600]}")
+output = ' || '.join(messages)[:1800] or 'no failure details found in connected test result XML'
+print(output.replace('%', '%25').replace('\n', ' ').replace('\r', ' '))
+PYX
+)
+  note_failure "real-translation Mindustry test failed (exit $test_status): ML Kit model download or translation unavailable on this emulator :: ${details}"
   exit "$test_status"
 fi
 
