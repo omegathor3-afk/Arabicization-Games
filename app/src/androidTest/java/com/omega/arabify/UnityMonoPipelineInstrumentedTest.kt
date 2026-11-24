@@ -69,6 +69,13 @@ class UnityMonoPipelineInstrumentedTest {
                 out.write(bytes)
                 out.closeEntry()
             }
+            // apksig determines the APK minSdk from a binary AndroidManifest;
+            // borrow this app's real manifest so the fixture APK is signable.
+            val ownApk = File(context.packageManager.getApplicationInfo(context.packageName, 0).sourceDir)
+            val manifestBytes = ZipFile(ownApk).use { zip ->
+                zip.getInputStream(zip.getEntry("AndroidManifest.xml")).use { it.readBytes() }
+            }
+            add("AndroidManifest.xml", manifestBytes)
             add("classes.dex", byteArrayOf(100, 101, 120, 10))
             add("assets/bin/Data/Managed/Assembly-CSharp.dll", byteArrayOf(77, 90, 1, 2))
             add("assets/bin/Data/StreamingAssets/pack.unity3d", bundle)
