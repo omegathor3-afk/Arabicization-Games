@@ -122,6 +122,21 @@ private fun ArabifyApp(context: Context) {
    }
   }
  }
+ val saveZipLauncher=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { targetUri:Uri? ->
+  val source=generatedApk
+  if(targetUri!=null && source!=null) {
+   scope.launch {
+    try {
+     withContext(Dispatchers.IO) {
+      context.contentResolver.openOutputStream(targetUri,"wt")?.use { output ->
+       source.inputStream().use { input -> input.copyTo(output) }
+      } ?: kotlin.error("تعذر إنشاء ملف ZIP في المكان المحدد.")
+     }
+     exportError=null
+    } catch(e:Exception) { exportError=e.message ?: "تعذر حفظ ملف ZIP." }
+   }
+  }
+ }
  val saveLauncher=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/vnd.android.package-archive")) { targetUri:Uri? ->
   val source=generatedApk
   if(targetUri!=null && source!=null) {
@@ -204,7 +219,33 @@ private fun ArabifyApp(context: Context) {
     finally { localizeBusy=false }
    }
   } else {
-   if((selectedInstalledApp?.splitCount ?: 0)>0) { assetError="تعريب مجموعات Split وتصديرها غير مدعومين بعد؛ أوقفنا العملية بأمان."; return }
+   val splitApp=selectedInstalledApp?.takeIf { it.splitCount>0 }
+   if(splitApp!=null) {
+    assetBusy=true;assetError=null;assetReport=null;assetProgress=0 to 0
+    scope.launch {
+     try {
+      val report=withContext(Dispatchers.IO) {
+       val stamp=System.currentTimeMillis()
+       val workDir=File(context.cacheDir,"arabify-splitset-$stamp")
+       val inputs=listOf(File(splitApp.apkPath))+splitApp.splitApkPaths.map { File(it) }
+       val (setReport,signed)=SplitApkSetLocalizer.localizeAndSignSet(context,inputs,workDir,offlineTranslator) { done,total -> scope.launch { assetProgress=done to total } }
+       val zipOut=File(context.cacheDir,"arabify-splitset-$stamp.zip")
+       ApkBackupManager.createBackup(splitApp.packageName,splitApp.label,null,signed,zipOut)
+       AssetLocalizationReport(
+        splitApp.packageName,
+        setReport.members.sumOf { it.report.filesDiscovered },
+        setReport.members.sumOf { it.report.filesTranslated },
+        setReport.stringsTranslated,
+        setReport.stringsSkipped,
+        zipOut
+       )
+      }
+      assetReport=report;generatedApk=report.outputApk
+     } catch(e:Exception) { assetError=e.message ?: "تعذر تعريب مجموعة Split." }
+     finally { assetBusy=false }
+    }
+    return
+   }
    assetBusy=true;assetError=null;assetReport=null;assetProgress=0 to 0
    scope.launch {
     try {
@@ -333,7 +374,7 @@ private fun ArabifyApp(context: Context) {
         LinearProgressIndicator(progress={fraction.coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth())
         Text("فحص ملفات التثبيت: ${inspectionProgress.first} من ${inspectionProgress.second}",color=ArabifyPalette.info,fontSize=11.sp)
        }
-       Text("يتم فحص ملفات APK الأساسية وملفات Split الإضافية كلٌ على حدة. إعادة بناء وتوقيع مجموعة Split كحزمة قابلة للتثبيت ما زالت غير مفعّلة؛ لذلك يتوقف التصدير الآمن لهذه الألعاب بدل إنتاج تثبيت ناقص.",color=ArabifyPalette.warning,fontSize=11.sp)
+       Text("يتم فحص ملفات APK الأساسية وملفات Split الإضافية كلٌ على حدة. تعريب نصوص مجموعات Split متاح من مسار ملفات النصوص: تُعاد كتابة كل الملفات وتُوقَّع بمفتاح واحد وتُصدَّر كملف ZIP واحد يُثبَّت من قسم الاستعادة.",color=ArabifyPalette.warning,fontSize=11.sp)
       }
      }
     }
@@ -532,8 +573,8 @@ private fun ArabifyApp(context: Context) {
             finally { assetBusy=false }
            }
           }
-         },enabled=modelReady&&!assetBusy&&selectedUri!=null&&(selectedInstalledApp?.splitCount ?: 0)==0,modifier=Modifier.fillMaxWidth()) {
-          Text(if(assetBusy) "جارٍ تعريب ملفات النصوص..." else "تعريب ملفات النصوص وإنشاء APK")
+         },enabled=modelReady&&!assetBusy&&selectedUri!=null,modifier=Modifier.fillMaxWidth()) {
+          Text(if(assetBusy) "جارِ تعريب ملفات النصوص..." else if((selectedInstalledApp?.splitCount ?: 0)>0) "تعريب مجموعة Split وإنشاء ZIP" else "تعريب ملفات النصوص وإنشاء APK")
          }
          if(assetBusy) {
           val fraction=if(assetProgress.second>0) assetProgress.first.toFloat()/assetProgress.second.toFloat() else 0f
@@ -543,7 +584,12 @@ private fun ArabifyApp(context: Context) {
          assetReport?.let { report ->
           Text("الملفات: ${report.filesTranslated} / ${report.filesDiscovered} • النصوص المترجمة: ${report.stringsTranslated} • المتروكة: ${report.stringsSkipped}",color=ArabifyPalette.success,fontSize=13.sp)
           if((report.bundleStringsTranslated ?: 0) > 0) Text("منها داخل حزم UnityFS: ${report.bundleFilesTranslated} ملف نصي، ${report.bundleStringsTranslated} نصًا مترجمًا.",color=ArabifyPalette.success,fontSize=11.sp)
-          Button(onClick={saveLauncher.launch("arabify_assets_arabic.apk")},modifier=Modifier.fillMaxWidth()){Text("الخطوة الأخيرة: حفظ APK بعد التعريب")}
+          if(report.outputApk.extension=="zip") {
+           Button(onClick={saveZipLauncher.launch("arabify_splitset_arabic.zip")},modifier=Modifier.fillMaxWidth()){Text("الخطوة الأخيرة: حفظ ZIP مجموعة Split المعربة")}
+           Text("ثبّت المجموعة من قسم الاستعادة أدناه؛ سيُرسل كل ملفات APK إلى مُثبّت Android في جلسة واحدة.",color=ArabifyPalette.textSecondary,fontSize=11.sp)
+          } else {
+           Button(onClick={saveLauncher.launch("arabify_assets_arabic.apk")},modifier=Modifier.fillMaxWidth()){Text("الخطوة الأخيرة: حفظ APK بعد التعريب")}
+          }
          }
          assetError?.let{Text(it,color=ArabifyPalette.danger,fontSize=12.sp)}
         }
@@ -767,7 +813,7 @@ private fun inspectInstalledPackage(context:Context, app:InstalledApp,onProgress
  val allCandidates=scans.flatMap { scan -> scan.candidateFiles.map { "${scan.fileName}:$it" } }.distinct()
  val allSamples=scans.flatMap { it.extractedTextSamples }.take(100)
  val allNotes=scans.flatMap { it.notes }.distinct().toMutableList()
- allNotes += "تم فحص APK الأساسي و${scans.size-1} ملفات Split إضافية للقراءة فقط. لم يتم بعد إعادة بناء مجموعة Split وتوقيعها كحزمة واحدة؛ التصدير معطل لهذه الحالة."
+ allNotes += "تم فحص APK الأساسي و${scans.size-1} ملفات Split إضافية للقراءة فقط. تعريب نصوص المجموعة وتصديرها كملف ZIP موقّع متاح من مسار ملفات النصوص."
  return base.copy(
   fileName=app.label,
   fileSize=scans.sumOf { it.fileSize },

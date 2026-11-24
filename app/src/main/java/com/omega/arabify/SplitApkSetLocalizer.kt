@@ -1,6 +1,7 @@
 package com.omega.arabify
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import java.io.File
 
 /**
@@ -60,6 +61,34 @@ internal object SplitApkSetLocalizer {
             "لم يتم العثور على نصوص قابلة للترجمة في أي ملف من مجموعة Split."
         }
         return SetReport(members)
+    }
+
+    /**
+     * Device-side orchestration: rebuild the whole set tolerantly, then sign
+     * every member with the persisted app key. extractNativeLibs is resolved
+     * per member from PackageManager; an unreadable member falls back to the
+     * safe default (false), which makes the rebuild refuse lib-carrying APKs
+     * instead of risking a broken install.
+     */
+    suspend fun localizeAndSignSet(
+        context: Context,
+        inputApks: List<File>,
+        workDir: File,
+        translator: OfflineArabicTranslator,
+        onProgress: (Int, Int) -> Unit = { _, _ -> }
+    ): Pair<SetReport, List<File>> {
+        val resolver: (File) -> Boolean = { apk ->
+            val info = try {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageArchiveInfo(apk.absolutePath, 0)
+            } catch (_: Exception) { null }
+            info?.applicationInfo?.let { it.flags and ApplicationInfo.FLAG_EXTRACT_NATIVE_LIBS != 0 } ?: false
+        }
+        val setReport = localizeSet(
+            inputApks, File(workDir, "unsigned"), resolver, onProgress
+        ) { value -> translator.translateEnglishToArabic(value) }
+        val signed = signSet(context, setReport, File(workDir, "signed"))
+        return setReport to signed
     }
 
     /**
