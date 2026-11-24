@@ -279,10 +279,11 @@ internal object GettextPoLocalizer {
     }
 
     private suspend fun translateValue(text: String, tx: suspend (String) -> String): String? {
-        val trimmed = text.trim()
-        if (trimmed.isEmpty()) return null
-        val result = tx(text)
-        return if (result.isBlank()) null else result
+        if (text.isBlank()) return null
+        // Keep gettext on the same reviewed path as loose assets: exact glossary,
+        // placeholder/tag protection, and the conservative Arabic quality gate.
+        val result = AssetTextTransformer.transformValue(text, tx)
+        return result.text.takeIf { result.translated && it.isNotBlank() }
     }
 
     private fun buildArPo(
