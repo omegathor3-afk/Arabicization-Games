@@ -207,7 +207,13 @@ capture_screen() {
   local fg
   fg="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'topResumedActivity|mResumedActivity' | tail -n 1 | tr -d '\r')"
   if [[ "$fg" != *"io.anuke.mindustry"* ]]; then
-    note_failure "Mindustry left the foreground during the in-game tour before ${name}"
+    # Capture what IS on screen (crash dialog? launcher?) plus a logcat tail
+    # so a tour failure says whether the game crashed or the tap missed.
+    adb exec-out screencap -p > "build/test-game/localized/real/mindustry-tour-${name}-FAILSTATE.png" 2>/dev/null || true
+    [[ -s "build/test-game/localized/real/mindustry-tour-${name}-FAILSTATE.png" ]] && upload_shot "build/test-game/localized/real/mindustry-tour-${name}-FAILSTATE.png" "mindustry-tour-${name}-FAILSTATE"
+    local crash_tail
+    crash_tail=$(adb logcat -d -b crash -v time 2>/dev/null | tail -12 | cut -c1-180 | tr '\n' '|' | cut -c1-1500)
+    note_failure "Mindustry left the foreground during the in-game tour before ${name} (foreground=${fg}) :: crash log: ${crash_tail:-none}"
     tour_status=1
     return 1
   fi
