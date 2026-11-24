@@ -528,3 +528,14 @@ New agent run (fresh sandbox; toolchain re-provisioned; baseline suite green bef
   fonts cover the full shaper emit set (Amiri), Kwajong-Italic.otf (CFF/OTF)
   honestly excluded. Not yet emulator-verified.
 
+
+## 58. Real-translation CI pass for Mindustry (pending hash)
+- MindustryLocaleSlotInstrumentedTest gains instrumentation arg
+  "translationMode": "pseudo" (default, deterministic mechanics) or "real"
+  (production OfflineArabicTranslator / ML Kit English-Arabic on the emulator).
+- Real mode writes the translated menu labels (key | english => arabic, logical
+  order) into mindustry-report-real.txt; the new CI script surfaces them as
+  ::notice:: annotations and publishes a mindustry-real-translation-screen
+  screenshot after the same foreground verification as the pseudo pass.
+- Motivation: the user asked whether the on-screen Arabic is the correct
+  translation; pseudo text could never answer that.
