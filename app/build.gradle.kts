@@ -22,6 +22,13 @@ android {
  }
  kotlinOptions { jvmTarget = "17" }
  buildFeatures { compose = true }
+ sourceSets {
+  // Share the real-format Unity fixture builders between the JVM suite and
+  // the instrumented tests so the on-device Unity Mono pipeline test builds
+  // the same UnityPy-validated fixtures. Not shipped in the app.
+  getByName("test") { java.srcDir("src/sharedTestFixtures/java") }
+  getByName("androidTest") { java.srcDir("src/sharedTestFixtures/java") }
+ }
 }
 dependencies {
  implementation(platform("androidx.compose:compose-bom:2025.10.01"))
