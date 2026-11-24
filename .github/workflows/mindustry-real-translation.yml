@@ -5,6 +5,7 @@ on:
   paths:
    - "app/src/androidTest/java/com/omega/arabify/MindustryLocaleSlotInstrumentedTest.kt"
    - "app/src/main/java/com/omega/arabify/OfflineArabicTranslator.kt"
+   - "app/src/main/java/com/omega/arabify/AndroidResourceLocalizer.kt"
    - ".github/scripts/run-mindustry-real-translation.sh"
    - ".github/workflows/mindustry-real-translation.yml"
  workflow_dispatch:
