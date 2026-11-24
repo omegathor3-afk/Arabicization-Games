@@ -18,17 +18,15 @@ note_failure() {
 # GitHub artifact access. Only game/app screens are uploaded - no user data.
 upload_shot() {
   local file="$1" label="$2"
-  [[ -s "$file" ]] || return 0
-  local url
-  url=$(curl --fail --silent --show-error --max-time 150 -F "file=@${file}" https://0x0.st 2>/dev/null || true)
-  if [[ -z "$url" ]]; then
-    url=$(curl --fail --silent --show-error --max-time 150 --upload-file "$file" "https://transfer.sh/${label}.png" 2>/dev/null || true)
+  if [[ ! -s "$file" ]]; then
+    echo "::notice::SCREENSHOT ${label}: no file captured"
+    return 0
   fi
-  if [[ -n "$url" ]]; then
-    echo "::notice::SCREENSHOT ${label}: ${url}"
-  else
-    echo "::notice::SCREENSHOT ${label}: upload failed"
-  fi
+  local url err=""
+  url=$(curl --fail --silent --show-error --max-time 150 -F "file=@${file}" https://0x0.st 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="0x0.st: $(echo "$url" | tail -c 200)"
+  url=$(curl --fail --silent --show-error --max-time 150 -F "reqtype=fileupload" -F "fileToUpload=@${file}" https://catbox.moe/user/api.php 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="${err} | catbox: $(echo "$url" | tail -c 200)"
+  url=$(curl --fail --silent --show-error --max-time 150 -F "file=@${file}" https://temp.sh/upload 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || err="${err} | temp.sh: $(echo "$url" | tail -c 200)"
+  echo "::notice::SCREENSHOT ${label}: upload failed :: ${err}"
 }
 
 run_connected_test() {
