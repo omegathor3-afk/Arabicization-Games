@@ -16,7 +16,7 @@ internal object PlaceholderProtector {
     // Preserve common Java/C-style format strings (including width/precision),
     // literal percent escapes, named game tokens, markup tags and escaped newlines.
     private val tokenPattern = Regex(
-        "%(?:[0-9]+\\$)?[-#+0,(<]*[0-9]*(?:\\.[0-9]+)?(?:[bBhHsScCdioxXuUeEfgGaApP]|[tT][a-zA-Z])|%%|%n|\\$\\{[^}]+\\}|\\{[^{}]+\\}|<[^>]+>|\\\\[nt]"
+        "%(?:[0-9]+\\$)?[-#+0,(<]*[0-9]*(?:\\.[0-9]+)?(?:[bBhHsScCdioxXuUeEfgGaApP]|[tT][a-zA-Z])|%%|%n|\\$\\{[^}]+\\}|\\{[^{}]+\\}|<[^>]+>|\\[[^\\]\\[\\n]{0,64}\\]|\\\\[nt]"
     )
 
     fun protect(source: String): ProtectedText {

@@ -12,6 +12,13 @@ class PlaceholderProtectorTest {
   assertEquals(source, PlaceholderProtector.restore(protected.text, protected))
   assertEquals(6, protected.tokens.size)
  }
+ @Test fun protectsSquareBracketMarkup() {
+  val source = "[red]Warning:[] core [#ff8800]under attack[] {0}"
+  val protected = PlaceholderProtector.protect(source)
+  assertEquals(source, PlaceholderProtector.restore(protected.text, protected))
+  assertEquals(5, protected.tokens.size)
+  assertFalse(protected.text.contains("[red]"))
+ }
  @Test fun leavesNormalTextAlone() {
   val source = "Welcome to the island"
   val protected = PlaceholderProtector.protect(source)
