@@ -120,7 +120,7 @@ if [[ -s build/test-game/localized/real/mindustry-report-real.txt ]]; then
 from pathlib import Path
 
 lines = Path("build/test-game/localized/real/mindustry-report-real.txt").read_text(encoding="utf-8").splitlines()
-counts = [l for l in lines if l.startswith(("translatedStrings=", "skippedStrings=", "skipReasons="))]
+counts = [l for l in lines if l.startswith(("translatedStrings=", "skippedStrings=", "skipReasons=", "repairedStrings=", "repairReasons="))]
 try:
     start = lines.index("menuTranslations:") + 1
 except ValueError:

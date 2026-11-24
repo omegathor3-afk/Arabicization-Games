@@ -191,6 +191,9 @@ class MindustryLocaleSlotInstrumentedTest {
                         "skippedStrings=${report.stringsSkipped}\n" +
                         "skipReasons=" + report.skipReasons.entries.sortedByDescending { it.value }
                             .joinToString(", ") { (reason, count) -> "$reason:$count" } + "\n" +
+                        "repairedStrings=${report.stringsRepaired}\n" +
+                        "repairReasons=" + report.repairReasons.entries.sortedByDescending { it.value }
+                            .joinToString(", ") { (reason, count) -> "$reason:$count" } + "\n" +
                         "fontReplaced=${report.fontReplaced}\n" +
                         "fontReason=${report.fontReason}\n" +
                         "signatureVerified=${verification.isVerified}\n" +

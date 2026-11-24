@@ -44,7 +44,9 @@ internal object LocaleSlotLocalizer {
         val outputApk: File,
         val fontReplaced: String? = null,
         val fontReason: String? = null,
-        val skipReasons: Map<String, Int> = emptyMap()
+        val skipReasons: Map<String, Int> = emptyMap(),
+        val stringsRepaired: Int = 0,
+        val repairReasons: Map<String, Int> = emptyMap()
     )
 
     private val mainFontPattern = Regex("(^|/)fonts/font\\.(woff|ttf|otf)$")
@@ -210,7 +212,7 @@ internal object LocaleSlotLocalizer {
                 out.write(slotBytes)
                 out.closeEntry()
             }
-            return SlotReport(base, slotPath, result.translated, result.skipped, outputApk, fontEntryName, fontReason, result.skipReasons)
+            return SlotReport(base, slotPath, result.translated, result.skipped, outputApk, fontEntryName, fontReason, result.skipReasons, result.repaired, result.repairReasons)
         }
     }
 
@@ -262,9 +264,14 @@ internal object LocaleSlotLocalizer {
         val output = mutableListOf<String>()
         var translated = 0
         var skipped = 0
+        var repaired = 0
         val skipReasons = mutableMapOf<String, Int>()
+        val repairReasons = mutableMapOf<String, Int>()
         fun countSkip(reason: String) {
             skipReasons[reason] = (skipReasons[reason] ?: 0) + 1
+        }
+        fun countRepair(reason: String) {
+            repairReasons[reason] = (repairReasons[reason] ?: 0) + 1
         }
         for (line in source.split("\n")) {
             val trimmed = line.trim()
@@ -290,6 +297,7 @@ internal object LocaleSlotLocalizer {
             val result = AssetTextTransformer.transformValue(sourceText, tx)
             if (result.translated) {
                 translated++
+                result.repair?.let { repaired++; countRepair(it) }
                 output += "$key = ${result.text}"
             } else {
                 skipped++
@@ -297,6 +305,6 @@ internal object LocaleSlotLocalizer {
                 output += if (value.isEmpty()) "$key = " else line
             }
         }
-        return AssetTextTransformer.Result(output.joinToString("\n"), translated, skipped, skipReasons)
+        return AssetTextTransformer.Result(output.joinToString("\n"), translated, skipped, skipReasons, repaired, repairReasons)
     }
 }

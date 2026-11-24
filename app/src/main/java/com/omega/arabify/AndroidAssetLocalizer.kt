@@ -22,13 +22,48 @@ internal data class AssetLocalizationReport(
 )
 
 internal object AssetTextTransformer {
- data class Result(val text:String,val translated:Int,val skipped:Int,val skipReasons:Map<String,Int> = emptyMap())
+ data class Result(val text:String,val translated:Int,val skipped:Int,val skipReasons:Map<String,Int> = emptyMap(),val repaired:Int = 0,val repairReasons:Map<String,Int> = emptyMap())
 
  suspend fun transform(
   path:String,
   source:String,
   translate:suspend (String)->String
  ):Result = transform(path,source,Int.MAX_VALUE,translate)
+
+  // ML Kit tends to lowercase the marker or inject spaces inside it; map any
+  // marker-shaped remnant back to the exact marker the gate expects.
+  val mangledMarkerPattern=Regex("(?i)_+\\s*arabify\\s*_?\\s*token\\s*_?\\s*(\\d+)\\s*_+")
+  fun recoverMangledMarkers(translated:String,protected:ProtectedText):String {
+   var out=translated
+   for(match in mangledMarkerPattern.findAll(translated)){
+    val index=match.groupValues[1].toIntOrNull() ?: continue
+    val marker=protected.markers.getOrNull(index) ?: continue
+    out=out.replace(match.value,marker)
+   }
+   return out
+  }
+
+  // Translate the marker-free segments one by one and reassemble with the
+  // markers in their original order. Returns null when a segment fails.
+  suspend fun translateSegmented(protected:ProtectedText,translate:suspend (String)->String):String? {
+   var remaining=protected.text
+   val parts=mutableListOf<String>()
+   for(marker in protected.markers){
+    val at=remaining.indexOf(marker)
+    if(at<0) return null
+    parts+=remaining.substring(0,at)
+    remaining=remaining.substring(at+marker.length)
+   }
+   parts+=remaining
+   val out=StringBuilder()
+   for(i in parts.indices){
+    val segment=parts[i]
+    val translated=if(segment.isBlank()) segment else try{translate(segment)}catch(cancelled:CancellationException){throw cancelled}catch(_:Exception){return null}
+    out.append(translated)
+    if(i<protected.markers.size) out.append(protected.markers[i])
+   }
+   return out.toString()
+  }
 
  /**
   * Translate a single value through the standard pipeline (translatability
@@ -49,18 +84,34 @@ internal object AssetTextTransformer {
   }
   val protected=PlaceholderProtector.protect(value)
   return try {
-   val result=translate(protected.text)
-   val quality=TranslationQualityGate.review(value,result,protected.markers)
+   var result=translate(protected.text)
+   var quality=TranslationQualityGate.review(value,result,protected.markers)
+   var repair:String?=null
+   if(!quality.accepted && quality.reason=="placeholder_lost" && protected.markers.isNotEmpty()){
+    val recovered=recoverMangledMarkers(result,protected)
+    if(recovered!=result){
+     result=recovered
+     quality=TranslationQualityGate.review(value,result,protected.markers)
+     if(quality.accepted)repair="marker_recovered"
+    }
+   }
+   if(!quality.accepted && (quality.reason=="placeholder_lost" || quality.reason=="placeholder_order_changed") && protected.markers.isNotEmpty()){
+    val rebuilt=translateSegmented(protected,translate)
+    if(rebuilt!=null){
+     val reQuality=TranslationQualityGate.review(value,rebuilt,protected.markers)
+     if(reQuality.accepted){result=rebuilt;quality=reQuality;repair="segmented_placeholders"}
+    }
+   }
    if(!quality.accepted)SingleResult(value,false,"quality_gate:"+quality.reason)
    else {
     val restored=PlaceholderProtector.restore(result,protected)
-    if(restored.isBlank())SingleResult(value,false,"blank_after_restore")else SingleResult(restored,true)
+    if(restored.isBlank())SingleResult(value,false,"blank_after_restore")else SingleResult(restored,true,null,repair)
    }
   }catch(cancelled:CancellationException){throw cancelled}
   catch(_:Exception){SingleResult(value,false,"translator_error")}
  }
 
- data class SingleResult(val text:String,val translated:Boolean,val reason:String? = null)
+ data class SingleResult(val text:String,val translated:Boolean,val reason:String? = null,val repair:String? = null)
 
  suspend fun transform(
   path:String,
@@ -72,8 +123,11 @@ internal object AssetTextTransformer {
   var translated=0
   var skipped=0
   var translationCandidates=0
+  var repaired=0
   val skipReasons=mutableMapOf<String,Int>()
+  val repairReasons=mutableMapOf<String,Int>()
   fun countSkip(reason:String){skipReasons[reason]=(skipReasons[reason] ?: 0)+1}
+  fun countRepair(reason:String){repairReasons[reason]=(repairReasons[reason] ?: 0)+1}
   suspend fun tx(value:String):String {
    if(!looksTranslatable(value)){skipped++;countSkip("not_translatable");return value}
    val glossaryHit=ArabicUiGlossary.translateExact(value)
@@ -87,9 +141,27 @@ internal object AssetTextTransformer {
    translationCandidates++
    val protected=PlaceholderProtector.protect(value)
    return try {
-    val result=translate(protected.text)
+    var result=translate(protected.text)
     val expectedTokens=protected.markers
-    val quality=TranslationQualityGate.review(value,result,expectedTokens)
+    var quality=TranslationQualityGate.review(value,result,expectedTokens)
+    // Repair instead of reject, tier 1: ML Kit often mangles the marker text
+    // itself (lowercases it or inserts spaces). Recover mangled markers in
+    // place before giving up on the translation.
+    if(!quality.accepted && quality.reason=="placeholder_lost" && expectedTokens.isNotEmpty()){
+     val recovered=recoverMangledMarkers(result,protected)
+     if(recovered!=result){result=recovered;quality=TranslationQualityGate.review(value,result,expectedTokens)}
+     if(quality.accepted){repaired++;countRepair("marker_recovered")}
+    }
+    // Tier 2: split the protected text at the markers, translate each segment
+    // on its own, and reassemble with the markers back in their original
+    // positions - placeholder preservation by construction.
+    if(!quality.accepted && (quality.reason=="placeholder_lost" || quality.reason=="placeholder_order_changed") && expectedTokens.isNotEmpty()){
+     val rebuilt=translateSegmented(protected,translate)
+     if(rebuilt!=null){
+      val reQuality=TranslationQualityGate.review(value,rebuilt,expectedTokens)
+      if(reQuality.accepted){result=rebuilt;quality=reQuality;repaired++;countRepair("segmented_placeholders")}
+     }
+    }
     if(!quality.accepted){skipped++;countSkip("quality_gate:"+quality.reason);value}
     else {
      val restored=PlaceholderProtector.restore(result,protected)
@@ -107,7 +179,7 @@ internal object AssetTextTransformer {
      root.startsWith("[") -> transformArray(JSONArray(root),::tx).toString(2)
      else -> source.also{skipped++;countSkip("unsupported_json_root")}
     }
-    Result(output,translated,skipped,skipReasons)
+    Result(output,translated,skipped,skipReasons,repaired,repairReasons)
    }catch(cancelled:CancellationException){throw cancelled}
    catch(_:Exception){Result(source,0,1,mapOf("unparseable" to 1))}
    "properties" -> {
@@ -125,11 +197,11 @@ internal object AssetTextTransformer {
       }
      }
     }
-    Result(output.joinToString("\n"),translated,skipped,skipReasons)
+    Result(output.joinToString("\n"),translated,skipped,skipReasons,repaired,repairReasons)
    }
    "csv" -> {
     val output=transformCsv(source,::tx){skipped++;countSkip("csv_structure")}
-    Result(output,translated,skipped,skipReasons)
+    Result(output,translated,skipped,skipReasons,repaired,repairReasons)
    }
    "strings" -> {
     val pattern=Regex("^(\\s*\"(?:\\\\.|[^\"])*\"\\s*=\\s*\")(.*?)(\"\\s*;\\s*)$")
@@ -139,14 +211,14 @@ internal object AssetTextTransformer {
      if(match==null){if(line.trim().isNotEmpty()&&!line.trim().startsWith("//")){skipped++;countSkip("malformed_line")};output+=line}
      else output+=match.groupValues[1]+tx(match.groupValues[2])+match.groupValues[3]
     }
-    Result(output.joinToString("\n"),translated,skipped,skipReasons)
+    Result(output.joinToString("\n"),translated,skipped,skipReasons,repaired,repairReasons)
    }
    "txt" -> {
     val output=mutableListOf<String>()
     for(line in source.split("\n")) {
      output+=if(line.isBlank()||line.trimStart().startsWith("#"))line else tx(line)
     }
-    Result(output.joinToString("\n"),translated,skipped,skipReasons)
+    Result(output.joinToString("\n"),translated,skipped,skipReasons,repaired,repairReasons)
    }
    else -> Result(source,0,1,mapOf("unsupported_extension" to 1))
   }

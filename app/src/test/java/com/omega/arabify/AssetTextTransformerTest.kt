@@ -42,9 +42,21 @@ class AssetTextTransformerTest {
   assertEquals(1,result.translated)
  }
 
- @Test fun lostPlaceholderRejectsTranslation()=runBlocking {
+ @Test fun lostPlaceholderIsRepairedBySegmentedTranslation()=runBlocking {
+  // The translator drops the marker on the whole string; the repair tier
+  // translates the marker-free segments and reassembles with the placeholder
+  // back in place instead of rejecting.
   val source="Hello {player}"
   val result=AssetTextTransformer.transform("assets/dialogue.txt",source){"مرحبا"}
+  assertEquals("مرحبا{player}",result.text)
+  assertEquals(1,result.translated)
+  assertEquals(0,result.skipped)
+  assertEquals(1,result.repaired)
+ }
+
+ @Test fun englishOnlyTranslationStillRejectedEvenAfterRepair()=runBlocking {
+  val source="Hello {player}"
+  val result=AssetTextTransformer.transform("assets/dialogue.txt",source){ "Hello there friend" }
   assertEquals(source,result.text)
   assertEquals(0,result.translated)
   assertEquals(1,result.skipped)
@@ -130,3 +142,36 @@ class AssetTextTransformerTest {
  }
 
 }
+
+ @Test fun mangledMarkerIsRecoveredInsteadOfRejected()=runBlocking {
+  val source="wave=Wave {0} incoming"
+  val result=AssetTextTransformer.transform("assets/bundle.properties",source){
+   "الموجة __arabify_token_0__ قادمة"
+  }
+  assertTrue(result.text.contains("الموجة {0} قادمة"))
+  assertEquals(1,result.translated)
+  assertEquals(0,result.skipped)
+  assertEquals(1,result.repaired)
+  assertEquals(1,result.repairReasons["marker_recovered"])
+ }
+
+ @Test fun droppedMarkerIsRepairedBySegmentedTranslation()=runBlocking {
+  val source="wave=Wave {0} incoming now"
+  val result=AssetTextTransformer.transform("assets/bundle.properties",source){ text ->
+   if(text.contains("__ARABIFY_TOKEN_")) "ترجمة كاملة بدون العلامة" else "جزء:$text"
+  }
+  assertTrue(result.text.contains("{0}"))
+  assertEquals(1,result.translated)
+  assertEquals(0,result.skipped)
+  assertEquals(1,result.repaired)
+  assertEquals(1,result.repairReasons["segmented_placeholders"])
+ }
+
+ @Test fun transformValueReportsRepair()=runBlocking {
+  val result=AssetTextTransformer.transformValue("Wave {0} incoming"){ text ->
+   if(text.contains("__ARABIFY_TOKEN_")) "ترجمة بدون علامة" else "جزء:$text"
+  }
+  assertTrue(result.translated)
+  assertEquals("segmented_placeholders",result.repair)
+  assertTrue(result.text.contains("{0}"))
+ }
