@@ -7,6 +7,10 @@ Every row names its verification level. Levels, strongest first:
   verified on screen or in the built artifact.
 - **FIXTURE**: verified against real engine files (Unity's own
   UnityDataTools fixtures, UnityPy oracle) in JVM tests, not on a device.
+- **DEVICE-FIXTURE**: Android emulator executes the production localization
+  path against a synthetic but real-format engine APK, signs the output and
+  reads translated data back after network isolation. This is not a real
+  game-player install/launch or visual rendering proof.
 - **DESIGNED**: researched approach, not implemented.
 - **UNSUPPORTED**: not implemented and not claimed.
 - **BLOCKED**: the game resists modification (anti-tamper, signature
@@ -16,8 +20,8 @@ Every row names its verification level. Levels, strongest first:
 | --- | --- | --- | --- |
 | Android resources (values/strings.xml) | Inject values-ar + sign | EMULATOR | RealGameLocalizationInstrumentedTest on real Minesweeper APK: localize, sign, install, reboot to ar-EG, launch, Arabic verified. CI run 45294493537 green. |
 | Loose text assets (JSON/CSV/TXT/Properties/Strings in assets/, res/raw/, localization/, strings/) | Translate in place, rebuild APK, sign | FIXTURE + EMULATOR (resource path); asset path JVM-verified | AndroidAssetLocalizer tests; used by UnityMonoLocalizer stage 2 |
-| Unity Mono - loose StreamingAssets text | Same asset path | FIXTURE | JVM + CI unit tests |
-| Unity Mono - TextAssets inside UnityFS bundles | Decode bundle, patch SerializedFile, rewrite container, rebuild APK, sign | FIXTURE (UnityDataTools real fixtures + UnityPy 1.25.4 oracle, incl. real 2021.3 LZMA bundle round-trip) | UnityApkBundleLocalizer tests; 38f80c3 wiring |
+| Unity Mono - loose StreamingAssets text | Same asset path | FIXTURE + DEVICE-FIXTURE | Android 15 instrumentation runs the production UnityMonoLocalizer path after model download and with validated internet disabled; signed APK read-back contains Arabic. Synthetic APK; no Unity Player launch. Run 45362192860. |
+| Unity Mono - TextAssets inside UnityFS bundles | Decode bundle, patch SerializedFile, rewrite container, rebuild APK, sign | FIXTURE + DEVICE-FIXTURE | Android 15 instrumentation translated a TextAsset inside a synthetic UnityFS/SerializedFile APK after network isolation, signed it and read Arabic back through the strict parsers (2 bundled strings). Not a real Unity Player install/launch. Run 45362192860. |
 | Unity Mono - split APK sets (text assets) | Rebuild every member, one-key sign, ZIP export, session install | FIXTURE (JVM); device signing CI-emulator-covered only via existing paths | SplitApkSetLocalizerTest; 8c204af |
 | Unity IL2CPP - global-metadata string literals | Patch string literals in global-metadata.dat | DESIGNED (research next) | not implemented |
 | Unity IL2CPP - managed strings in blueprints | - | UNSUPPORTED | - |
@@ -30,11 +34,11 @@ Every row names its verification level. Levels, strongest first:
 | OpenTTD (native C++, F-Droid, GPLv2) | none needed | ALREADY-ARABIC | ships lang/arabic_egypt.lng inside nested data zip; game supports Arabic natively |
 | Revengate (Godot, F-Droid, GPL) | Godot i18n absent from project.godot; text hardcoded in scenes | UNSUPPORTED | only the dialogue addon has .po; main text needs .tscn/.gd literal rewriting - fragile tier not built |
 | Andor's Trail (native Android, F-Droid, GPL) | Android resources (671 own strings) | ALREADY-ARABIC | ships values-ar with 612 real Arabic strings; device run showed the app correctly respects them (existingArabic) and translated only the ~49 leftovers; story text in res/raw XML - future tier |
-| Mindustry (libGDX/Java, F-Droid, GPLv3) | libGDX bundle slot (bundle_ar.properties) | FONT-BLOCKED | slot injected and APK-verified on emulator (install, launch, key preservation); on-screen Arabic does not render - game font has no Arabic glyphs (labels showed only the digits of the pseudo strings); fix = font-injection tier (issue #5) |
+| Mindustry (libGDX/Java, F-Droid, GPLv3) | libGDX bundle slot (bundle_ar.properties) | FONT-BLOCKED | The main font reports family Fontello (icon font); replacing it with a text font is now refused to protect UI symbols. The previous 60-second foreground run exited before screenshot; no Arabic rendering proof. Safe icon/text font merging remains required. |
 | Game-native language tables (add "Arabic" slot) | Per-game format research | DESIGNED | - |
 | Universal fallback: screen OCR + translation overlay | On-device OCR + overlay, engine-agnostic | DESIGNED | large separate feature |
 | Games with anti-tamper/DRM/integrity locks | None - reported as blocked | BLOCKED (by policy) | - |
-| Arabic fonts when game fonts lack Arabic | Bundled OFL catalog (Amiri), per-role recommendation | FIXTURE (real TTF parses suitable) | da4fe7e; injection NOT implemented |
+| Arabic fonts when game fonts lack Arabic | Bundled OFL catalog (9 OFL candidates), bounded sfnt/WOFF1 analysis and style/weight scoring | FIXTURE (coverage/parser only) | Icon-font replacement is refused; no safe font merge or visually verified engine injection yet. |
 
 ## What is NOT claimed
 

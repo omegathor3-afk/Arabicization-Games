@@ -62,10 +62,18 @@ No silent fallback: when nothing matches well, the reason says so.
 
 ### 4. Application (v1: replace, not merge)
 
-Replace the game font asset with the chosen catalog font (full Latin+Arabic
-coverage in catalog fonts keeps Latin rendering). On-device sfnt merge
-(game Latin + catalog Arabic) is future work (needs a Kotlin font merger).
-Tradeoff recorded in the report: Latin glyph appearance changes.
+Replace the game font asset only when it is a text font and a compatible
+catalog candidate passes the hard coverage gate. Known icon-only families
+(Fontello, Font Awesome, Material Icons, IcoMoon, etc.) are preserved: their
+codepoints may be game UI symbols, so replacing them with a text font can
+silently corrupt the interface. The report must say that Arabic rendering
+remains unsupported for a preserved icon font until a safe merge/reference
+strategy exists.
+
+Pre-shape translated values only when a catalog font was actually injected.
+If the game's own font already covers Arabic, keep the original strings so
+the game's native shaping/bidi path is not double-applied. On-device sfnt
+merge (game Latin + catalog Arabic) remains future work.
 Mindustry note: FreeType sniffs font content, so a TTF replacing
 assets/fonts/font.woff still loads (verify on emulator).
 

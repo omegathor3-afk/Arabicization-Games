@@ -8,6 +8,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.android.apksig.ApkVerifier
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -21,8 +22,8 @@ import java.util.zip.ZipFile
  *
  * Translation uses a deterministic pseudo-Arabic stand-in so the test is
  * reproducible. This instrumentation test proves APK-level mechanics only:
- * locale-slot creation, byte-identical preservation of unrelated entries,
- * font replacement, and signature verification. It does not launch Mindustry
+ * locale-slot creation, byte-identical preservation of unrelated entries
+ * including the recognized icon font, and signature verification. It does not launch Mindustry
  * or prove that Arabic glyphs render on screen; the CI script separately
  * launches the exact output and only captures a screenshot while the game is
  * confirmed as the resumed foreground activity. Visual glyph verification
@@ -67,7 +68,8 @@ class MindustryLocaleSlotInstrumentedTest {
                     if (trimmed.length >= 3) "العربية ${trimmed.length}" else text
                 }
                 Log.i("MindustrySlot", "font=${report.fontReplaced} reason=${report.fontReason}")
-                assertEquals("Mindustry main font was not replaced", "assets/fonts/font.woff", report.fontReplaced)
+                assertNull("Mindustry's Fontello icon font must not be replaced by a text font", report.fontReplaced)
+                assertTrue("Icon-font preservation reason missing", report.fontReason?.contains("خط الأيقونات") == true)
                 Log.i("MindustrySlot", "slot=${report.addedEntry} translated=${report.stringsTranslated} skipped=${report.stringsSkipped}")
                 assertEquals("assets/bundles/bundle_ar.properties", report.addedEntry)
                 assertTrue("Too few Mindustry strings translated: ${report.stringsTranslated}", report.stringsTranslated > 1000)
@@ -87,7 +89,8 @@ class MindustryLocaleSlotInstrumentedTest {
                             }
                             .toSet()
                         assertEquals("Bundle keys were not preserved in the slot", bundleKeys(baseText), bundleKeys(slotText))
-                        assertTrue("Slot contains no Arabic text", slotText.any { it.code in 0xFE70..0xFEFF })
+                        assertTrue("Slot contains no Arabic text", slotText.any { it.code in 0x0621..0x064A })
+                        assertTrue("Icon font must not trigger presentation-form shaping", slotText.none { it.code in 0xFE70..0xFEFF })
                         val originalNames = original.entries().asSequence().map { it.name }.toList()
                         var compared = 0
                         for (name in originalNames) {

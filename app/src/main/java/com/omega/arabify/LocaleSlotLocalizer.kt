@@ -105,22 +105,37 @@ internal object LocaleSlotLocalizer {
             var fontEntryName: String? = null
             var fontBytes: ByteArray? = null
             var fontReason: String? = null
+            var shapeArabicSlot = false
             if (fonts != null && isGdx) {
                 val fe = candidates.firstOrNull { mainFontPattern.containsMatchIn(it) }
                 if (fe != null) {
                     val gameFont = zip.getInputStream(zip.getEntry(fe)).use {
                         BoundedArchiveInput.readAll(it, 16L * 1024L * 1024L)
                     }
-                    val profile = FontAnalyzer.analyze(gameFont)
-                    if (!profile.hasArabicCore) {
-                        val choice = FontSelector.select(profile) { f -> FontAnalyzer.analyze(fonts.fontBytes(f)) }
-                        fontEntryName = fe
-                        fontBytes = fonts.fontBytes(choice.font)
-                        fontReason = choice.reason
+                    val profile = try {
+                        FontAnalyzer.analyze(gameFont)
+                    } catch (error: FontAnalyzer.FontParseException) {
+                        fontReason = "تم الحفاظ على الخط الأصلي؛ تعذر فحصه بأمان (${error.message ?: "صيغة غير مدعومة"})."
+                        null
+                    }
+                    if (profile != null && !profile.hasArabicCore) {
+                        if (profile.isIconFont) {
+                            fontReason = "تم الحفاظ على خط الأيقونات الأصلي '${profile.familyName}'؛ استبداله بخط نصي قد يفسد رموز الواجهة. عرض العربية بهذا الخط غير مدعوم حتى الآن."
+                        } else {
+                            try {
+                                val choice = FontSelector.select(profile) { f -> FontAnalyzer.analyze(fonts.fontBytes(f)) }
+                                val replacement = fonts.fontBytes(choice.font)
+                                fontEntryName = fe
+                                fontBytes = replacement
+                                fontReason = choice.reason
+                                shapeArabicSlot = true
+                            } catch (error: Exception) {
+                                fontReason = "تم الحفاظ على الخط الأصلي؛ لم يتم اختيار بديل عربي آمن (${error.message ?: "سبب غير معروف"})."
+                            }
+                        }
                     }
                 }
             }
-            val shape = fonts != null && isGdx
             val tx = txIn
 
             val baseEntry = zip.getEntry(base)!!
@@ -136,7 +151,10 @@ internal object LocaleSlotLocalizer {
             } else {
                 AssetTextTransformer.transform(slotPath, source) { value -> tx(value) }
             }
-            val slotText = if (shape) shapeProperties(result.text) else result.text
+            // Presentation-form shaping is paired with the catalog font that was
+            // actually injected. Never shape when preserving the game's own font:
+            // it may already shape Arabic natively, or may be an icon font.
+            val slotText = if (shapeArabicSlot) shapeProperties(result.text) else result.text
             require(result.translated > 0) { "لم يتم العثور على نصوص قابلة للترجمة في حزمة اللغة." }
 
             outputApk.parentFile?.mkdirs()

@@ -51,6 +51,9 @@ internal object FontSelector {
         game: FontAnalyzer.FontProfile,
         coverage: (SelectableFont) -> FontAnalyzer.FontProfile,
     ): FontChoice {
+        require(!game.isIconFont) {
+            "Refusing to replace recognized icon font '${game.familyName}'; its glyphs may encode game UI symbols."
+        }
         val wanted = inferStyle(game)
         val scored = catalog.mapNotNull { f ->
             val p = coverage(f)

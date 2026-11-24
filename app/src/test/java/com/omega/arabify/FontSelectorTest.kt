@@ -39,4 +39,13 @@ class FontSelectorTest {
         val c = FontSelector.select(game("Mono", 400, mono = true), ::cov)
         assertTrue(c.reason.isNotBlank())
     }
+
+    @Test
+    fun refusesToReplaceRecognizedIconFonts() {
+        val failure = runCatching {
+            FontSelector.select(game("fontello", 400), ::cov)
+        }.exceptionOrNull()
+        assertTrue(failure is IllegalArgumentException)
+        assertTrue(failure?.message.orEmpty().contains("icon font"))
+    }
 }

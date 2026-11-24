@@ -143,7 +143,9 @@ if [[ -s "$GENERATED_APK" ]]; then
           game_pid="$(adb shell pidof io.anuke.mindustry 2>/dev/null | tr -d '\r')"
           if [[ -z "$game_pid" || "$foreground" != *"io.anuke.mindustry"* ]]; then
             launch_status=1
-            note_failure "Mindustry left the foreground before screenshot capture; pid=$game_pid foreground=$foreground"
+            adb logcat -d -v time > build/test-game/localized/game-exit-logcat.txt || true
+            logcat_tail="$(grep -iE 'mindustry|AndroidRuntime|FATAL|libc|ActivityTaskManager' build/test-game/localized/game-exit-logcat.txt | tail -40 | tr '\n' ' ' | cut -c1-1800)"
+            note_failure "Mindustry left the foreground before screenshot capture; pid=$game_pid foreground=$foreground :: logcat: ${logcat_tail:-unavailable}"
           else
             printf 'pid=%s\nforeground=%s\n' "$game_pid" "$foreground" > build/test-game/localized/game-process.txt
             echo "foreground_package=io.anuke.mindustry" > build/test-game/localized/ui-smoke-validation.txt
@@ -154,15 +156,15 @@ if [[ -s "$GENERATED_APK" ]]; then
             HIERARCHY_HOST_PATH="build/test-game/localized/mindustry-window.xml"
             adb shell uiautomator dump --compressed "$HIERARCHY_DEVICE_PATH" >/tmp/arabify-uiautomator-dump.log 2>&1 || true
             adb pull "$HIERARCHY_DEVICE_PATH" "$HIERARCHY_HOST_PATH" >/dev/null 2>&1 || true
-            adb exec-out screencap -p > build/test-game/localized/mindustry-arabic-screen.png || launch_status=$?
-            if [[ ! -s build/test-game/localized/mindustry-arabic-screen.png ]]; then
+            adb exec-out screencap -p > build/test-game/localized/mindustry-foreground-screen.png || launch_status=$?
+            if [[ ! -s build/test-game/localized/mindustry-foreground-screen.png ]]; then
               note_failure "localized Mindustry screenshot missing or empty after foreground verification"
               launch_status=1
             elif python3 - <<'PY'
 from pathlib import Path
 import struct
 
-path = Path("build/test-game/localized/mindustry-arabic-screen.png")
+path = Path("build/test-game/localized/mindustry-foreground-screen.png")
 data = path.read_bytes()
 if len(data) < 24 or data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
     raise SystemExit("Localized Mindustry screenshot is not a valid PNG.")
@@ -175,7 +177,7 @@ PY
               final_foreground="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'topResumedActivity|mResumedActivity' | tail -n 1 | tr -d '\r')"
               final_pid="$(adb shell pidof io.anuke.mindustry 2>/dev/null | tr -d '\r')"
               if [[ -n "$final_pid" && "$final_foreground" == *"io.anuke.mindustry"* ]]; then
-                upload_shot build/test-game/localized/mindustry-arabic-screen.png "mindustry-arabic-screen"
+                upload_shot build/test-game/localized/mindustry-foreground-screen.png "mindustry-foreground-screen"
               else
                 launch_status=1
                 note_failure "Mindustry exited or lost foreground during screenshot capture; refusing to publish non-game screenshot"

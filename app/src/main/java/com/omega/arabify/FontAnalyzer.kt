@@ -1,8 +1,22 @@
 package com.omega.arabify
 
 import java.io.ByteArrayOutputStream
+import java.util.Locale
 import java.util.zip.DataFormatException
 import java.util.zip.Inflater
+
+private val iconFontFamilyMarkers = listOf(
+    "fontello", "font awesome", "material icons", "material symbols", "icomoon",
+    "glyphicons", "wingdings", "webdings", "entypo", "ionicons", "octicons",
+    "segoe mdl2 assets", "segoe fluent icons"
+)
+
+private fun isKnownIconFontFamily(familyName: String): Boolean {
+    val normalized = familyName.lowercase(Locale.ROOT).replace(Regex("[_-]+"), " ").trim()
+    return iconFontFamilyMarkers.any { marker ->
+        normalized == marker || normalized.startsWith("$marker ") || normalized.contains(" $marker ")
+    }
+}
 
 /** Bounded pure-Kotlin reader for sfnt fonts (TTF/OTF) and WOFF1 containers. */
 object FontAnalyzer {
@@ -33,6 +47,8 @@ object FontAnalyzer {
         val pixelStyle: Boolean get() = bitmapStrikes ||
             familyName.contains("pixel", true) || familyName.contains("rooyin", true) ||
             familyName.contains("8bit", true)
+        /** Known icon-only families must never be replaced by a text font. */
+        val isIconFont: Boolean get() = isKnownIconFontFamily(familyName)
         fun supports(cp: Int): Boolean = ranges.any { cp in it }
     }
 
