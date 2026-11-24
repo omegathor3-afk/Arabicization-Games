@@ -208,6 +208,55 @@ class UnityAssetInventoryTest {
         }
     }
 
+    @Test fun integrityVerifierHonorsTheAllowedChangedAllowlist() {
+        val directory = createTempDir(prefix = "arabify-unity-allowlist-")
+        try {
+            fun write(file: File, bundleBytes: ByteArray, assetBytes: ByteArray) {
+                ZipOutputStream(file.outputStream()).use { zip ->
+                    zip.putNextEntry(ZipEntry("assets/bin/Data/StreamingAssets/pack.unity3d"))
+                    zip.write(bundleBytes)
+                    zip.closeEntry()
+                    zip.putNextEntry(ZipEntry("assets/bin/Data/resources.assets"))
+                    zip.write(assetBytes)
+                    zip.closeEntry()
+                }
+            }
+            val source = File(directory, "source.apk")
+            val output = File(directory, "output.apk")
+            write(source, byteArrayOf(1, 1, 1), byteArrayOf(2, 2, 2))
+            write(output, byteArrayOf(9, 9, 9), byteArrayOf(2, 2, 2))
+
+            // Without the allowlist the rewritten bundle is rejected.
+            var rejected = false
+            try {
+                UnityAssetIntegrityVerifier.verifyUnchanged(source, output)
+            } catch (_: IllegalArgumentException) {
+                rejected = true
+            }
+            assertTrue(rejected)
+
+            // With the bundle allowlisted, only resources.assets is checked.
+            val report = UnityAssetIntegrityVerifier.verifyUnchanged(
+                source, output, setOf("assets/bin/Data/StreamingAssets/pack.unity3d")
+            )
+            assertEquals(1, report.filesVerified)
+
+            // A change outside the allowlist is still rejected.
+            write(output, byteArrayOf(9, 9, 9), byteArrayOf(3, 3, 3))
+            var rejectedOutside = false
+            try {
+                UnityAssetIntegrityVerifier.verifyUnchanged(
+                    source, output, setOf("assets/bin/Data/StreamingAssets/pack.unity3d")
+                )
+            } catch (_: IllegalArgumentException) {
+                rejectedOutside = true
+            }
+            assertTrue(rejectedOutside)
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
     @Test fun inventoryUsesBoundedSerializedFileInspectorToReportObjectCount() {
         val directory = createTempDir(prefix = "arabify-unity-object-index-")
         try {

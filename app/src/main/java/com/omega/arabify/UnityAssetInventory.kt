@@ -419,7 +419,17 @@ internal data class UnityAssetIntegrityReport(
  * is modified by the current Mono pipeline.
  */
 internal object UnityAssetIntegrityVerifier {
-    fun verifyUnchanged(inputApk: File, outputApk: File): UnityAssetIntegrityReport {
+    /**
+     * [allowedChanged] names APK entries a verified upstream stage was allowed
+     * to rewrite (e.g. UnityFS bundles localized by the bundle stage, which
+     * re-verifies their content itself). Everything else protected must stay
+     * byte-identical.
+     */
+    fun verifyUnchanged(
+        inputApk: File,
+        outputApk: File,
+        allowedChanged: Set<String> = emptySet()
+    ): UnityAssetIntegrityReport {
         var checked = 0
         var bytes = 0L
         ZipFile(inputApk).use { source ->
@@ -427,7 +437,7 @@ internal object UnityAssetIntegrityVerifier {
                 val entries = source.entries()
                 while (entries.hasMoreElements()) {
                     val entry = entries.nextElement()
-                    if (entry.isDirectory || !isProtected(entry.name)) continue
+                    if (entry.isDirectory || !isProtected(entry.name) || entry.name in allowedChanged) continue
                     val outputEntry = output.getEntry(entry.name)
                         ?: error("Unity resource disappeared during APK rebuild: ${entry.name}")
                     val sourceDigest = source.getInputStream(entry).use(::sha256)

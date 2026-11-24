@@ -10,7 +10,8 @@ internal data class UnityApkBundleReport(
     val textAssetsTranslated: Int,
     val stringsTranslated: Int,
     val stringsSkipped: Int,
-    val outputApk: File
+    val outputApk: File,
+    val rewrittenEntryNames: Set<String> = emptySet()
 )
 
 /**
@@ -71,10 +72,10 @@ internal object UnityApkBundleLocalizer {
         var stringsTranslated = 0
         var stringsSkipped = 0
 
+        val replaced = HashMap<String, ByteArray>()
         ZipFile(inputApk).use { zip ->
             // Pass 1: find UnityFS bundle entries and localize each in the
             // working directory. Byte-identical entries stream through later.
-            val replaced = HashMap<String, ByteArray>()
             val entries = zip.entries()
             var scanned = 0
             while (entries.hasMoreElements()) {
@@ -154,8 +155,13 @@ internal object UnityApkBundleLocalizer {
             }
         }
 
+        // The rebuild must leave every protected Unity binary except the
+        // localized bundles byte-identical; the bundles themselves were
+        // verified by the chain that rewrote them.
+        UnityAssetIntegrityVerifier.verifyUnchanged(inputApk, outputApk, replaced.keys)
         return UnityApkBundleReport(
-            bundlesProcessed, textAssetsTranslated, stringsTranslated, stringsSkipped, outputApk
+            bundlesProcessed, textAssetsTranslated, stringsTranslated, stringsSkipped, outputApk,
+            replaced.keys.toSet()
         )
     }
 

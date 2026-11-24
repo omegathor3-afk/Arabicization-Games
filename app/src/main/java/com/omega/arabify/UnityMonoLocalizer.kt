@@ -126,7 +126,10 @@ internal object UnityMonoLocalizer {
         } else {
             report
         }
-        UnityAssetIntegrityVerifier.verifyUnchanged(inputApk, merged.outputApk)
+        // Stage 2 (loose text) must leave every protected Unity binary
+        // untouched; compare against the bundle stage's output when it ran,
+        // since that stage legitimately rewrote the localized bundles.
+        UnityAssetIntegrityVerifier.verifyUnchanged(looseInput, merged.outputApk)
         return merged
     }
 
