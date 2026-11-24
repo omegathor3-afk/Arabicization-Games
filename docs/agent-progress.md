@@ -590,3 +590,10 @@ New agent run (fresh sandbox; toolchain re-provisioned; baseline suite green bef
 - **Unciv per-swipe captures:** العربية sits near 47.6% sorted position and six blind swipes overshot it; the script now captures after each swipe (unciv-language-list-1..6).
 - **v2.1 home polish:** app-row اختيار buttons became quiet OutlinedButtons (accent fill + primary border only when selected).
 - Evidence: FAILSTATE screenshot (launcher after campaign tap) reported to the user; CI round on 3903a0b pending.
+
+## 62. skipReasons root cause found: Result constructor dropped the map (2026-11-24)
+
+- The empty skipReasons was NOT stale evidence (the 3903a0b run with the wipe still printed an empty map). Real cause: the properties/strings/txt branches of `AssetTextTransformer.transform` counted skips into the map but built `Result(output, translated, skipped)` without the 4th parameter, so `emptyMap()` reached the report. Fixed per branch (0f31fac); 328 unit tests green.
+- Unciv language picker sorts by translation completion descending: swipe 4 = 96-82%, swipe 6 = 56-42%. Arabic (fresh slot) sits below swipe 6, so captures raised from 6 to 12 swipes (1fe40c8).
+- Learned: the real-translation workflow ignores docs-only pushes.
+- Next: the 0f31fac run names the dominant skip rule behind the 656 Mindustry skips; that decides the P1 repair-instead-of-reject target.
