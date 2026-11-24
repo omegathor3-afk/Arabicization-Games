@@ -43,4 +43,13 @@ class PlaceholderProtectorTest {
   assertEquals(source, PlaceholderProtector.restore(protected.text, protected))
  }
 
+
+    @Test
+    fun protectsGettextPercentHashPlaceholder() {
+        val source = "Hit %# vehicles"
+        val protected = PlaceholderProtector.protect(source)
+        assertEquals(listOf("%#"), protected.tokens)
+        assertEquals(source, PlaceholderProtector.restore(protected.text, protected))
+    }
+
 }
