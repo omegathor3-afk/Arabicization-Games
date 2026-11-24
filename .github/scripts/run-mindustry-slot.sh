@@ -94,25 +94,31 @@ if [[ -s "$GENERATED_APK" ]]; then
         adb shell pidof io.anuke.mindustry > build/test-game/localized/game-process.txt || { launch_status=$?; note_failure "game process not running after launch (pidof empty)"; }
         HIERARCHY_DEVICE_PATH="/data/local/tmp/arabify-mindustry-window.xml"
         HIERARCHY_HOST_PATH="build/test-game/localized/mindustry-window.xml"
+        # Mindustry either opens its first-run language picker (listing
+        # العربية from the new bundle_ar) or boots its menu in Arabic. The
+        # game can take a while to build its first screen after install;
+        # poll the hierarchy for Arabic for up to 90 seconds instead of
+        # taking a single early snapshot.
         hierarchy_ready=0
-        for attempt in 1 2 3; do
+        arabic_found=0
+        for attempt in $(seq 1 18); do
           adb shell rm -f "$HIERARCHY_DEVICE_PATH" || true
           adb shell uiautomator dump --compressed "$HIERARCHY_DEVICE_PATH" >/tmp/arabify-uiautomator-dump.log 2>&1 || true
           if adb shell test -s "$HIERARCHY_DEVICE_PATH"; then
             if adb pull "$HIERARCHY_DEVICE_PATH" "$HIERARCHY_HOST_PATH" >/dev/null 2>&1 && [[ -s "$HIERARCHY_HOST_PATH" ]]; then
               hierarchy_ready=1
-              break
+              if grep -qP '[\x{0600}-\x{06FF}]' "$HIERARCHY_HOST_PATH"; then
+                arabic_found=1
+                break
+              fi
             fi
           fi
-          sleep 2
+          sleep 5
         done
         if [[ "$hierarchy_ready" -eq 1 ]]; then
-          # Mindustry either opens its first-run language picker (listing
-          # العربية from the new bundle_ar) or boots its menu in Arabic.
-          # Any Arabic script on screen proves the slot is active.
-          if ! grep -qP '[\x{0600}-\x{06FF}]' "$HIERARCHY_HOST_PATH"; then
-            echo "No Arabic text was visible in the accessibility hierarchy." >&2
-            note_failure "no Arabic text visible on the Mindustry screen after locale switch (hierarchy captured)"
+          if [[ "$arabic_found" -eq 0 ]]; then
+            echo "No Arabic text was visible in the accessibility hierarchy after 90s of polling." >&2
+            note_failure "no Arabic text visible on the Mindustry screen after 90s of hierarchy polling"
             launch_status=1
           else
             echo "Accessibility hierarchy captured; Arabic text is visible on the Mindustry screen." > build/test-game/localized/ui-smoke-validation.txt
