@@ -114,6 +114,12 @@ if [[ -s "$GENERATED_APK" ]]; then
         # Android shows a "Viewing full screen" confirmation over a fullscreen
         # game on first launch; it takes window focus and Mindustry stops. The
         # 11:29 failure frame proved it. Pre-confirm it before launching.
+        # Hypothesis from the game's last_log + logcat: right before Mindustry
+        # pauses and exits, Android logs "ApplicationInfo updating for
+        # io.anuke.mindustry" (post-install dexopt refreshing the package),
+        # and Mindustry quits on that. Finish the compile BEFORE launching.
+        adb shell cmd package compile -m speed -f io.anuke.mindustry > build/test-game/localized/dexopt.txt 2>&1 || true
+        sleep 5
         adb shell settings put secure immersive_mode_confirmations confirmed >/dev/null 2>&1 || true
         adb shell settings put global policy_control immersive.confirmations=confirmed >/dev/null 2>&1 || true
         for attempt in 1 2 3; do
