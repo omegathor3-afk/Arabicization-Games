@@ -136,7 +136,9 @@ if [[ -s "$GENERATED_APK" ]]; then
         else
           # A live process alone is insufficient: only capture evidence while
           # Android reports the game package as the resumed foreground app.
-          sleep 8
+          # The first captured frame (8s) was Mindustry's asset-loading screen,
+          # not the menu. Give the game time to reach its first interactive screen.
+          sleep 60
           foreground="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'topResumedActivity|mResumedActivity' | tail -n 1 | tr -d '\r')"
           game_pid="$(adb shell pidof io.anuke.mindustry 2>/dev/null | tr -d '\r')"
           if [[ -z "$game_pid" || "$foreground" != *"io.anuke.mindustry"* ]]; then
