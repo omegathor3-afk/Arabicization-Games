@@ -158,12 +158,16 @@ class MindustryLocaleSlotInstrumentedTest {
                     val base = ZipFile(installedGameApk).use { bundleValues(it, report.baseEntry) }
                     menuKeys.mapNotNull { key ->
                         base[key]?.let { english ->
-                            val arabic = try {
+                            // Report what the pipeline actually ships: the reviewed
+                            // glossary owns its terms, everything else is raw ML Kit.
+                            val reviewed = ArabicUiGlossary.translateExact(english)
+                            val arabic = reviewed ?: try {
                                 translator.translateEnglishToArabic(english)
                             } catch (error: Exception) {
                                 "<translation failed: ${error.message}>"
                             }
-                            "$key | $english => $arabic"
+                            val marker = if (reviewed != null) " [glossary]" else ""
+                            "$key | $english => $arabic$marker"
                         }
                     }
                 } else {
