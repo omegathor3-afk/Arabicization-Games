@@ -17,7 +17,7 @@ class UnityTextAssetBundleLocalizerTest {
     private fun buildGameBundle(dir: File): File {
         val serialized = UnityTestFixtures.serializedFileV17(
             listOf(
-                UnityTestFixtures.TextAssetSpec(1L, "menu.txt", "Start Game\nOptions"),
+                UnityTestFixtures.TextAssetSpec(1L, "menu.txt", "Start Game\nShop"),
                 UnityTestFixtures.TextAssetSpec(2L, "dialog.txt", "The gate is locked.")
             )
         )
@@ -36,7 +36,7 @@ class UnityTextAssetBundleLocalizerTest {
     private val fakeArabic: suspend (String) -> String = { text ->
         when (text) {
             "Start Game" -> "ابدأ اللعبة"
-            "Options" -> "الخيارات"
+            "Shop" -> "المتجر" // non-glossary: glossary hits bypass the callback
             "The gate is locked." -> "البوابة مقفلة."
             else -> error("unexpected text: $text")
         }
@@ -92,7 +92,7 @@ class UnityTextAssetBundleLocalizerTest {
             table.objects.single { it.pathId == 1L }
         )!!
         assertEquals("menu.txt", patched.name)
-        assertEquals("ابدأ اللعبة\nالخيارات", patched.script)
+        assertEquals("ابدأ اللعبة\nالمتجر", patched.script)
         // The sibling TextAsset in the same SerializedFile is preserved.
         val sibling = UnityTextAssetReader.read(
             cabFile, inspection.header, inspection.typeTable,

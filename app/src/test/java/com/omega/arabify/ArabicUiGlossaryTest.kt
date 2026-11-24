@@ -32,6 +32,12 @@ class ArabicUiGlossaryTest {
         // Real-translation CI evidence (bb58a25): ML Kit produced استقال for
         // Quit, الاعتمادات for Credits, تعديل for Mods, noun لعب for Play.
         assertEquals("خروج", ArabicUiGlossary.translateExact("Quit"))
+        // Same imperative class as quit: ML Kit is unreliable on standalone verbs.
+        assertEquals("خروج", ArabicUiGlossary.translateExact("Exit"))
+        assertEquals("خيارات", ArabicUiGlossary.translateExact("Options"))
+        assertEquals("حول", ArabicUiGlossary.translateExact("About"))
+        assertEquals("استئناف", ArabicUiGlossary.translateExact("Resume"))
+        assertEquals("إيقاف مؤقت", ArabicUiGlossary.translateExact("Pause"))
         assertEquals("العب", ArabicUiGlossary.translateExact("Play"))
         assertEquals("فريق العمل", ArabicUiGlossary.translateExact("Credits"))
         assertEquals("إضافات", ArabicUiGlossary.translateExact("Mods"))
