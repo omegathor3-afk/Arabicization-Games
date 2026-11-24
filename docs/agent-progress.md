@@ -555,3 +555,11 @@ New agent run (fresh sandbox; toolchain re-provisioned; baseline suite green bef
   dialog covered the game; immersive pre-confirm added (9b676fc).
 - GitHub unauthenticated API rate limit (60/hr) bit during CI polling; pace
   annotation reads.
+
+## 60. Gettext safety pipeline + exact-head CI coverage (42089a71)
+- `GettextPoLocalizer.translateValue` now routes every singular/plural value through `AssetTextTransformer.transformValue`, so gettext receives the same exact glossary, placeholder/tag protection, and conservative Arabic quality gate as loose assets. Rejected translations remain the original `msgid`.
+- `PlaceholderProtector` now recognizes Pixel Wheels' custom `%#` count token in addition to standard printf tokens.
+- Regression tests cover `Quit => خروج` from the reviewed glossary, rejection when a translator drops `%s`, preservation/restoration of `%#`, and absence of leaked internal markers.
+- Exact SHA `42089a71a43cec736e27ede1eaa260850b3a9068` CI: CodeQL push + PR passed; Andors Trail and Mindustry emulator jobs passed; Unciv stopped at dependency resolution because Maven Central returned HTTP 429 (26 dependency fetches); Firebase Test Lab jobs were skipped by their configured condition. The Android CI workflow did not appear in the seven runs attached to this SHA, so the Andors Trail workflow is being amended to execute the JVM unit suite as a reliable push-triggered gate.
+- Known product gap confirmed by current `MainActivity`: `LocaleSlotLocalizer` and `GettextPoLocalizer` are implemented/tested but are not yet selected from the Android UI flow. Wire the libGDX/Gettext strategies into the user-facing localization path before claiming those game families are supported in the app.
+- Backlog remains: update stale README claims against the current coverage matrix; run unit tests on the exact current SHA; finish real Unity SerializedFile/UnityFS write-back and validate it in a Unity Player; test Bergamot on ARM64 hardware before exposing it as a user translator.
