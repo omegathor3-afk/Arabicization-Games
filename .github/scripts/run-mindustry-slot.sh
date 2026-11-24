@@ -145,7 +145,9 @@ if [[ -s "$GENERATED_APK" ]]; then
             launch_status=1
             adb logcat -d -v time > build/test-game/localized/game-exit-logcat.txt || true
             adb logcat -d -b crash -v time >> build/test-game/localized/game-exit-logcat.txt 2>/dev/null || true
-            logcat_tail="$(grep -E 'FATAL EXCEPTION|Caused by|Fatal signal|SIGSEGV|SIGABRT|OutOfMemory|lowmemorykiller|Low on memory|am_kill|am_proc_died|am_crash|Process .*(io\.anuke|mindustry).* (has died|crash)|Force finishing activity io\.anuke|Scheduling restart of crashed|Gdx|FreeType|GL.*(error|fail)|EGL.*(error|fail)' build/test-game/localized/game-exit-logcat.txt | grep -v nativeloader | tail -20 | cut -c1-230 | tr '\n' '|' | cut -c1-2200)"
+            game_lines="$(grep -E 'io\.anuke|mindustry|Mindustry' build/test-game/localized/game-exit-logcat.txt | grep -v nativeloader | tail -18 | cut -c1-200 | tr '\n' '|')"
+            sys_lines="$(grep -E 'FATAL EXCEPTION IN SYSTEM PROCESS|lowmemorykiller|Low on memory|am_kill|am_proc_died|ANR in|has died|Killing [0-9]+:io' build/test-game/localized/game-exit-logcat.txt | tail -8 | cut -c1-200 | tr '\n' '|')"
+            logcat_tail="GAME[${game_lines}] SYSTEM[${sys_lines}]"
             note_failure "Mindustry left the foreground before screenshot capture; pid=$game_pid foreground=$foreground :: logcat: ${logcat_tail:-unavailable}"
           else
             printf 'pid=%s\nforeground=%s\n' "$game_pid" "$foreground" > build/test-game/localized/game-process.txt
