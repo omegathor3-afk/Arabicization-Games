@@ -47,6 +47,18 @@ jobs:
       echo "ARABIFY_UNITY_TEXTASSET_ORACLE=$GITHUB_WORKSPACE/build/unitypy/textasset-oracle.properties" >> "$GITHUB_ENV"
    - name: Unit tests
      run: gradle testDebugUnitTest
+   - name: Surface failing unit tests as annotations
+     if: failure()
+     run: |
+      python3 - <<'PY'
+      import glob, xml.etree.ElementTree as ET
+      for path in sorted(glob.glob('app/build/test-results/testDebugUnitTest/*.xml')):
+          tree = ET.parse(path)
+          for case in tree.getroot().iter('testcase'):
+              for bad in list(case.iter('failure')) + list(case.iter('error')):
+                  msg = (bad.get('message') or '').replace('\n', ' ')[:300]
+                  print(f"::notice::TEST-FAIL {case.get('classname')}.{case.get('name')}: {msg}")
+      PY
    - name: Upload unit test reports
      if: always()
      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
