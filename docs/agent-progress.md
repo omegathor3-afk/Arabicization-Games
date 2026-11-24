@@ -492,3 +492,16 @@ New agent run (fresh sandbox; toolchain re-provisioned; baseline suite green bef
 - Sandbox note: this agent's toolchain lives at /downloads/toolchain (jdk17,
   gradle-8.13, sdk). Push: pending a NEW deploy key (public key sent to main
   agent 4:11 PM; old agent's key stayed on its box).
+
+## 55. Mindustry Arabic ON SCREEN: FONT-BLOCKED -> EMULATOR (16bc286)
+- CI on 16bc286 fully green (8/8 workflows; the Andor's Trail failure on b97fed1 was a flake, green again).
+- The mindustry-foreground-screen screenshot (temp.sh annotation) shows the real
+  Mindustry main menu with CONNECTED right-to-left Arabic labels (shaped
+  pseudo-Arabic "العربية N" stand-ins) and every Fontello icon intact. The
+  glyph-merge (FontMerger, b97fed1) plus ArabicShaper pre-shaping rendered on
+  device. Caveats kept: pseudo-Arabic stand-in strings, approximated shaping.
+- On-device lesson: an earlier assertion ("slot contains Arabic base letters")
+  was wrong under shaping - shaped slots contain presentation forms (0xFExx)
+  instead of base letters; fixed in 16bc286.
+- a623254 adds JVM coverage of the icon-font merge path (merge success with a
+  synthetic fontello-family TTF; honest preservation fallback when no glyf).
