@@ -33,13 +33,20 @@ internal object LocaleSlotLocalizer {
     private val baseBundlePattern = Regex("(^|/)bundle\\.properties$")
     private val translationFolderPattern = Regex("(^|/)translations/English\\.properties$")
 
+    /** Supplies the bytes of a catalog font (app assets on device, files in tests). */
+    internal class FontInjection(val fontBytes: (SelectableFont) -> ByteArray)
+
     data class SlotReport(
         val baseEntry: String,
         val addedEntry: String,
         val stringsTranslated: Int,
         val stringsSkipped: Int,
-        val outputApk: File
+        val outputApk: File,
+        val fontReplaced: String? = null,
+        val fontReason: String? = null
     )
+
+    private val mainFontPattern = Regex("(^|/)fonts/font\\.(woff|ttf|otf)$")
 
     fun arabicSlotPathFor(basePath: String): String =
         if (translationFolderPattern.containsMatchIn(basePath)) {
@@ -52,6 +59,28 @@ internal object LocaleSlotLocalizer {
         inputApk: File,
         outputApk: File,
         tx: suspend (String) -> String
+    ): SlotReport = build(inputApk, outputApk, null, tx)
+
+    /**
+     * Same slot, plus the automatic font tier for libGDX bundles: when the
+     * game's main font (fonts/font.*) cannot render Arabic, FontSelector picks
+     * a catalog font and it replaces that asset; slot values are pre-shaped to
+     * visual-order Presentation Forms-B because libGDX has no shaper. Games
+     * whose main font already covers Arabic, or that use the translation-folder
+     * layout, are left font-untouched. The report records the choice and reason.
+     */
+    internal suspend fun addArabicLocaleSlotWithFont(
+        inputApk: File,
+        outputApk: File,
+        fonts: FontInjection,
+        tx: suspend (String) -> String
+    ): SlotReport = build(inputApk, outputApk, fonts, tx)
+
+    private suspend fun build(
+        inputApk: File,
+        outputApk: File,
+        fonts: FontInjection?,
+        txIn: suspend (String) -> String
     ): SlotReport {
         require(inputApk.isFile) { "ملف APK الأصلي غير موجود." }
         require(inputApk.absoluteFile != outputApk.absoluteFile) { "لا يمكن الكتابة فوق ملف APK الأصلي." }
@@ -72,6 +101,28 @@ internal object LocaleSlotLocalizer {
                 "اللعبة تحتوي بالفعل على ملف لغة عربية ($slotPath)."
             }
 
+            val isGdx = !translationFolderPattern.containsMatchIn(base)
+            var fontEntryName: String? = null
+            var fontBytes: ByteArray? = null
+            var fontReason: String? = null
+            if (fonts != null && isGdx) {
+                val fe = candidates.firstOrNull { mainFontPattern.containsMatchIn(it) }
+                if (fe != null) {
+                    val gameFont = zip.getInputStream(zip.getEntry(fe)).use {
+                        BoundedArchiveInput.readAll(it, 16L * 1024L * 1024L)
+                    }
+                    val profile = FontAnalyzer.analyze(gameFont)
+                    if (!profile.hasArabicCore) {
+                        val choice = FontSelector.select(profile) { f -> FontAnalyzer.analyze(fonts.fontBytes(f)) }
+                        fontEntryName = fe
+                        fontBytes = fonts.fontBytes(choice.font)
+                        fontReason = choice.reason
+                    }
+                }
+            }
+            val shape = fonts != null && isGdx
+            val tx = txIn
+
             val baseEntry = zip.getEntry(base)!!
             val baseBytes = zip.getInputStream(baseEntry).use {
                 BoundedArchiveInput.readAll(it, MAX_BASE_BUNDLE_BYTES)
@@ -85,6 +136,7 @@ internal object LocaleSlotLocalizer {
             } else {
                 AssetTextTransformer.transform(slotPath, source) { value -> tx(value) }
             }
+            val slotText = if (shape) shapeProperties(result.text) else result.text
             require(result.translated > 0) { "لم يتم العثور على نصوص قابلة للترجمة في حزمة اللغة." }
 
             outputApk.parentFile?.mkdirs()
@@ -98,6 +150,13 @@ internal object LocaleSlotLocalizer {
                     written++
                     require(written <= MAX_ARCHIVE_ENTRIES) { "عدد عناصر APK يتجاوز حد إعادة البناء الآمن." }
                     if (AndroidAssetLocalizer.isOldSignature(entry.name)) continue
+                    if (fontBytes != null && entry.name == fontEntryName) {
+                        val ft = ApkZipEntryPolicy.create(entry, fontBytes, countingOutput.bytesWritten)
+                        out.putNextEntry(ft)
+                        out.write(fontBytes)
+                        out.closeEntry()
+                        continue
+                    }
                     val target = ApkZipEntryPolicy.create(entry, null, countingOutput.bytesWritten)
                     out.putNextEntry(target)
                     if (!entry.isDirectory) {
@@ -112,7 +171,7 @@ internal object LocaleSlotLocalizer {
                     }
                     out.closeEntry()
                 }
-                val slotBytes = result.text.toByteArray(Charsets.UTF_8)
+                val slotBytes = slotText.toByteArray(Charsets.UTF_8)
                 require(slotBytes.size.toLong() <= MAX_SINGLE_REBUILT_ENTRY_BYTES) {
                     "حزمة اللغة العربية تجاوزت حد الحجم الآمن."
                 }
@@ -120,8 +179,23 @@ internal object LocaleSlotLocalizer {
                 out.write(slotBytes)
                 out.closeEntry()
             }
-            return SlotReport(base, slotPath, result.translated, result.skipped, outputApk)
+            return SlotReport(base, slotPath, result.translated, result.skipped, outputApk, fontEntryName, fontReason)
         }
+    }
+
+    /**
+     * Shapes every value of a .properties text to visual-order presentation
+     * forms. Done AFTER translation because glossary hits bypass the translate
+     * callback; keys, comments and non-Arabic values are left untouched.
+     */
+    internal fun shapeProperties(text: String): String = text.split("\n").joinToString("\n") { line ->
+        val trimmed = line.trimStart()
+        if (trimmed.isEmpty() || trimmed.startsWith("#") || trimmed.startsWith("!")) return@joinToString line
+        val index = line.indexOfFirst { it == '=' || it == ':' }
+        if (index < 0) return@joinToString line
+        val value = line.substring(index + 1).trim()
+        if (!ArabicShaper.containsArabic(value)) line
+        else line.substring(0, index + 1) + " " + ArabicShaper.toVisual(value)
     }
 
     /**

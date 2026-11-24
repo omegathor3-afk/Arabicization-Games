@@ -175,4 +175,75 @@ class LocaleSlotLocalizerTest {
             dir.deleteRecursively()
         }
     }
+
+    /** Minimal sfnt (head + cmap format 4, Latin A-Z only): enough for FontAnalyzer. */
+    private fun latinOnlyFont(): ByteArray {
+        val head = ByteArray(54).also { it[18] = 0x03; it[19] = 0xE8.toByte() } // unitsPerEm 1000
+        fun u16(v: Int) = byteArrayOf((v shr 8).toByte(), v.toByte())
+        fun u32(v: Int) = u16(v shr 16) + u16(v and 0xFFFF)
+        val seg = u16(4) + u16(2) + u16(1) + u16(0) +             // segCountX2=4, searchRange..
+            u16(0x5A) + u16(0xFFFF) + u16(0) +                    // endCodes + pad
+            u16(0x41) + u16(0xFFFF) +                             // startCodes
+            u16(0) + u16(1) + u16(0) + u16(0)                     // idDelta, idRangeOffset
+        val sub = u16(4) + u16(6 + seg.size) + u16(0) + seg
+        val cmap = u16(0) + u16(1) + u16(3) + u16(1) + u32(12) + sub
+        val tables = listOf("cmap" to cmap, "head" to head)
+        var offset = 12 + 16 * tables.size
+        var dir = u32(0x00010000) + u16(tables.size) + u16(0) + u16(0) + u16(0)
+        var body = ByteArray(0)
+        for ((tag, data) in tables) {
+            dir += tag.toByteArray(Charsets.US_ASCII) + u32(0) + u32(offset) + u32(data.size)
+            body += data
+            offset += data.size
+        }
+        return dir + body
+    }
+
+    private fun buildLibGdxFontApk(dir: File, gameFont: ByteArray): File {
+        val apk = File(dir, "gdx-font.apk")
+        writeApk(apk, linkedMapOf(
+            "classes.dex" to byteArrayOf(100, 101, 120, 10),
+            "assets/bundles/bundle.properties" to "menu.new = New Game\nmenu.load = Load Game\nmenu.quit = Quit\n".toByteArray(),
+            "assets/fonts/font.ttf" to gameFont,
+            "assets/fonts/icon.ttf" to byteArrayOf(1, 2, 3)
+        ))
+        return apk
+    }
+
+    @Test
+    fun injectsSelectedFontAndShapesSlotForLibGdxGameWithoutArabicGlyphs() {
+        runBlocking {
+            val dir = createTempDir()
+            val gameFont = latinOnlyFont()
+            val input = buildLibGdxFontApk(dir, gameFont)
+            val output = File(dir, "out.apk")
+            val assets = File("src/main/assets")
+            val fonts = LocaleSlotLocalizer.FontInjection { f -> File(assets, f.assetPath).readBytes() }
+            val report = LocaleSlotLocalizer.addArabicLocaleSlotWithFont(input, output, fonts) { fakeArabic(it) }
+
+            assertEquals("assets/fonts/font.ttf", report.fontReplaced)
+            assertTrue(report.fontReason!!.contains("OFL-1.1"))
+            val replaced = readEntry(output, "assets/fonts/font.ttf")!!
+            assertTrue(!replaced.contentEquals(gameFont))
+            assertTrue(FontAnalyzer.analyze(replaced).hasArabicCore)
+            // other fonts untouched
+            assertTrue(readEntry(output, "assets/fonts/icon.ttf")!!.contentEquals(byteArrayOf(1, 2, 3)))
+            // slot values are shaped: presentation forms present, no raw base letters
+            val slot = String(readEntry(output, "assets/bundles/bundle_ar.properties")!!, Charsets.UTF_8)
+            assertTrue(slot.any { it.code in 0xFE70..0xFEFF })
+            assertTrue("raw letters in: $slot", slot.none { it.code in 0x0628..0x064A })
+        }
+    }
+
+    @Test
+    fun plainSlotNeverTouchesFontsOrShapes() {
+        runBlocking {
+            val dir = createTempDir()
+            val input = buildLibGdxFontApk(dir, latinOnlyFont())
+            val output = File(dir, "out.apk")
+            val report = LocaleSlotLocalizer.addArabicLocaleSlot(input, output) { fakeArabic(it) }
+            assertNull(report.fontReplaced)
+            assertTrue(readEntry(output, "assets/fonts/font.ttf")!!.contentEquals(readEntry(input, "assets/fonts/font.ttf")!!))
+        }
+    }
 }
