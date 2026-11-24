@@ -394,3 +394,6 @@ assets/fonts/catalog (Amiri, Noto Naskh var, Cairo var, Tajawal, Almarai, Rooyin
 pass Arabic core coverage in JVM test; Rooyin has 139 presentation-forms-B glyphs. Next: wire
 into ArabicFontCatalog (style tags + per-font OFL notices), scoring+reason, ArabicShaper, Mindustry tier.
 Mindustry font.woff is WOFF1 (parsable); Mindustry loads via FreeType.
+
+## 48. FontSelector (scoring + reason) done, JVM-verified only
+FontSelector.kt: 9 catalog fonts with style tag/weight/license/source URL; hard requirement Arabic core + presentation forms B>=80; score = style match 60 + weight closeness 40; reason string per choice, weak matches say so. Style inference is crude (pixel from bitmap/name, mono, else sans) - serif detection not possible from tables. Not yet wired to any localizer. Next: ArabicShaper, then Mindustry integration.
