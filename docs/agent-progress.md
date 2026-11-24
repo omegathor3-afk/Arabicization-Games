@@ -582,3 +582,11 @@ New agent run (fresh sandbox; toolchain re-provisioned; baseline suite green bef
   hierarchy, since screenshots need repo auth (26400ea).
 - Open: Unciv on-screen check failed on ef81d34 ("no Arabic entry visible") -
   next run's annotation will show the actual screen content.
+
+## 61. Stale-evidence trap on reused CI AVDs, campaign crash confirmed, per-swipe Unciv captures (2026-11-24)
+
+- **skipReasons mystery resolved (strong hypothesis):** the dfc37ce run printed byte-identical counts to the previous run with an empty skipReasons map even though every skip path was instrumented. Root cause: on a reused AVD, MediaStore renames duplicate display names on disk, so the fixed-path `adb pull` fetched the PREVIOUS run's report. Fix: the script wipes `/sdcard/Download/ARABIFY` before installing the game. Confirmation arrives with the next run: reasons present = stale file was the whole story.
+- **Campaign tour crash is the game, not us:** FAILSTATE capture shows the Android launcher after tapping حملة — the pinned original Mindustry APK exits on swiftshader when loading the 3D campaign planet. Tour routes gameplay evidence through the 2D custom-game maps list instead.
+- **Unciv per-swipe captures:** العربية sits near 47.6% sorted position and six blind swipes overshot it; the script now captures after each swipe (unciv-language-list-1..6).
+- **v2.1 home polish:** app-row اختيار buttons became quiet OutlinedButtons (accent fill + primary border only when selected).
+- Evidence: FAILSTATE screenshot (launcher after campaign tap) reported to the user; CI round on 3903a0b pending.
