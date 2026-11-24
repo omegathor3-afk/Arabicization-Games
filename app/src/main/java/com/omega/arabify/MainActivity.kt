@@ -34,10 +34,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -365,7 +367,10 @@ private fun ArabifyApp(context: Context) {
           Text(app.packageName,color=ArabifyPalette.textMuted,fontSize=10.sp)
           if(app.splitCount>0) Text("حزمة أساسية + ${app.splitCount} ملفات Split إضافية",color=ArabifyPalette.warning,fontSize=10.sp)
          }
-         Button(onClick={
+         // Row actions stay quiet - the neon belongs to primary CTAs. Selected
+         // rows get a subtle fill so state is still readable at a glance.
+         val rowSelected=selectedInstalledApp?.packageName==app.packageName
+         OutlinedButton(onClick={
           selectedInstalledApp=app
           unityDeepReport=null;unityDeepError=null
           selectedUri=Uri.fromFile(File(app.apkPath))
@@ -375,7 +380,12 @@ private fun ArabifyApp(context: Context) {
            catch(e:Exception){error=e.message ?: "تعذر فحص التطبيق المثبت."}
            finally{busy=false;showLocalizationChoice=true}
           }
-         },enabled=!busy,modifier=Modifier.semantics { contentDescription = "اختيار ${app.label} ${app.packageName}" }) { Text(if(selectedInstalledApp?.packageName==app.packageName) "محدد" else "اختيار") }
+         },enabled=!busy,
+         colors=ButtonDefaults.outlinedButtonColors(
+          containerColor=if(rowSelected) ArabifyPalette.surfaceAccent else Color.Transparent,
+          contentColor=ArabifyPalette.primary),
+         border=BorderStroke(1.dp,if(rowSelected) ArabifyPalette.primary else ArabifyPalette.outline),
+         modifier=Modifier.semantics { contentDescription = "اختيار ${app.label} ${app.packageName}" }) { Text(if(rowSelected) "محدد" else "اختيار") }
         }
        }
        if(busy && selectedInstalledApp!=null) {
