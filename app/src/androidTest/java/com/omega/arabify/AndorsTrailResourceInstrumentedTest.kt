@@ -50,8 +50,11 @@ class AndorsTrailResourceInstrumentedTest {
                 )
                 Log.i("AndorsTrail", "Localized ${report.translatedStrings}/${report.discoveredStrings} strings")
                 assertEquals(gamePackage, report.packageName)
-                assertTrue("Too few Andor's Trail strings discovered: ${report.discoveredStrings}", report.discoveredStrings > 5000)
-                assertTrue("Too few Andor's Trail strings translated: ${report.translatedStrings}", report.translatedStrings > 5000)
+                // The app's own package holds ~670 default strings; the aapt
+                // total of ~22k includes library packages. Story text lives
+                // in res/raw XML files - a separate future tier.
+                assertTrue("Too few Andor's Trail strings discovered: ${report.discoveredStrings}", report.discoveredStrings > 300)
+                assertTrue("Too few Andor's Trail strings translated: ${report.translatedStrings}", report.translatedStrings > 300)
                 assertTrue("The translated APK was not created", output.isFile && output.length() > 0L)
 
                 val module = ApkModule.loadApkFile(output)
@@ -75,12 +78,12 @@ class AndorsTrailResourceInstrumentedTest {
                             }
                         }
                     }
-                    assertTrue("Arabic-qualified values contain no Arabic script", arabicValues > 1000)
+                    assertTrue("Arabic-qualified values contain no Arabic script", arabicValues > 100)
                     count
                 } finally {
                     module.close()
                 }
-                assertTrue("No Arabic-qualified string resources were written", arabicResourceCount > 1000)
+                assertTrue("No Arabic-qualified string resources were written", arabicResourceCount > 100)
 
                 val verification = ApkVerifier.Builder(output).build().verify()
                 assertTrue("Signed Andor's Trail APK failed verification: ${verification.errors}", verification.isVerified)
