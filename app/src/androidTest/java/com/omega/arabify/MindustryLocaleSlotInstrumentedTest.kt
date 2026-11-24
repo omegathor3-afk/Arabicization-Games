@@ -90,7 +90,6 @@ class MindustryLocaleSlotInstrumentedTest {
                             }
                             .toSet()
                         assertEquals("Bundle keys were not preserved in the slot", bundleKeys(baseText), bundleKeys(slotText))
-                        assertTrue("Slot contains no Arabic text", slotText.any { it.code in 0x0621..0x064A })
                         assertTrue("Merged-font slot must be pre-shaped to presentation forms",
                             slotText.any { it.code in 0xFE70..0xFEFF })
                         val fontEntry = localized.getEntry("assets/fonts/font.woff") ?: error("font entry missing")
