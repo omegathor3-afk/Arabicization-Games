@@ -5,6 +5,8 @@ import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 
 internal data class UnityFsRewriteReport(
@@ -29,9 +31,9 @@ internal data class UnityFsRewriteReport(
  *   stored uncompressed, which Unity accepts.
  * - The block info keeps its original codec only for NONE/LZ4; LZMA block-info
  *   bundles are refused rather than recompressed with an untested encoder.
- * - After writing, the whole bundle is decoded again with the existing strict
- *   decoder and the rebuilt stream is byte-compared against the expected bytes.
- *   Any mismatch deletes the output and fails.
+ * - The rebuilt bundle is written to a sibling temporary file, decoded and
+ *   byte-verified there, then atomically published. A failed write/verification
+ *   never deletes or truncates an existing destination.
  *
  * The 16-byte block-info hash slot is written as truncated SHA-256 of the
  * decompressed stream. Unity uses this field as a cache hint; neither the
@@ -50,7 +52,9 @@ internal object UnityFsBundleRewriter {
         limits: UnityFsDecodeLimits = UnityFsDecodeLimits()
     ): UnityFsRewriteReport {
         require(input.isFile) { "ملف UnityFS الأصلي غير موجود." }
-        require(input.absoluteFile != output.absoluteFile) { "لا يمكن الكتابة فوق حزمة UnityFS نفسها." }
+        require(input.canonicalFile != output.canonicalFile) {
+            "لا يمكن الكتابة فوق حزمة UnityFS الأصلية نفسها، حتى عبر مسار بديل."
+        }
         require(replacement.isNotEmpty()) { "بيانات العقدة البديلة فارغة." }
         require(replacement.size.toLong() <= MAX_NODE_BYTES) { "بيانات العقدة البديلة تتجاوز الحد الآمن." }
         require(nodePath.isNotBlank() && nodePath.length <= 4096 && nodePath.none { it.isISOControl() }) {
@@ -63,9 +67,16 @@ internal object UnityFsBundleRewriter {
             ?: error("لم يتم العثور على العقدة المطلوبة داخل الحزمة: $nodePath")
         require(target.size <= Int.MAX_VALUE.toLong())
         val delta = replacement.size.toLong() - target.size
+        val newStreamSize = Math.addExact(originalStream.size.toLong(), delta)
+        require(
+            newStreamSize in 1L..limits.maxTotalDecodedBytes &&
+                newStreamSize <= Int.MAX_VALUE.toLong()
+        ) {
+            "حجم البيانات المفكوكة بعد إعادة البناء يتجاوز الحد الآمن للذاكرة أو حد الفهرسة."
+        }
 
         // Rebuild the decompressed stream with only the target range replaced.
-        val newStream = ByteArray(Math.addExact(originalStream.size.toLong(), delta).toInt())
+        val newStream = ByteArray(newStreamSize.toInt())
         System.arraycopy(originalStream, 0, newStream, 0, target.offset.toInt())
         System.arraycopy(replacement, 0, newStream, target.offset.toInt(), replacement.size)
         val tailStart = (target.offset + target.size).toInt()
@@ -184,25 +195,38 @@ internal object UnityFsBundleRewriter {
         headerBuffer.putInt(header.headerSize - 8, infoBytes.size)
         System.arraycopy(patchedHeader, 0, finalBytes, 0, header.headerSize)
 
-        output.parentFile?.mkdirs()
-        output.writeBytes(finalBytes)
-
-        val report = UnityFsRewriteReport(
-            nodePath = nodePath,
-            oldNodeBytes = target.size,
-            newNodeBytes = replacement.size.toLong(),
-            deltaBytes = delta,
-            shiftedNodeCount = blockInfo.nodes.count { it.offset > target.offset },
-            blockCount = newBlocks.size,
-            newFileBytes = finalBytes.size.toLong()
-        )
-        try {
-            verifyRewrittenBundle(output, limits, blockInfo, originalStream, nodePath, replacement, newStream)
-        } catch (failure: Throwable) {
-            output.delete()
-            throw failure
+        val outputParent = output.absoluteFile.parentFile
+            ?: error("مجلد الملف الناتج غير صالح.")
+        require(outputParent.isDirectory || outputParent.mkdirs()) {
+            "تعذر تجهيز مجلد الملف الناتج."
         }
-        return report
+        val temporaryOutput = Files.createTempFile(
+            outputParent.toPath(), ".arabify-unityfs-", ".tmp"
+        ).toFile()
+        try {
+            temporaryOutput.writeBytes(finalBytes)
+            val report = UnityFsRewriteReport(
+                nodePath = nodePath,
+                oldNodeBytes = target.size,
+                newNodeBytes = replacement.size.toLong(),
+                deltaBytes = delta,
+                shiftedNodeCount = blockInfo.nodes.count { it.offset > target.offset },
+                blockCount = newBlocks.size,
+                newFileBytes = finalBytes.size.toLong()
+            )
+            verifyRewrittenBundle(
+                temporaryOutput, limits, blockInfo, originalStream, nodePath, replacement, newStream
+            )
+            Files.move(
+                temporaryOutput.toPath(),
+                output.absoluteFile.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING
+            )
+            return report
+        } finally {
+            temporaryOutput.delete()
+        }
     }
 
     private fun readBundle(
@@ -270,7 +294,7 @@ internal object UnityFsBundleRewriter {
                 newNode.offset.toInt(), (newNode.offset + newNode.size).toInt()
             )
             require(newBytes.contentEquals(oldBytes)) {
-                "فشل التحقق: محتوى عقدة غير مستهدفة تغيّر (${oldNode.path})."
+                "فشل التحقق: محتوى عقدة غير مستهدفة تغيّر (" + oldNode.path + ")."
             }
         }
     }
