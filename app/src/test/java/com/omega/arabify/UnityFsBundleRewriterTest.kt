@@ -2,6 +2,7 @@ package com.omega.arabify
 
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
@@ -185,6 +186,63 @@ class UnityFsBundleRewriterTest {
   val output = File.createTempFile("arabify-bundle-out", ".unity3d")
   UnityFsBundleRewriter.rewriteNode(bundle, output, nodeA.path, ByteArray(2500) { 6 })
   assertTrue(bundle.readBytes().contentEquals(before))
+  bundle.delete()
+  output.delete()
+ }
+
+ @Test fun refusesOutputPathThatAliasesInputThroughDotSegments() {
+  val node = FixtureNode("CAB-alias", 4, ByteArray(128) { 7 })
+  val bundle = buildBundle(listOf(node))
+  val before = bundle.readBytes()
+  val alias = File(bundle.parentFile, "missing-parent/../" + bundle.name)
+
+  assertThrows(IllegalArgumentException::class.java) {
+   UnityFsBundleRewriter.rewriteNode(bundle, alias, node.path, ByteArray(64) { 3 })
+  }
+
+  assertTrue("The original bundle must remain byte-identical", bundle.readBytes().contentEquals(before))
+  bundle.delete()
+ }
+
+ @Test fun failedAtomicPublishPreservesExistingDestinationAndCleansTemporaryFile() {
+  val node = FixtureNode("CAB-atomic", 4, ByteArray(256) { (it % 17).toByte() })
+  val bundle = buildBundle(listOf(node))
+  val original = bundle.readBytes()
+  val parent = createTempDir()
+  val outputDirectory = File(parent, "existing-output")
+  assertTrue(outputDirectory.mkdir())
+  val sentinel = File(outputDirectory, "keep.txt")
+  sentinel.writeText("do not replace")
+
+  assertThrows(IOException::class.java) {
+   UnityFsBundleRewriter.rewriteNode(bundle, outputDirectory, node.path, ByteArray(300) { 9 })
+  }
+
+  assertTrue(outputDirectory.isDirectory)
+  assertEquals("do not replace", sentinel.readText())
+  assertTrue(bundle.readBytes().contentEquals(original))
+  assertTrue(
+   "Temporary bundle files must be removed after a failed publish",
+   parent.listFiles().orEmpty().none { it.name.startsWith(".arabify-unityfs-") }
+  )
+  bundle.delete()
+  parent.deleteRecursively()
+ }
+
+ @Test fun refusesExpandedStreamAboveTheConfiguredDecodedByteBudget() {
+  val node = FixtureNode("CAB-budget", 4, ByteArray(100) { 1 })
+  val bundle = buildBundle(listOf(node))
+  val original = bundle.readBytes()
+  val output = File.createTempFile("arabify-budget-output", ".unity3d")
+  output.writeText("keep existing output")
+  val limits = UnityFsDecodeLimits(maxTotalDecodedBytes = 200)
+
+  assertThrows(IllegalArgumentException::class.java) {
+   UnityFsBundleRewriter.rewriteNode(bundle, output, node.path, ByteArray(1_000) { 2 }, limits)
+  }
+
+  assertEquals("keep existing output", output.readText())
+  assertTrue(bundle.readBytes().contentEquals(original))
   bundle.delete()
   output.delete()
  }
