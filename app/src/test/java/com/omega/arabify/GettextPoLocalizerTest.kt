@@ -147,13 +147,22 @@ msgstr ""
     fun keepsUntranslatableEntriesAsSource() {
         runBlocking {
             val dir = createTempDir()
-            val input = buildGameApk(dir)
+            // Use a msgid outside the reviewed glossary so the empty translator
+            // really leaves it untranslatable (glossary hits are intentional).
+            val untranslatablePot = """msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "Zzq Blorf"
+msgstr ""
+"""
+            val input = buildGameApk(dir, untranslatablePot)
             val output = File(dir, "out2.apk")
             val assets = File("src/main/assets")
             val fonts = GettextPoLocalizer.FontInjection { f -> File(assets, f.assetPath).readBytes() }
             val report = GettextPoLocalizer.addArabicGettextSlot(input, output, fonts) { "" } // nothing translatable
             val arPo = String(readEntry(output, "assets/po/ar.po")!!, Charsets.UTF_8)
-            assertTrue(arPo.contains("msgstr \"New Game\"")) // falls back to source text
+            assertTrue(arPo.contains("msgstr \"Zzq Blorf\"")) // falls back to source text
             assertEquals(0, report.stringsTranslated)
             assertFalse(report.addedEntry.isEmpty())
             dir.deleteRecursively()
