@@ -54,7 +54,8 @@ object FontAnalyzer {
 
     class FontParseException(message: String) : Exception(message)
 
-    fun analyze(bytes: ByteArray): FontProfile {
+    /** Container decode shared with FontMerger: format label + raw sfnt tables. */
+    internal fun decodeTables(bytes: ByteArray): Pair<String, Map<String, ByteArray>> {
         if (bytes.size < 12) throw FontParseException("too small")
         if (bytes.size > MAX_FONT_BYTES) throw FontParseException("font exceeds the 32 MiB input limit")
         val tag = be32(bytes, 0)
@@ -70,6 +71,11 @@ object FontAnalyzer {
             0x774F4646L -> "WOFF1"
             else -> "TTF"
         }
+        return format to tables
+    }
+
+    fun analyze(bytes: ByteArray): FontProfile {
+        val (format, tables) = decodeTables(bytes)
         val head = tables["head"] ?: throw FontParseException("no head table")
         if (head.size < 46) throw FontParseException("truncated head table")
         val unitsPerEm = u16(head, 18)

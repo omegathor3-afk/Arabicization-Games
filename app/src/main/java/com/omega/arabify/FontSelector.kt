@@ -54,6 +54,23 @@ internal object FontSelector {
         require(!game.isIconFont) {
             "Refusing to replace recognized icon font '${game.familyName}'; its glyphs may encode game UI symbols."
         }
+        return pick(game, coverage)
+    }
+
+    /**
+     * Selection for the glyph-MERGE tier: the game font is not replaced, so an
+     * icon font is acceptable here - its icons stay and only Arabic glyphs are
+     * appended from the chosen catalog font. Same coverage gate and scoring.
+     */
+    fun selectForMerge(
+        game: FontAnalyzer.FontProfile,
+        coverage: (SelectableFont) -> FontAnalyzer.FontProfile,
+    ): FontChoice = pick(game, coverage)
+
+    private fun pick(
+        game: FontAnalyzer.FontProfile,
+        coverage: (SelectableFont) -> FontAnalyzer.FontProfile,
+    ): FontChoice {
         val wanted = inferStyle(game)
         val scored = catalog.mapNotNull { f ->
             val p = coverage(f)

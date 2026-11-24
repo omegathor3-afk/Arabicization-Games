@@ -68,8 +68,9 @@ class MindustryLocaleSlotInstrumentedTest {
                     if (trimmed.length >= 3) "العربية ${trimmed.length}" else text
                 }
                 Log.i("MindustrySlot", "font=${report.fontReplaced} reason=${report.fontReason}")
-                assertNull("Mindustry's Fontello icon font must not be replaced by a text font", report.fontReplaced)
-                assertTrue("Icon-font preservation reason missing", report.fontReason?.contains("خط الأيقونات") == true)
+                assertEquals("Fontello icon font must be merged in place, never replaced",
+                    "assets/fonts/font.woff", report.fontReplaced)
+                assertTrue("Icon-font merge reason missing", report.fontReason?.contains("دمج") == true)
                 Log.i("MindustrySlot", "slot=${report.addedEntry} translated=${report.stringsTranslated} skipped=${report.stringsSkipped}")
                 assertEquals("assets/bundles/bundle_ar.properties", report.addedEntry)
                 assertTrue("Too few Mindustry strings translated: ${report.stringsTranslated}", report.stringsTranslated > 1000)
@@ -90,7 +91,15 @@ class MindustryLocaleSlotInstrumentedTest {
                             .toSet()
                         assertEquals("Bundle keys were not preserved in the slot", bundleKeys(baseText), bundleKeys(slotText))
                         assertTrue("Slot contains no Arabic text", slotText.any { it.code in 0x0621..0x064A })
-                        assertTrue("Icon font must not trigger presentation-form shaping", slotText.none { it.code in 0xFE70..0xFEFF })
+                        assertTrue("Merged-font slot must be pre-shaped to presentation forms",
+                            slotText.any { it.code in 0xFE70..0xFEFF })
+                        val fontEntry = localized.getEntry("assets/fonts/font.woff") ?: error("font entry missing")
+                        val mergedFont = localized.getInputStream(fontEntry).use { it.readBytes() }
+                        val mergedProfile = FontAnalyzer.analyze(mergedFont)
+                        assertEquals("Merged font must keep the Fontello family", "fontello", mergedProfile.familyName)
+                        assertTrue("Merged font must cover Arabic", mergedProfile.hasArabicCore)
+                        assertTrue("Merged font must cover presentation forms B", mergedProfile.presentationFormsB >= 80)
+                        assertTrue("Merged font must keep PUA icons", mergedProfile.supports(0xE800))
                         val originalNames = original.entries().asSequence().map { it.name }.toList()
                         var compared = 0
                         for (name in originalNames) {

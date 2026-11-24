@@ -120,7 +120,19 @@ internal object LocaleSlotLocalizer {
                     }
                     if (profile != null && !profile.hasArabicCore) {
                         if (profile.isIconFont) {
-                            fontReason = "تم الحفاظ على خط الأيقونات الأصلي '${profile.familyName}'؛ استبداله بخط نصي قد يفسد رموز الواجهة. عرض العربية بهذا الخط غير مدعوم حتى الآن."
+                            // Icon-merged font: never replace (icons would break). Instead merge
+                            // Arabic glyphs from a catalog font into a copy, keeping every
+                            // original glyph byte-identical, and shape the slot values.
+                            try {
+                                val choice = FontSelector.selectForMerge(profile) { f -> FontAnalyzer.analyze(fonts.fontBytes(f)) }
+                                val merged = FontMerger.mergeArabicInto(gameFont, fonts.fontBytes(choice.font))
+                                fontEntryName = fe
+                                fontBytes = merged.fontBytes
+                                fontReason = "تم دمج الحروف العربية من ${choice.font.family} داخل خط الأيقونات '${profile.familyName}' مع الحفاظ على كل أيقوناته (${merged.codepointsAdded} رمزاً عربياً، ${merged.glyphsAdded} شكلاً). " + choice.reason
+                                shapeArabicSlot = true
+                            } catch (error: Exception) {
+                                fontReason = "تم الحفاظ على خط الأيقونات الأصلي '${profile.familyName}'؛ تعذر دمج الحروف العربية فيه (${error.message ?: "سبب غير معروف"}). عرض العربية بهذا الخط غير مدعوم حتى الآن."
+                            }
                         } else {
                             try {
                                 val choice = FontSelector.select(profile) { f -> FontAnalyzer.analyze(fonts.fontBytes(f)) }

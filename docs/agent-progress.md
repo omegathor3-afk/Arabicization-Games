@@ -467,3 +467,28 @@ Substitute candidates: Vector Pinball (F-Droid com.dozingcatsoftware.bouncy_43.a
 
 ### Lessons
 CI green is not proof; look at the pixels. uiautomator never sees OpenGL text. Check for existing Arabic before building a tier (3 games already ship it). Glossary hits bypass the translate callback. Context-bound device paths are invisible to JVM tests. Check for Omega's parallel commits before every push.
+
+## 54. Font glyph-MERGE tier: Arabic glyphs inside the game's own font (JVM-verified; emulator pending)
+New agent run (fresh sandbox; toolchain re-provisioned; baseline suite green before changes).
+- New FontMerger.kt: appends Arabic glyphs (U+0600-06FF + U+FE70-FEFF) from a catalog
+  font INTO the game's font, every original glyph byte-identical (icons/Latin safe).
+  Handles WOFF1 in -> WOFF1 out, glyf simple+composite (component id remap),
+  unitsPerEm rescaling, cmap format 4+12 rebuild, hmtx/hhea/maxp/head/post rebuild,
+  checkSumAdjustment, table checksums. Appended glyphs drop hinting instructions.
+- FontSelector.selectForMerge: same coverage gate + scoring, no icon-font refusal
+  (the font is not replaced, so icons are safe).
+- LocaleSlotLocalizer icon-font branch now MERGES instead of refusing; slot values
+  are shaped only when a merge actually happened; failure falls back to the honest
+  preservation message. Mindustry instrumented test updated: expects merged
+  font.woff (family still fontello, hasArabicCore, pfB>=80, PUA icons kept) and a
+  pre-shaped slot (presentation forms present).
+- JVM tests (FontMergerTest): byte-identity of original glyphs, original cmap
+  unchanged, Arabic added, composite (Amiri lam-alef/meem forms) remap, WOFF1
+  round-trip, upm scaling (Rooyin 2000 -> 1000), honest refusal without Arabic.
+- REAL-font verification (scratch test, since deleted): real Mindustry font.woff
+  + Tajawal -> 156 Arabic codepoints merged (67 base + 89 forms), WOFF1 out,
+  icons intact, 841ms. Not yet on screen: matrix stays FONT-BLOCKED until the CI
+  Mindustry screenshot shows connected Arabic.
+- Sandbox note: this agent's toolchain lives at /downloads/toolchain (jdk17,
+  gradle-8.13, sdk). Push: pending a NEW deploy key (public key sent to main
+  agent 4:11 PM; old agent's key stayed on its box).
