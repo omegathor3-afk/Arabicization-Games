@@ -64,12 +64,13 @@ if [[ -s "$GENERATED_APK" ]]; then
     if [[ "$launch_status" -eq 0 ]]; then
       # Mindustry resolves the locale from the Android system locale through
       # libGDX; switch the emulator to Arabic so it selects bundle_ar.
-      adb shell settings put system system_locales ar-EG || launch_status=$?
+      adb shell settings put system system_locales ar-EG || { launch_status=$?; note_failure "failed to switch emulator system locale to ar-EG (exit $launch_status)"; }
       if [[ "$launch_status" -eq 0 ]]; then
-        timeout 30 adb reboot || launch_status=$?
+        timeout 30 adb reboot || { launch_status=$?; note_failure "adb reboot after locale switch failed or timed out"; }
         if [[ "$launch_status" -eq 0 ]]; then
           if ! timeout 180 adb wait-for-device; then
             echo "Emulator did not return to ADB after switching to Arabic." >&2
+            note_failure "emulator did not return to ADB within 180s after the Arabic locale reboot"
             launch_status=1
           fi
         fi
@@ -82,14 +83,15 @@ if [[ -s "$GENERATED_APK" ]]; then
           BOOTED="$(adb shell getprop sys.boot_completed | tr -d '\r')"
           if [[ "$BOOTED" != "1" ]]; then
             echo "Emulator did not finish booting after switching to Arabic." >&2
+            note_failure "emulator did not finish booting after the Arabic locale reboot (sys.boot_completed != 1)"
             launch_status=1
           fi
         fi
       fi
       if [[ "$launch_status" -eq 0 ]]; then
-        adb shell monkey -p io.anuke.mindustry 1 || launch_status=$?
+        adb shell monkey -p io.anuke.mindustry 1 || { launch_status=$?; note_failure "monkey launch of the localized game failed"; }
         sleep 12
-        adb shell pidof io.anuke.mindustry > build/test-game/localized/game-process.txt || launch_status=$?
+        adb shell pidof io.anuke.mindustry > build/test-game/localized/game-process.txt || { launch_status=$?; note_failure "game process not running after launch (pidof empty)"; }
         HIERARCHY_DEVICE_PATH="/data/local/tmp/arabify-mindustry-window.xml"
         HIERARCHY_HOST_PATH="build/test-game/localized/mindustry-window.xml"
         hierarchy_ready=0
@@ -116,6 +118,7 @@ if [[ -s "$GENERATED_APK" ]]; then
             echo "Accessibility hierarchy captured; Arabic text is visible on the Mindustry screen." > build/test-game/localized/ui-smoke-validation.txt
           fi
         else
+          echo "::notice::UIAutomator exposed no hierarchy; relying on screenshot + process checks (not counted as failure)"
           echo "WARNING: Android UIAutomator did not expose a hierarchy for the launched game. The instrumentation test verified the slot content, APK signature and install; screenshot and foreground-process checks remain required." > build/test-game/localized/ui-smoke-validation.txt
           cat /tmp/arabify-uiautomator-dump.log >> build/test-game/localized/ui-smoke-validation.txt 2>/dev/null || true
         fi
