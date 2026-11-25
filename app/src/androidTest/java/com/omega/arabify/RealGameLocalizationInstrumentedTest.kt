@@ -67,10 +67,18 @@ class RealGameLocalizationInstrumentedTest {
                 try {
                     runShell(instrumentation, "svc wifi disable")
                     runShell(instrumentation, "svc data disable")
-                    Thread.sleep(2000)
+                    // Radio teardown after svc disable is asynchronous; a fixed
+                    // 2s sleep raced it on CI (validated internet still up
+                    // right after the model download). Poll until the
+                    // validated capability is gone, fail only if it never is.
+                    var offline = false
+                    for (attempt in 1..30) {
+                        Thread.sleep(1000)
+                        if (!hasValidatedInternet(context)) { offline = true; break }
+                    }
                     assertTrue(
-                        "Validated internet is still available; offline translation was not isolated",
-                        !hasValidatedInternet(context)
+                        "Validated internet is still available after 30s; offline translation was not isolated",
+                        offline
                     )
                     Log.i("RealGameLocalization", "Network is offline; translating installed Minesweeper APK")
                     AndroidResourceLocalizer.localizeEnglishStrings(

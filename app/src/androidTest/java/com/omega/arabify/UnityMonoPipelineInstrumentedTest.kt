@@ -93,10 +93,17 @@ class UnityMonoPipelineInstrumentedTest {
                 try {
                     runShell(instrumentation, "svc wifi disable")
                     runShell(instrumentation, "svc data disable")
-                    Thread.sleep(2000)
+                    // Radio teardown after svc disable is asynchronous; poll
+                    // until the validated capability is gone (see the same
+                    // fix in RealGameLocalizationInstrumentedTest).
+                    var offline = false
+                    for (attempt in 1..30) {
+                        Thread.sleep(1000)
+                        if (!hasValidatedInternet(context)) { offline = true; break }
+                    }
                     assertTrue(
-                        "Validated internet is still available; offline translation was not isolated",
-                        !hasValidatedInternet(context)
+                        "Validated internet is still available after 30s; offline translation was not isolated",
+                        offline
                     )
                     UnityMonoLocalizer.localize(context, input, unsigned, signed, translator)
                 } finally {
