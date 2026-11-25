@@ -1,6 +1,8 @@
 package com.omega.arabify
 
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
@@ -26,6 +28,7 @@ internal data class UnityApkBundleReport(
 internal object UnityApkBundleLocalizer {
     private const val MAX_BUNDLES = 64
     private const val MAX_BUNDLE_BYTES = 512L * 1024L * 1024L
+    private const val MAX_TOTAL_STAGED_BUNDLE_BYTES = 512L * 1024L * 1024L
     private const val MAX_TOTAL_REBUILT_BYTES = 2L * 1024L * 1024L * 1024L
     private const val MAX_SINGLE_REBUILT_ENTRY_BYTES = 512L * 1024L * 1024L
     private const val MAX_ARCHIVE_ENTRIES = 20_000
@@ -64,105 +67,172 @@ internal object UnityApkBundleLocalizer {
         requireTranslations: Boolean
     ): UnityApkBundleReport? {
         require(inputApk.isFile) { "ملف APK الأصلي غير موجود." }
-        require(inputApk.absoluteFile != outputApk.absoluteFile) { "لا يمكن الكتابة فوق ملف APK الأصلي." }
+        require(inputApk.canonicalFile != outputApk.canonicalFile) {
+            "لا يمكن الكتابة فوق ملف APK الأصلي نفسه، حتى عبر مسار بديل."
+        }
         require(workingDir.isDirectory || workingDir.mkdirs()) { "تعذر إنشاء مجلد العمل المؤقت." }
 
-        var bundlesProcessed = 0
-        var textAssetsTranslated = 0
-        var stringsTranslated = 0
-        var stringsSkipped = 0
+        val operationDir = Files.createTempDirectory(workingDir.toPath(), ".arabify-unity-apk-").toFile()
+        var temporaryApk: File? = null
+        try {
+            var bundlesProcessed = 0
+            var textAssetsTranslated = 0
+            var stringsTranslated = 0
+            var stringsSkipped = 0
+            var unityBundlesSeen = 0
+            var stagedReplacementBytes = 0L
+            val replacements = LinkedHashMap<String, File>()
 
-        val replaced = HashMap<String, ByteArray>()
-        ZipFile(inputApk).use { zip ->
-            // Pass 1: find UnityFS bundle entries and localize each in the
-            // working directory. Byte-identical entries stream through later.
-            val entries = zip.entries()
-            var scanned = 0
-            while (entries.hasMoreElements()) {
-                val entry = entries.nextElement()
-                if (entry.isDirectory) continue
-                scanned++
-                require(scanned <= MAX_ARCHIVE_ENTRIES) { "عدد عناصر APK يتجاوز الحد الآمن." }
-                if (entry.size !in 1L..MAX_BUNDLE_BYTES) continue
-                val probe = ByteArray(8)
-                val read = zip.getInputStream(entry).use { it.read(probe) }
-                if (read < 8 || String(probe, Charsets.US_ASCII) != "UnityFS\u0000") continue
-
-                val bundleIn = File(workingDir, "bundle-$scanned.in")
-                val bundleOut = File(workingDir, "bundle-$scanned.out")
-                val nodeDir = File(workingDir, "bundle-$scanned.nodes")
-                try {
-                    zip.getInputStream(entry).use { input ->
-                        bundleIn.outputStream().use { input.copyTo(it) }
+            ZipFile(inputApk).use { zip ->
+                val entries = zip.entries()
+                var scanned = 0
+                val seenEntryNames = HashSet<String>()
+                while (entries.hasMoreElements()) {
+                    val entry = entries.nextElement()
+                    require(seenEntryNames.add(entry.name)) {
+                        "يحتوي APK على أسماء ZIP مكررة؛ أُوقفت إعادة البناء لتجنب اختلاف تفسير الملفات."
                     }
-                    require(bundleIn.length() == entry.size) { "حجم الحزمة المستخرجة لا يطابق بيانات ZIP." }
-                    nodeDir.mkdirs()
-                    val result = localizeBundle(bundleIn, bundleOut, nodeDir, translate, limits)
-                    if (result != null) {
-                        bundlesProcessed++
-                        textAssetsTranslated += result.first
-                        stringsTranslated += result.second
-                        stringsSkipped += result.third
-                        replaced[entry.name] = bundleOut.readBytes()
-                    }
-                } finally {
-                    bundleIn.delete()
-                    bundleOut.delete()
-                    nodeDir.deleteRecursively()
-                }
-            }
+                    if (entry.isDirectory) continue
+                    scanned++
+                    require(scanned <= MAX_ARCHIVE_ENTRIES) { "عدد عناصر APK يتجاوز الحد الآمن." }
+                    if (entry.size !in 1L..MAX_BUNDLE_BYTES) continue
 
-            if (stringsTranslated == 0) {
-                require(!requireTranslations) {
-                    "لم يتم العثور على TextAssets قابلة للترجمة داخل حزم UnityFS في هذا الملف."
-                }
-                return null
-            }
-
-            // Pass 2: rebuild the APK, replacing localized bundles.
-            outputApk.parentFile?.mkdirs()
-            val countingOutput = CountingOutputStream(outputApk.outputStream().buffered())
-            ZipOutputStream(countingOutput).use { out ->
-                val all = zip.entries()
-                var writtenEntries = 0
-                var copiedArchiveBytes = 0L
-                while (all.hasMoreElements()) {
-                    val entry = all.nextElement()
-                    writtenEntries++
-                    require(writtenEntries <= MAX_ARCHIVE_ENTRIES) { "عدد عناصر APK تغير أثناء إعادة البناء." }
-                    if (isOldSignature(entry.name)) continue
-                    val replacement = replaced[entry.name]
-                    val target = ApkZipEntryPolicy.create(entry, replacement, countingOutput.bytesWritten)
-                    out.putNextEntry(target)
-                    if (!entry.isDirectory) {
-                        val remaining = MAX_TOTAL_REBUILT_BYTES - copiedArchiveBytes
-                        require(remaining >= 0L) { "الحجم المفكوك للأرشيف تجاوز حد إعادة البناء الآمن." }
-                        val entryBudget = minOf(MAX_SINGLE_REBUILT_ENTRY_BYTES, remaining)
-                        if (replacement != null) {
-                            require(replacement.size.toLong() <= entryBudget) { "الحزمة المعربة تجاوزت حد الحجم الآمن." }
-                            out.write(replacement)
-                            copiedArchiveBytes += replacement.size.toLong()
-                        } else {
-                            val copied = zip.getInputStream(entry).use { BoundedArchiveInput.copy(it, out, entryBudget) }
-                            require(entry.size < 0L || copied == entry.size) {
-                                "حجم عنصر ZIP الفعلي لا يطابق بياناته: ${entry.name}"
-                            }
-                            copiedArchiveBytes += copied
+                    val probe = ByteArray(8)
+                    val read = zip.getInputStream(entry).use { input ->
+                        var count = 0
+                        while (count < probe.size) {
+                            val next = input.read(probe, count, probe.size - count)
+                            if (next < 0) break
+                            if (next > 0) count += next
                         }
+                        count
                     }
-                    out.closeEntry()
+                    if (read < 8 || String(probe, Charsets.US_ASCII) != "UnityFS\u0000") continue
+
+                    unityBundlesSeen++
+                    require(unityBundlesSeen <= MAX_BUNDLES) {
+                        "عدد حزم UnityFS يتجاوز الحد الآمن ($MAX_BUNDLES)."
+                    }
+
+                    val bundleIn = File(operationDir, "bundle-$scanned.in")
+                    val bundleOut = File(operationDir, "bundle-$scanned.out")
+                    val nodeDir = File(operationDir, "bundle-$scanned.nodes")
+                    var keepBundleOut = false
+                    try {
+                        val copied = zip.getInputStream(entry).use { source ->
+                            bundleIn.outputStream().buffered().use { destination ->
+                                BoundedArchiveInput.copy(source, destination, MAX_BUNDLE_BYTES)
+                            }
+                        }
+                        require(copied == entry.size) { "حجم حزمة UnityFS المستخرجة لا يطابق بيانات ZIP." }
+                        require(nodeDir.mkdirs()) { "تعذر إنشاء مجلد عقد UnityFS المؤقت." }
+
+                        val result = localizeBundle(bundleIn, bundleOut, nodeDir, translate, limits)
+                        if (result != null) {
+                            val replacementBytes = bundleOut.length()
+                            require(bundleOut.isFile && replacementBytes in 1L..MAX_SINGLE_REBUILT_ENTRY_BYTES) {
+                                "حجم حزمة UnityFS المعربة غير صالح أو يتجاوز الحد الآمن."
+                            }
+                            val nextStagedBytes = Math.addExact(stagedReplacementBytes, replacementBytes)
+                            require(nextStagedBytes <= MAX_TOTAL_STAGED_BUNDLE_BYTES) {
+                                "إجمالي الحزم المعربة المؤقتة يتجاوز حد التخزين الآمن."
+                            }
+                            stagedReplacementBytes = nextStagedBytes
+                            replacements[entry.name] = bundleOut
+                            keepBundleOut = true
+                            bundlesProcessed++
+                            textAssetsTranslated += result.first
+                            stringsTranslated += result.second
+                            stringsSkipped += result.third
+                        }
+                    } finally {
+                        bundleIn.delete()
+                        if (!keepBundleOut) bundleOut.delete()
+                        nodeDir.deleteRecursively()
+                    }
+                }
+
+                if (stringsTranslated == 0) {
+                    require(!requireTranslations) {
+                        "لم يتم العثور على TextAssets قابلة للترجمة داخل حزم UnityFS في هذا الملف."
+                    }
+                    return null
+                }
+
+                val outputParent = outputApk.absoluteFile.parentFile
+                    ?: error("مجلد APK الناتج غير صالح.")
+                require(outputParent.isDirectory || outputParent.mkdirs()) { "تعذر إنشاء مجلد APK الناتج." }
+                val stagedApk = Files.createTempFile(outputParent.toPath(), ".arabify-apk-", ".tmp").toFile()
+                temporaryApk = stagedApk
+
+                val countingOutput = CountingOutputStream(stagedApk.outputStream().buffered())
+                ZipOutputStream(countingOutput).use { out ->
+                    val all = zip.entries()
+                    var writtenEntries = 0
+                    var copiedArchiveBytes = 0L
+                    while (all.hasMoreElements()) {
+                        val entry = all.nextElement()
+                        writtenEntries++
+                        require(writtenEntries <= MAX_ARCHIVE_ENTRIES) {
+                            "عدد عناصر APK تغير أثناء إعادة البناء."
+                        }
+                        if (isOldSignature(entry.name)) continue
+                        val replacement = replacements[entry.name]
+                        val target = ApkZipEntryPolicy.createWithFileReplacement(
+                            entry, replacement, countingOutput.bytesWritten
+                        )
+                        out.putNextEntry(target)
+                        if (!entry.isDirectory) {
+                            val remaining = MAX_TOTAL_REBUILT_BYTES - copiedArchiveBytes
+                            require(remaining >= 0L) {
+                                "الحجم المفكوك للأرشيف تجاوز حد إعادة البناء الآمن."
+                            }
+                            val entryBudget = minOf(MAX_SINGLE_REBUILT_ENTRY_BYTES, remaining)
+                            if (replacement != null) {
+                                val expectedBytes = replacement.length()
+                                require(expectedBytes <= entryBudget) {
+                                    "الحزمة المعربة تجاوزت حد الحجم الآمن."
+                                }
+                                val copied = replacement.inputStream().buffered().use {
+                                    BoundedArchiveInput.copy(it, out, entryBudget)
+                                }
+                                require(copied == expectedBytes) {
+                                    "تغير حجم الحزمة المعربة أثناء إعادة بناء APK."
+                                }
+                                copiedArchiveBytes = Math.addExact(copiedArchiveBytes, copied)
+                            } else {
+                                val copied = zip.getInputStream(entry).use {
+                                    BoundedArchiveInput.copy(it, out, entryBudget)
+                                }
+                                require(entry.size < 0L || copied == entry.size) {
+                                    "حجم عنصر ZIP الفعلي لا يطابق بياناته: ${entry.name}"
+                                }
+                                copiedArchiveBytes = Math.addExact(copiedArchiveBytes, copied)
+                            }
+                        }
+                        out.closeEntry()
+                    }
                 }
             }
-        }
 
-        // The rebuild must leave every protected Unity binary except the
-        // localized bundles byte-identical; the bundles themselves were
-        // verified by the chain that rewrote them.
-        UnityAssetIntegrityVerifier.verifyUnchanged(inputApk, outputApk, replaced.keys)
-        return UnityApkBundleReport(
-            bundlesProcessed, textAssetsTranslated, stringsTranslated, stringsSkipped, outputApk,
-            replaced.keys.toSet()
-        )
+            val stagedApk = requireNotNull(temporaryApk)
+            UnityAssetIntegrityVerifier.verifyUnchanged(inputApk, stagedApk, replacements.keys)
+            Files.move(
+                stagedApk.toPath(),
+                outputApk.absoluteFile.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING
+            )
+            temporaryApk = null
+
+            return UnityApkBundleReport(
+                bundlesProcessed, textAssetsTranslated, stringsTranslated,
+                stringsSkipped, outputApk, replacements.keys.toSet()
+            )
+        } finally {
+            temporaryApk?.delete()
+            operationDir.deleteRecursively()
+        }
     }
 
     /** Returns (textAssets, translatedStrings, skippedStrings) or null when nothing qualified. */

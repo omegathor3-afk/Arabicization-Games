@@ -671,3 +671,13 @@ quality signal, not a pipeline defect. Audit is now permanent CI evidence.
 Unity SerializedFile/UnityFS write-back (the big backlog item); Unciv
 phone-activation route needs Omega's call (Shizuku/root vs debuggable
 repackage + run-as).
+
+
+## Entry 65 — APK-level UnityFS staging and publication hardening (2026-11-25)
+
+- The Unity APK adapter previously retained every rewritten UnityFS bundle as a `ByteArray` until the APK's second pass. With up to 64 bundles, this could exhaust the Android heap before the existing 2 GiB rebuilt-archive limit was reached.
+- Rewritten bundle outputs are now kept as files inside a unique private operation directory. ZIP replacement entries stream from those files; STORED-entry CRC is computed incrementally. The adapter rejects duplicate ZIP entry names, enforces the declared 64-bundle ceiling, and caps staged rewritten bundles at 512 MiB total.
+- The rebuilt APK is written to a sibling temporary file, checked with `UnityAssetIntegrityVerifier`, then atomically moved to the requested destination. The source APK and any existing destination remain untouched if ZIP writing, integrity verification, or publication fails.
+- Added regression coverage for file-backed STORED-entry size/CRC/alignment, the 65th UnityFS bundle, and failed atomic publication/temporary cleanup.
+- Baseline evidence before this hardening, exact HEAD `78c77d04e10db97822542df2a6e391ee3c551743`: 59 JUnit XML suites, 372 unit tests with 0 failures/errors/skips; 1 Android 15 instrumentation test passed for the synthetic Unity Mono APK; Android CI, CodeQL/Gitleaks, Andor's Trail and Mindustry runs passed. Unciv was still running when inspected. New-commit validation is pending and will be reported separately.
+- **Known high-priority gap remains:** a single UnityFS rewrite still materializes the decoded bundle and several full-size intermediate byte arrays; the 512 MiB decoded limit is not a whole-pipeline heap guarantee. Next: redesign the rewriter around temporary files and bounded chunk streams, then validate with real Unity fixtures across Unity versions and a runnable Unity Player sample.

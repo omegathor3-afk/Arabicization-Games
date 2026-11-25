@@ -1,6 +1,7 @@
 package com.omega.arabify
 
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.FilterOutputStream
 import java.io.OutputStream
 import java.util.zip.CRC32
@@ -51,18 +52,41 @@ internal object ApkZipEntryPolicy {
         replacement: ByteArray?,
         localHeaderOffset: Long
     ): ZipEntry {
+        val method = outputMethod(source)
+        val replacementCrc = if (replacement != null && method == ZipEntry.STORED) crc32(replacement) else null
+        return createInternal(source, replacement != null, replacement?.size?.toLong(), replacementCrc, localHeaderOffset)
+    }
+
+    /** File-backed variant for large rewritten entries; STORED CRC is streamed. */
+    fun createWithFileReplacement(
+        source: ZipEntry,
+        replacement: File?,
+        localHeaderOffset: Long
+    ): ZipEntry {
+        require(replacement == null || replacement.isFile) { "Replacement ZIP entry must be a regular file" }
+        val method = outputMethod(source)
+        val replacementCrc = if (replacement != null && method == ZipEntry.STORED) crc32(replacement) else null
+        return createInternal(source, replacement != null, replacement?.length(), replacementCrc, localHeaderOffset)
+    }
+
+    private fun outputMethod(source: ZipEntry): Int =
+        if (source.name == "resources.arsc") ZipEntry.STORED else source.method
+
+    private fun createInternal(
+        source: ZipEntry,
+        hasReplacement: Boolean,
+        replacementSize: Long?,
+        replacementCrc: Long?,
+        localHeaderOffset: Long
+    ): ZipEntry {
         require(localHeaderOffset >= 0L)
-        require(!source.isDirectory || replacement == null)
+        require(!source.isDirectory || !hasReplacement)
 
         val sourceMethod = source.method
         require(sourceMethod == ZipEntry.STORED || sourceMethod == ZipEntry.DEFLATED) {
             "Unsupported ZIP compression method"
         }
-        val outputMethod = if (source.name == "resources.arsc") {
-            ZipEntry.STORED
-        } else {
-            sourceMethod
-        }
+        val outputMethod = outputMethod(source)
 
         val filteredExtra = filterExtraFields(source.extra ?: ByteArray(0))
         var outputExtra = filteredExtra.bytes
@@ -98,32 +122,36 @@ internal object ApkZipEntryPolicy {
         }
 
         if (outputMethod == ZipEntry.STORED) {
-            val size = replacement?.size?.toLong() ?: source.size
-            val crc = replacement?.let(::crc32) ?: source.crc
+            val size = if (hasReplacement) requireNotNull(replacementSize) else source.size
+            val crc = if (hasReplacement) requireNotNull(replacementCrc) else source.crc
             require(size >= 0L && crc >= 0L) {
                 "STORED ZIP entries require a known size and CRC"
             }
             output.size = size
             output.compressedSize = size
             output.crc = crc
-
             val alignment = maxOf(MIN_ALIGNMENT, filteredExtra.alignment ?: MIN_ALIGNMENT)
-            output.extra = appendAlignmentField(
-                outputExtra,
-                source.name,
-                localHeaderOffset,
-                alignment
-            )
+            output.extra = appendAlignmentField(outputExtra, source.name, localHeaderOffset, alignment)
         } else if (outputExtra.isNotEmpty()) {
             output.extra = outputExtra
         }
-
         return output
     }
 
-    private fun crc32(bytes: ByteArray): Long = CRC32().apply {
-        update(bytes)
-    }.value
+    private fun crc32(bytes: ByteArray): Long = CRC32().apply { update(bytes) }.value
+
+    private fun crc32(file: File): Long {
+        val crc = CRC32()
+        file.inputStream().buffered().use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                if (count > 0) crc.update(buffer, 0, count)
+            }
+        }
+        return crc.value
+    }
 
     private fun filterExtraFields(extra: ByteArray): FilteredExtra {
         val retained = ByteArrayOutputStream(extra.size)

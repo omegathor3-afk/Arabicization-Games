@@ -1,6 +1,7 @@
 package com.omega.arabify
 
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
@@ -132,6 +133,66 @@ class UnityApkBundleLocalizerTest {
             )
             assertNull(report)
             assertTrue(!output.exists())
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun refusesMoreThan64UnityFsBundlesBeforePublishingOutput() {
+        runBlocking {
+            val dir = createTempDir()
+            val bundle = UnityTestFixtures.unityFs(
+                listOf(UnityTestFixtures.NodeSpec("resS", 0, ByteArray(16) { it.toByte() }))
+            )
+            val apk = File(dir, "many-bundles.apk")
+            ZipOutputStream(apk.outputStream().buffered()).use { out ->
+                repeat(65) { index ->
+                    out.putNextEntry(
+                        ZipEntry("assets/bin/Data/StreamingAssets/bundle-$index.unity3d")
+                    )
+                    out.write(bundle)
+                    out.closeEntry()
+                }
+            }
+            val output = File(dir, "output.apk")
+            val error = org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+                runBlocking {
+                    UnityApkBundleLocalizer.tryLocalizeBundlesInApk(
+                        apk, output, File(dir, "work"), fakeArabic
+                    )
+                }
+            }
+            assertTrue(error.message!!.contains("64"))
+            assertTrue(!output.exists())
+            assertTrue(File(dir, "work").listFiles().orEmpty().isEmpty())
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun failedAtomicPublishPreservesExistingDestinationAndCleansTemporaryApk() {
+        runBlocking {
+            val dir = createTempDir()
+            val apk = buildApk(dir)
+            val originalApk = apk.readBytes()
+            val destination = File(dir, "existing-output.apk")
+            assertTrue(destination.mkdir())
+            val sentinel = File(destination, "keep.txt")
+            sentinel.writeText("do not replace")
+
+            org.junit.Assert.assertThrows(IOException::class.java) {
+                runBlocking {
+                    UnityApkBundleLocalizer.localizeBundlesInApk(
+                        apk, destination, File(dir, "work"), fakeArabic
+                    )
+                }
+            }
+
+            assertTrue(destination.isDirectory)
+            assertEquals("do not replace", sentinel.readText())
+            assertArrayEquals(originalApk, apk.readBytes())
+            assertTrue(dir.listFiles().orEmpty().none { it.name.startsWith(".arabify-apk-") })
+            assertTrue(File(dir, "work").listFiles().orEmpty().isEmpty())
             dir.deleteRecursively()
         }
     }

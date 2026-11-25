@@ -77,6 +77,46 @@ class ApkZipEntryPolicyTest {
     }
 
     @Test
+    fun fileBackedStoredReplacementRecomputesSizeAndCrcAndRemainsAligned() {
+        val source = File.createTempFile("arabify-zip-file-source-", ".apk")
+        val output = File.createTempFile("arabify-zip-file-output-", ".apk")
+        val replacementFile = File.createTempFile("arabify-zip-replacement-", ".bin")
+        val original = "old".toByteArray(Charsets.UTF_8)
+        val replacement = "نص عربي محفوظ في ملف مرحلي".toByteArray(Charsets.UTF_8)
+
+        try {
+            ZipOutputStream(source.outputStream()).use { zip ->
+                putStored(zip, "assets/dialogue.txt", original)
+            }
+            replacementFile.writeBytes(replacement)
+            ZipFile(source).use { input ->
+                val counting = CountingOutputStream(output.outputStream().buffered())
+                ZipOutputStream(counting).use { zip ->
+                    val entry = requireNotNull(input.getEntry("assets/dialogue.txt"))
+                    val target = ApkZipEntryPolicy.createWithFileReplacement(
+                        entry, replacementFile, counting.bytesWritten
+                    )
+                    zip.putNextEntry(target)
+                    replacementFile.inputStream().use { it.copyTo(zip) }
+                    zip.closeEntry()
+                }
+            }
+            ZipFile(output).use { zip ->
+                val entry = requireNotNull(zip.getEntry("assets/dialogue.txt"))
+                assertEquals(ZipEntry.STORED, entry.method)
+                assertEquals(replacement.size.toLong(), entry.size)
+                assertEquals(crc32(replacement), entry.crc)
+                assertArrayEquals(replacement, zip.getInputStream(entry).use { it.readBytes() })
+            }
+            assertEquals(0L, localDataOffset(output, "assets/dialogue.txt") % 4L)
+        } finally {
+            source.delete()
+            output.delete()
+            replacementFile.delete()
+        }
+    }
+
+    @Test
     fun existingSixteenKiBAlignmentIsPreservedInWrittenZip() {
         val output = File.createTempFile("arabify-zip-16k-", ".apk")
         val bytes = byteArrayOf(7, 8, 9)
