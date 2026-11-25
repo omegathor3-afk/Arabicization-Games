@@ -87,6 +87,21 @@ if [[ "$test_status" -eq 0 ]]; then
   echo "::notice::UncivLocaleSlotInstrumentedTest PASSED (real translation; slot built, signed and verified on-device)"
 fi
 
+# The long connected-test run (ML Kit translating 6.5k strings on
+# swiftshader) can drop the adb connection; observed 2026-11-25: green
+# test, then every pull failed with "device offline". Reconnect first.
+for attempt in $(seq 1 12); do
+  adb_state=$(adb get-state 2>/dev/null | tr -d '\r')
+  [[ "$adb_state" == "device" ]] && break
+  adb reconnect 2>/dev/null || adb reconnect offline 2>/dev/null || true
+  sleep 5
+done
+adb_state=$(adb get-state 2>/dev/null | tr -d '\r')
+if [[ "$adb_state" != "device" ]]; then
+  note_failure "adb connection to the emulator never recovered after the connected test (state: ${adb_state:-unknown})"
+  exit 1
+fi
+
 OUTPUT_DIR="build/test-game/localized/pulled-evidence"
 mkdir -p "$OUTPUT_DIR"
 adb pull /sdcard/Download/ARABIFY/unciv-arabic.apk "$OUTPUT_DIR/unciv-arabic.apk" || true
