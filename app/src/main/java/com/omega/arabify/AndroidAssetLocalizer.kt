@@ -22,6 +22,11 @@ internal data class AssetLocalizationReport(
 )
 
 internal object AssetTextTransformer {
+
+ // Full-coverage phrase composition: strings built entirely from reviewed
+ // glossary phrases never reach the MT engine.
+ private val phraseTermBase by lazy { PhraseTermBase(ArabicUiGlossary.terms) }
+
  data class Result(val text:String,val translated:Int,val skipped:Int,val skipReasons:Map<String,Int> = emptyMap(),val repaired:Int = 0,val repairReasons:Map<String,Int> = emptyMap())
 
  suspend fun transform(
@@ -87,6 +92,12 @@ internal object AssetTextTransformer {
    val suffix=value.takeLastWhile{it.isWhitespace()}
    return SingleResult(prefix+glossaryHit+suffix,true)
   }
+  val phraseHit=phraseTermBase.compose(value.trim())
+  if(phraseHit!=null){
+   val prefix=value.takeWhile{it.isWhitespace()}
+   val suffix=value.takeLastWhile{it.isWhitespace()}
+   return SingleResult(prefix+phraseHit.text+suffix,true,null,"phrase_term_base")
+  }
   val protected=PlaceholderProtector.protect(value)
   return try {
    var result=translate(protected.text)
@@ -141,6 +152,14 @@ internal object AssetTextTransformer {
     val prefix=value.takeWhile{it.isWhitespace()}
     val suffix=value.takeLastWhile{it.isWhitespace()}
     return prefix+glossaryHit+suffix
+   }
+   val phraseHit=phraseTermBase.compose(value.trim())
+   if(phraseHit!=null){
+    translated++
+    countRepair("phrase_term_base")
+    val prefix=value.takeWhile{it.isWhitespace()}
+    val suffix=value.takeLastWhile{it.isWhitespace()}
+    return prefix+phraseHit.text+suffix
    }
    if(translationCandidates>=maxTranslationCandidates){skipped++;countSkip("candidate_cap");return value}
    translationCandidates++

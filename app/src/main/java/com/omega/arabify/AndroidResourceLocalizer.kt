@@ -131,6 +131,9 @@ internal object AndroidResourceLocalizer {
  * replacement.
  */
 internal object ArabicUiGlossary {
+    /** Term source for the phrase term base (full-coverage composition). */
+    val terms: Map<String, String> get() = exactTranslations
+
     private val exactTranslations = mapOf(
         "create" to "إنشاء",
         "play" to "العب",
