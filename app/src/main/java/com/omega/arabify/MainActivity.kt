@@ -722,7 +722,7 @@ private fun ArabifyApp(context: Context) {
          }
          if(inventory.totalUnityFiles > 12 || inventory.scanTruncated) {
           val shown=minOf(12,inventory.items.size)
-          Text("عدد عناصر Unity المكتشفة: ${inventory.totalUnityFiles}؛ المعروض: أول ${shown}." + if(inventory.scanTruncated) " الجرد جزئي؛ لم تُفحص بقية إدخالات ZIP." else "",color=Color(0xFF9CA5B1),fontSize=10.sp)
+          Text("عدد عناصر Unity المكتشفة: ${inventory.totalUnityFiles}؛ المعروض: أول ${shown}." + if(inventory.scanTruncated) " الجرد جزئي؛ لم تُفحص بقية إدخالات ZIP." else "",color=ArabifyPalette.textMuted,fontSize=10.sp)
          }
         }
        }

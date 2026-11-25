@@ -5,7 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -26,48 +26,51 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * ARABIFY design system v2: deep-space navy with cyan/violet neon accents and
- * bundled Cairo type. Gamer energy, professional restraint: one accent family,
- * glow reserved for primary actions, hierarchy carried by type scale.
+ * ARABIFY design system v3: League of Legends client look - hextech deep
+ * blue-black canvas, brushed-gold borders and actions, cream inscription
+ * text, sharp cut-corner frames. Style match only: colors/shapes in the LoL
+ * spirit; no Riot art, icons, or fonts are copied (Cairo stays our typeface).
  */
 internal object ArabifyPalette {
-    val canvas = Color(0xFF070B16)
-    val surface = Color(0xFF0E1526)
-    val surfaceRaised = Color(0xFF141C33)
-    val surfaceAccent = Color(0xFF1A2440)
-    val surfaceElevated = Color(0xFF1F2A4A)
-    val outline = Color(0xFF28334F)
-    val outlineNeon = Color(0xFF2DE0D0)
-    val primary = Color(0xFF2DE0D0)
-    val primaryDeep = Color(0xFF0E9C93)
-    val violet = Color(0xFF8B5CF6)
-    val violetSoft = Color(0xFFA78BFA)
-    val accent = Color(0xFFFFB454)
-    val tertiary = Color(0xFF5EC8F8)
-    val textPrimary = Color(0xFFF2F5FF)
-    val textSecondary = Color(0xFFA9B4D4)
-    val textMuted = Color(0xFF77839F)
-    val textDisabled = Color(0xFF535D78)
-    val textBody = Color(0xFFC6CFE8)
-    val textOnCard = Color(0xFFE4E9FA)
+    val canvas = Color(0xFF010A13)
+    val surface = Color(0xFF0D1420)
+    val surfaceRaised = Color(0xFF121A29)
+    val surfaceAccent = Color(0xFF16202F)
+    val surfaceElevated = Color(0xFF1B2636)
+    val outline = Color(0xFF785A28)
+    val outlineNeon = Color(0xFFC89B3C)
+    val primary = Color(0xFFC89B3C)
+    val primaryDeep = Color(0xFF785A28)
+    val violet = Color(0xFF0AC8B9)
+    val violetSoft = Color(0xFF4FD8CC)
+    val accent = Color(0xFFF0C868)
+    val tertiary = Color(0xFF0AC8B9)
+    val textPrimary = Color(0xFFF0E6D2)
+    val textSecondary = Color(0xFFA09B8C)
+    val textMuted = Color(0xFF73716C)
+    val textDisabled = Color(0xFF3C3C41)
+    val textBody = Color(0xFFCDBE91)
+    val textOnCard = Color(0xFFF0E6D2)
     val success = Color(0xFF4ADE80)
-    val warning = Color(0xFFFFB454)
+    val warning = Color(0xFFF0C868)
     val warningText = Color(0xFFF5C97E)
-    val danger = Color(0xFFFF6B6B)
-    val info = Color(0xFF5EC8F8)
+    val danger = Color(0xFFD13639)
+    val info = Color(0xFF0AC8B9)
 }
 
 /** Signature gradients. */
 internal object ArabifyGradients {
-    val neon = Brush.horizontalGradient(listOf(ArabifyPalette.primary, ArabifyPalette.violet))
+    val neon = Brush.linearGradient(
+        listOf(Color(0xFF785A28), Color(0xFFC89B3C), Color(0xFFF0E6D2))
+    )
     val neonSoft = Brush.horizontalGradient(
         listOf(ArabifyPalette.primary.copy(alpha = 0.22f), ArabifyPalette.violet.copy(alpha = 0.22f))
     )
     val hero = Brush.linearGradient(
-        listOf(Color(0xFF0D1B3A), Color(0xFF101830), Color(0xFF160F2E))
+        listOf(Color(0xFF010A13), Color(0xFF0D1420), Color(0xFF16202F))
     )
     val wordmark = Brush.horizontalGradient(
-        listOf(ArabifyPalette.primary, Color(0xFF7CD4FC), ArabifyPalette.violetSoft)
+        listOf(Color(0xFF785A28), Color(0xFFC89B3C), Color(0xFFF0E6D2))
     )
 }
 
@@ -89,9 +92,9 @@ internal object ArabifySpacing {
 }
 
 internal object ArabifyCorners {
-    val control = RoundedCornerShape(14.dp)
-    val card = RoundedCornerShape(20.dp)
-    val feature = RoundedCornerShape(28.dp)
+    val control = CutCornerShape(12.dp)
+    val card = CutCornerShape(18.dp)
+    val feature = CutCornerShape(24.dp)
 }
 
 @Composable
@@ -99,13 +102,13 @@ internal fun ArabifyTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
             primary = ArabifyPalette.primary,
-            onPrimary = Color(0xFF03211E),
-            primaryContainer = Color(0xFF0E3A3F),
-            onPrimaryContainer = Color(0xFFBFF5EE),
+            onPrimary = Color(0xFF241C0E),
+            primaryContainer = Color(0xFF3A2F17),
+            onPrimaryContainer = Color(0xFFF0E6D2),
             secondary = ArabifyPalette.violetSoft,
-            onSecondary = Color(0xFF1D0B45),
-            secondaryContainer = Color(0xFF35206B),
-            onSecondaryContainer = Color(0xFFE7DCFF),
+            onSecondary = Color(0xFF01241F),
+            secondaryContainer = Color(0xFF0E3A38),
+            onSecondaryContainer = Color(0xFFBFF5EE),
             tertiary = ArabifyPalette.tertiary,
             background = ArabifyPalette.canvas,
             onBackground = ArabifyPalette.textPrimary,
@@ -126,9 +129,9 @@ internal fun ArabifyTheme(content: @Composable () -> Unit) {
             labelLarge = TextStyle(fontFamily = ArabifyFontFamily, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         ),
         shapes = Shapes(
-            small = RoundedCornerShape(12.dp),
-            medium = RoundedCornerShape(18.dp),
-            large = RoundedCornerShape(24.dp)
+            small = CutCornerShape(8.dp),
+            medium = CutCornerShape(14.dp),
+            large = CutCornerShape(18.dp)
         ),
         content = content
     )
@@ -149,7 +152,7 @@ internal fun ArabifyCtaButton(
         shape = shape,
         colors = ButtonDefaults.buttonColors(
             containerColor = Color.Transparent,
-            contentColor = Color(0xFF04110F),
+            contentColor = Color(0xFF241C0E),
             disabledContainerColor = Color.Transparent,
             disabledContentColor = ArabifyPalette.textDisabled,
         ),
