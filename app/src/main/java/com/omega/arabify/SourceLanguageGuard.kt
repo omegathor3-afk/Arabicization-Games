@@ -19,8 +19,12 @@ internal object SourceLanguageGuard {
         if (arabic * 2 >= letters.length) return Verdict.ALREADY_ARABIC
         val latin = letters.count { it.code < 0x0250 }
         if (latin * 2 < letters.length) return Verdict.NOT_ENGLISH
+        // Marker absence only convicts longer strings: short English game
+        // strings routinely contain no function words ("Hit one vehicle"),
+        // and skipping real English costs a translation; a rare French
+        // false-pass costs one odd string. Five words is the balance.
         val words = text.lowercase().split(Regex("[^a-z]+")).filter { it.isNotEmpty() }
-        if (words.size >= 3 && words.count { it in ENGLISH_MARKERS } == 0) return Verdict.NOT_ENGLISH
+        if (words.size >= 5 && words.count { it in ENGLISH_MARKERS } == 0) return Verdict.NOT_ENGLISH
         return Verdict.ENGLISH
     }
 

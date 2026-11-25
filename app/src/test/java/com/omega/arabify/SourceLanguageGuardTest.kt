@@ -35,4 +35,11 @@ class SourceLanguageGuardTest {
     fun shortEnglishWithoutMarkersPasses() {
         assertEquals(SourceLanguageGuard.Verdict.ENGLISH, SourceLanguageGuard.classify("Refinery"))
     }
+
+    @Test
+    fun shortEnglishGameStringsWithoutFunctionWordsPass() {
+        // regression: marker absence must not convict short strings
+        assertEquals(SourceLanguageGuard.Verdict.ENGLISH, SourceLanguageGuard.classify("Hit one vehicle"))
+        assertEquals(SourceLanguageGuard.Verdict.ENGLISH, SourceLanguageGuard.classify("Wave incoming"))
+    }
 }

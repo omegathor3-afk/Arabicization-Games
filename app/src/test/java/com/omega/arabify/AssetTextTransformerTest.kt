@@ -185,7 +185,7 @@ class AssetTextTransformerTest {
  }
 
  @Test fun transformValueSkipsNonEnglishSource()=runBlocking {
-  val result=AssetTextTransformer.transformValue("Joueur contre environnement"){ "SHOULD_NOT_BE_CALLED" }
+  val result=AssetTextTransformer.transformValue("Joueur contre environnement facile maintenant"){ "SHOULD_NOT_BE_CALLED" }
   assertTrue(!result.translated)
   assertEquals("source_language:not_english",result.reason)
  }
