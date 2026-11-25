@@ -90,7 +90,7 @@ fi
 # The long connected-test run (ML Kit translating 6.5k strings on
 # swiftshader) can drop the adb connection; observed 2026-11-25: green
 # test, then every pull failed with "device offline". Reconnect first.
-for attempt in $(seq 1 12); do
+for attempt in $(seq 1 24); do
   adb_state=$(adb get-state 2>/dev/null | tr -d '\r')
   [[ "$adb_state" == "device" ]] && break
   adb reconnect 2>/dev/null || adb reconnect offline 2>/dev/null || true
@@ -102,11 +102,26 @@ if [[ "$adb_state" != "device" ]]; then
   exit 1
 fi
 
+# get-state saying "device" is not enough: the link can flap again between
+# the check and the next command (observed on e57557f: state recovered,
+# then the evidence pulls still hit "device offline"). Retry individual
+# adb commands with a reconnect between attempts.
+adb_with_reconnect() {
+  local tries=0
+  while [[ $tries -lt 24 ]]; do
+    if adb "$@"; then return 0; fi
+    tries=$((tries+1))
+    adb reconnect 2>/dev/null || adb reconnect offline 2>/dev/null || true
+    sleep 5
+  done
+  return 1
+}
+
 OUTPUT_DIR="build/test-game/localized/pulled-evidence"
 mkdir -p "$OUTPUT_DIR"
-adb pull /sdcard/Download/ARABIFY/unciv-arabic.apk "$OUTPUT_DIR/unciv-arabic.apk" || true
-adb pull /sdcard/Download/ARABIFY/unciv-report.txt "$OUTPUT_DIR/unciv-report.txt" || true
-adb pull /sdcard/Download/ARABIFY/unciv-roundtrip.txt "$OUTPUT_DIR/unciv-roundtrip.txt" || true
+adb_with_reconnect pull /sdcard/Download/ARABIFY/unciv-arabic.apk "$OUTPUT_DIR/unciv-arabic.apk" || true
+adb_with_reconnect pull /sdcard/Download/ARABIFY/unciv-report.txt "$OUTPUT_DIR/unciv-report.txt" || true
+adb_with_reconnect pull /sdcard/Download/ARABIFY/unciv-roundtrip.txt "$OUTPUT_DIR/unciv-roundtrip.txt" || true
 if [[ -s "$OUTPUT_DIR/unciv-roundtrip.txt" ]]; then
   echo "::notice::ROUNDTRIP-AUDIT $(head -2 "$OUTPUT_DIR/unciv-roundtrip.txt" | tr '\n' ' ')"
   tail -n +3 "$OUTPUT_DIR/unciv-roundtrip.txt" | head -5 | while IFS= read -r sample; do
@@ -325,7 +340,7 @@ PY
   fi
 else
   echo "Translated Unciv APK was not exported to the shared Downloads collection." >&2
-  downloads_listing=$(adb shell ls -la /sdcard/Download/ARABIFY/ 2>&1 | head -20 | tr '\n' ' ')
+  downloads_listing=$(adb_with_reconnect shell ls -la /sdcard/Download/ARABIFY/ 2>&1 | head -20 | tr '\n' ' ')
   note_failure "localized Unciv APK missing after a green test: /sdcard/Download/ARABIFY listing: ${downloads_listing:-<empty>}"
   if [[ "$test_status" -eq 0 ]]; then test_status=1; fi
 fi
