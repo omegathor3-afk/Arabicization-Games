@@ -175,4 +175,24 @@ class AssetTextTransformerTest {
   assertEquals("segmented_placeholders",result.repair)
   assertTrue(result.text.contains("{0}"))
  }
+
+ @Test fun transformValueSkipsAlreadyArabicSource()=runBlocking {
+  // Arabic source never reaches the translator (re-run protection lives in
+  // looksTranslatable, which rejects any Arabic-script value up front).
+  val result=AssetTextTransformer.transformValue("لعبة جديدة"){ "SHOULD_NOT_BE_CALLED" }
+  assertTrue(!result.translated)
+  assertEquals("not_translatable",result.reason)
+ }
+
+ @Test fun transformValueSkipsNonEnglishSource()=runBlocking {
+  val result=AssetTextTransformer.transformValue("Joueur contre environnement"){ "SHOULD_NOT_BE_CALLED" }
+  assertTrue(!result.translated)
+  assertEquals("source_language:not_english",result.reason)
+ }
+
+ @Test fun transformValueStillTranslatesShortEnglish()=runBlocking {
+  val result=AssetTextTransformer.transformValue("Options"){ "خيارات" }
+  assertTrue(result.translated)
+  assertEquals("خيارات",result.text)
+ }
 }

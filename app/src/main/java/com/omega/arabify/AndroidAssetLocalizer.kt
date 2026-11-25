@@ -98,6 +98,13 @@ internal object AssetTextTransformer {
    val suffix=value.takeLastWhile{it.isWhitespace()}
    return SingleResult(prefix+phraseHit.text+suffix,true,null,"phrase_term_base")
   }
+  // Never feed non-English source to the EN->AR engine: a string that is
+  // actually French/CJK/etc. would produce garbage attributed to us. Arabic
+  // source is already rejected by looksTranslatable above; short English
+  // strings (OK, No) still pass through.
+  if(SourceLanguageGuard.classify(value)==SourceLanguageGuard.Verdict.NOT_ENGLISH){
+   return SingleResult(value,false,"source_language:not_english")
+  }
   val protected=PlaceholderProtector.protect(value)
   return try {
    var result=translate(protected.text)
