@@ -306,9 +306,12 @@ internal object GettextPoLocalizer {
                 out.append("msgid_plural ").append(quote(entry.msgidPlural)).append("\n")
                 val one = shape(singular ?: entry.msgid)
                 val many = shape(plural ?: singular ?: entry.msgidPlural)
-                // Arabic plural forms without real inflection: 1 = singular, 0/2/3/4/5 = plural text.
-                for (i in 0..5) {
-                    out.append("msgstr[").append(i).append("] ").append(quote(if (i == 1) one else many)).append("\n")
+                // CLDR category order via ArabicPluralRules; without noun
+                // inflection only ONE takes the singular - ZERO/TWO would need
+                // "لا + اسم" / dual morphology, a documented limit.
+                for (category in ArabicPluralRules.Category.entries) {
+                    val i = ArabicPluralRules.gettextIndex(category)
+                    out.append("msgstr[").append(i).append("] ").append(quote(ArabicPluralRules.pickText(category, one, many))).append("\n")
                 }
             } else {
                 out.append("msgstr ").append(quote(shape(singular ?: entry.msgid))).append("\n")
