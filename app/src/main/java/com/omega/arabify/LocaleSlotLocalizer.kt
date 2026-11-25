@@ -128,16 +128,25 @@ internal object LocaleSlotLocalizer {
             var fontEntryName: String? = null
             var fontBytes: ByteArray? = null
             var fontReason: String? = null
-            var shapeArabicSlot = false
-            // Shaping+font injection applies to BOTH conventions. Folder-
-            // convention games (Unciv-style) rendered logical Arabic through
-            // their own text stack and dropped/mangled glyphs on device
-            // (تاريخ rendered as تارايخ, عرب lost its ب) - their renderer
-            // does not do full Arabic shaping, so they need the same
-            // Presentation Forms-B visual order + catalog font as libGDX.
+            // These two bundle conventions are read by libGDX-family text
+            // stacks that have NO bidi algorithm: logical-order Arabic renders
+            // reversed on screen (Unciv rendered خيارات as تارايخ even though
+            // the glyphs themselves were shaped, because it draws via Android
+            // system fonts at runtime, not a bundled TTF). So the slot values
+            // are ALWAYS pre-shaped to visual-order Presentation Forms-B,
+            // whether or not a static font asset exists to inject. Verified on
+            // device: logical content renders reversed, PFB content renders
+            // correctly through the same stack.
+            var shapeArabicSlot = fonts != null
             if (fonts != null) {
                 val fe = candidates.firstOrNull { mainFontPattern.containsMatchIn(it) }
-                if (fe != null) {
+                if (fe == null) {
+                    // Some libGDX games (Unciv) bundle no TTF at all - they build
+                    // fonts at runtime from Android system fonts. Nothing static
+                    // to replace; the PFB-shaped slot renders through the system
+                    // Arabic font, which carries presentation forms.
+                    fontReason = "لا يوجد خط ثابت داخل اللعبة لاستبداله (تبني خطوطها من خطوط النظام وقت التشغيل)؛ اعتمدنا تشكيل الحروف مسبقاً مع خط النظام العربي."
+                } else {
                     val gameFont = zip.getInputStream(zip.getEntry(fe)).use {
                         BoundedArchiveInput.readAll(it, 16L * 1024L * 1024L)
                     }
@@ -192,9 +201,6 @@ internal object LocaleSlotLocalizer {
             } else {
                 AssetTextTransformer.transform(slotPath, source) { value -> tx(value) }
             }
-            // Presentation-form shaping is paired with the catalog font that was
-            // actually injected. Never shape when preserving the game's own font:
-            // it may already shape Arabic natively, or may be an icon font.
             val slotText = if (shapeArabicSlot) shapeProperties(result.text) else result.text
             require(result.translated > 0) { "لم يتم العثور على نصوص قابلة للترجمة في حزمة اللغة." }
 

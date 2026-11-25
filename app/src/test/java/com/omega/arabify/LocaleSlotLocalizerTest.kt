@@ -299,15 +299,16 @@ class LocaleSlotLocalizerTest {
             assertNull(report.fontReplaced)
             assertTrue(report.fontReason!!.contains("خط الأيقونات"))
             assertTrue(readEntry(output, "assets/fonts/font.ttf")!!.contentEquals(gameFont))
+            // renderer family has no bidi: the slot is pre-shaped even when no
+            // font could be injected (glyphs were already unavailable).
             val slot = String(readEntry(output, "assets/bundles/bundle_ar.properties")!!, Charsets.UTF_8)
-            assertTrue(slot.contains("لعبة جديدة"))
-            assertFalse(slot.any { it.code in 0xFE70..0xFEFF })
+            assertTrue(slot.any { it.code in 0xFE70..0xFEFF })
             dir.deleteRecursively()
         }
     }
 
     @Test
-    fun keepsAnArabicCapableGameFontAndDoesNotPreShapeIt() {
+    fun keepsAnArabicCapableGameFontButStillPreShapesForRendererWithoutBidi() {
         runBlocking {
             val dir = createTempDir()
             val assets = File("src/main/assets")
@@ -321,9 +322,12 @@ class LocaleSlotLocalizerTest {
             assertNull(report.fontReplaced)
             assertNull(report.fontReason)
             assertTrue(readEntry(output, "assets/fonts/font.ttf")!!.contentEquals(gameFont))
+            // libGDX-family layout has no bidi: even with an Arabic-capable font,
+            // logical order renders reversed on screen (verified on Unciv), so the
+            // slot is still pre-shaped to visual-order presentation forms.
             val slot = String(readEntry(output, "assets/bundles/bundle_ar.properties")!!, Charsets.UTF_8)
-            assertTrue(slot.contains("لعبة جديدة"))
-            assertFalse(slot.any { it.code in 0xFE70..0xFEFF })
+            assertTrue(slot.any { it.code in 0xFE70..0xFEFF })
+            assertTrue("raw letters in: $slot", slot.none { it.code in 0x0628..0x064A })
             dir.deleteRecursively()
         }
     }
