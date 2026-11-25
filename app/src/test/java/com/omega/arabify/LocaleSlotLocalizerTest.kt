@@ -80,9 +80,9 @@ class LocaleSlotLocalizerTest {
             val report = LocaleSlotLocalizer.addArabicLocaleSlot(input, output, fakeArabic)
 
             assertEquals("assets/jsons/translations/English.properties", report.baseEntry)
-            assertEquals("assets/jsons/translations/Arabic.properties", report.addedEntry)
+            assertEquals("assets/jsons/translations/العربية.properties", report.addedEntry)
             assertEquals(3, report.stringsTranslated)
-            val slot = readEntry(output, "assets/jsons/translations/Arabic.properties")!!.toString(Charsets.UTF_8)
+            val slot = readEntry(output, "assets/jsons/translations/العربية.properties")!!.toString(Charsets.UTF_8)
             assertTrue(slot.contains("New Game") && slot.contains("لعبة جديدة"))
             // The French sibling and the English base stay byte-identical.
             val originalFrench = readEntry(input, "assets/jsons/translations/French.properties")!!

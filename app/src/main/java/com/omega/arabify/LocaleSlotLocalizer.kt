@@ -14,7 +14,8 @@ import java.util.zip.ZipOutputStream
  *    siblings such as bundle_de.properties): writes bundle_ar.properties.
  *  - Translation folders (assets/jsons/translations/English.properties +
  *    one <Language>.properties per language, as in Unciv): writes
- *    Arabic.properties; the game builds its language list from the folder.
+ *    العربية.properties (the autonym these registries key on); the game
+ *    builds its language list from the folder.
  *
  * The game then lists Arabic in its own language settings or resolves it
  * from the device locale - the preferred "add Arabic to the game's
@@ -51,11 +52,29 @@ internal object LocaleSlotLocalizer {
 
     private val mainFontPattern = Regex("(^|/)fonts/font\\.(woff|ttf|otf)$")
 
+    // Folder-convention games key translation files by their language DISPLAY
+    // name (English.properties, French.properties, ...). Arabic's display name
+    // in the language registries these games use (Unciv's LocaleCode, CLDR) is
+    // the autonym العربية, and the reader looks up
+    // "<folder>/<display name>.properties" directly - an English-keyed
+    // "Arabic.properties" is never read by such a game.
     fun arabicSlotPathFor(basePath: String): String =
         if (translationFolderPattern.containsMatchIn(basePath)) {
-            basePath.removeSuffix("English.properties") + "Arabic.properties"
+            basePath.removeSuffix("English.properties") + "العربية.properties"
         } else {
             basePath.removeSuffix(".properties") + "_ar.properties"
+        }
+
+    // Alternate slot names a game might already ship under (English-keyed
+    // registries). Existence of any of them means the game has Arabic already.
+    private fun existingArabicSlotPathsFor(basePath: String): List<String> =
+        if (translationFolderPattern.containsMatchIn(basePath)) {
+            listOf(
+                basePath.removeSuffix("English.properties") + "العربية.properties",
+                basePath.removeSuffix("English.properties") + "Arabic.properties"
+            )
+        } else {
+            listOf(basePath.removeSuffix(".properties") + "_ar.properties")
         }
 
     suspend fun addArabicLocaleSlot(
@@ -100,8 +119,9 @@ internal object LocaleSlotLocalizer {
             }
             val base = bases.first()
             val slotPath = arabicSlotPathFor(base)
-            require(zip.getEntry(slotPath) == null) {
-                "اللعبة تحتوي بالفعل على ملف لغة عربية ($slotPath)."
+            val shipped = existingArabicSlotPathsFor(base).firstOrNull { zip.getEntry(it) != null }
+            require(shipped == null) {
+                "اللعبة تحتوي بالفعل على ملف لغة عربية ($shipped)."
             }
 
             val isGdx = !translationFolderPattern.containsMatchIn(base)

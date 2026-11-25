@@ -18,9 +18,11 @@ import java.util.zip.ZipFile
 /**
  * End-to-end test of the translation-folder locale-slot tier against the
  * real Unciv game (F-Droid build) installed on the emulator by the CI
- * script. Unciv builds its in-game language list from
- * assets/jsons/translations/<Language>.properties, so adding
- * Arabic.properties surfaces Arabic in the game's own language UI.
+ * script. Unciv reads jsons/translations/<settings.language>.properties, and
+ * its registry names Arabic بالعربية, so the slot file must be
+ * العربية.properties (its language picker hides Arabic entirely:
+ * LocaleCode.Arabic is flagged unused upstream - activation happens via the
+ * GameSettings.json the CI script seeds, not the picker).
  *
  * Translation uses a deterministic pseudo-Arabic stand-in (see
  * MindustryLocaleSlotInstrumentedTest for the rationale).
@@ -61,7 +63,7 @@ class UncivLocaleSlotInstrumentedTest {
                     if (trimmed.length >= 3) "عر${trimmed.length}" else text
                 }
                 Log.i("UncivSlot", "slot=${report.addedEntry} translated=${report.stringsTranslated} skipped=${report.stringsSkipped}")
-                assertEquals("assets/jsons/translations/Arabic.properties", report.addedEntry)
+                assertEquals("assets/jsons/translations/العربية.properties", report.addedEntry)
                 assertTrue("Too few Unciv strings translated: ${report.stringsTranslated}", report.stringsTranslated > 1000)
                 assertTrue("Unsigned localized APK missing", unsigned.isFile && unsigned.length() > 0L)
 
