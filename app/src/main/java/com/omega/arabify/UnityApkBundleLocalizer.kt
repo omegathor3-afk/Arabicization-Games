@@ -243,8 +243,12 @@ internal object UnityApkBundleLocalizer {
         translate: suspend (String) -> String,
         limits: UnityFsDecodeLimits
     ): Triple<Int, Int, Int>? {
+        // The writer currently keeps several full-stream copies alive. Apply a
+        // heap-derived ceiling before decoding so oversized bundles are refused
+        // before ByteArrayOutputStream can grow toward the parser's broad read limit.
+        val rewriteLimits = UnityFsRewriteMemoryBudget.constrain(limits)
         val stream = java.io.ByteArrayOutputStream()
-        val decoded = UnityFsBundleDecoder.decode(bundleIn, stream, limits)
+        val decoded = UnityFsBundleDecoder.decode(bundleIn, stream, rewriteLimits)
             ?: error("حزمة UnityFS داخل APK لا تُفك؛ أُوقفت العملية حفاظًا على سلامة الملف.")
         val streamBytes = stream.toByteArray()
 
@@ -327,7 +331,7 @@ internal object UnityApkBundleLocalizer {
             } else {
                 File(bundleOut.parentFile, "bundle-chain-$step.tmp")
             }
-            UnityFsBundleRewriter.rewriteNode(source, target, nodePath, nodeBytes, limits)
+            UnityFsBundleRewriter.rewriteNode(source, target, nodePath, nodeBytes, rewriteLimits)
             if (source != bundleIn) source.delete()
             source = target
         }

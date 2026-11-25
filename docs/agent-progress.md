@@ -681,3 +681,13 @@ repackage + run-as).
 - Added regression coverage for file-backed STORED-entry size/CRC/alignment, the 65th UnityFS bundle, and failed atomic publication/temporary cleanup.
 - Baseline evidence before this hardening, exact HEAD `78c77d04e10db97822542df2a6e391ee3c551743`: 59 JUnit XML suites, 372 unit tests with 0 failures/errors/skips; 1 Android 15 instrumentation test passed for the synthetic Unity Mono APK; Android CI, CodeQL/Gitleaks, Andor's Trail and Mindustry runs passed. Unciv was still running when inspected. New-commit validation is pending and will be reported separately.
 - **Known high-priority gap remains:** a single UnityFS rewrite still materializes the decoded bundle and several full-size intermediate byte arrays; the 512 MiB decoded limit is not a whole-pipeline heap guarantee. Next: redesign the rewriter around temporary files and bounded chunk streams, then validate with real Unity fixtures across Unity versions and a runnable Unity Player sample.
+
+
+## Entry 66 — heap-derived UnityFS rewrite guard (2026-11-25)
+
+- The previous 512 MiB decoded limit was appropriate only as a parser ceiling; it was not safe for the current rewrite implementation, which keeps several full-stream byte arrays alive during patching, LZ4 chunking, assembly and read-back verification.
+- Added `UnityFsRewriteMemoryBudget`. Both the APK TextAsset localization path and direct UnityFS rewriter now apply it before decoding. The rewrite decoded-stream budget is the minimum of the caller's limit, 32 MiB, and 1/32 of the app's maximum heap; per-block, Block Info, LZMA and working-set limits are reduced consistently.
+- Oversized bundles are rejected by the decoder's declared-total check before storage blocks are expanded. The source APK/bundle and any pre-existing output remain unchanged on refusal.
+- Added four deterministic unit tests for a 256 MiB heap, the 32 MiB hard ceiling, preserving stricter caller budgets, and rejecting an unrealistically small heap.
+- This does **not** make the writer streaming and does not establish a safe bound for every allocation on every device. It deliberately trades support for large bundles for a lower OOM risk until the file-backed writer is implemented.
+- Validation on this commit is pending; no local Gradle environment is available through the GitHub-only editing session. CI must confirm the Kotlin compile, unit suite, Android fixture path and lint before this entry is treated as validated.

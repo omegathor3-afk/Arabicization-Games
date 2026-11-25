@@ -61,8 +61,12 @@ internal object UnityFsBundleRewriter {
             "مسار العقدة داخل الحزمة غير صالح."
         }
 
+        // Keep the multi-array rewrite/verification pipeline within a conservative
+        // fraction of the Android app heap. This is a safety gate, not a substitute
+        // for the still-pending file-backed streaming rewrite.
+        val rewriteLimits = UnityFsRewriteMemoryBudget.constrain(limits)
         // Parse header and block info exactly like the decoder does.
-        val (header, rawHeader, blockInfo, originalStream) = readBundle(input, limits)
+        val (header, rawHeader, blockInfo, originalStream) = readBundle(input, rewriteLimits)
         val target = blockInfo.nodes.singleOrNull { it.path == nodePath }
             ?: error("لم يتم العثور على العقدة المطلوبة داخل الحزمة: $nodePath")
         require(target.size <= Int.MAX_VALUE.toLong())
@@ -215,7 +219,7 @@ internal object UnityFsBundleRewriter {
                 newFileBytes = finalBytes.size.toLong()
             )
             verifyRewrittenBundle(
-                temporaryOutput, limits, blockInfo, originalStream, nodePath, replacement, newStream
+                temporaryOutput, rewriteLimits, blockInfo, originalStream, nodePath, replacement, newStream
             )
             Files.move(
                 temporaryOutput.toPath(),
