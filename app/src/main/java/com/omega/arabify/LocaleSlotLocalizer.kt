@@ -258,7 +258,11 @@ internal object LocaleSlotLocalizer {
     internal fun shapeProperties(text: String): String = text.split("\n").joinToString("\n") { line ->
         val trimmed = line.trimStart()
         if (trimmed.isEmpty() || trimmed.startsWith("#") || trimmed.startsWith("!")) return@joinToString line
-        val index = line.indexOfFirst { it == '=' || it == ':' }
+        // Split at '=' only, exactly like the writers: keys may legally
+        // contain ':' (Unciv: "Leads to: = "), and treating ':' as a
+        // separator pulled the '=' into the shaped value and corrupted the
+        // line (caught by the Unciv instrumented key-preservation check).
+        val index = line.indexOf('=')
         if (index < 0) return@joinToString line
         val value = line.substring(index + 1).trim()
         if (!ArabicShaper.containsArabic(value)) line

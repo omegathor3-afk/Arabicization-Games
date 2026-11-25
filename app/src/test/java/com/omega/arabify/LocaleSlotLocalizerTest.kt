@@ -95,6 +95,34 @@ class LocaleSlotLocalizerTest {
     }
 
     @Test
+    fun shapingPreservesColonContainingKeys() {
+        runBlocking {
+            // Regression: Unciv has keys ending in ':' ("Leads to: = "). When
+            // the shaper split at ':' too, the '=' was pulled into the shaped
+            // value and the key set changed (caught by Unciv CI key check).
+            val dir = createTempDir()
+            val apk = File(dir, "colon-game.apk")
+            writeApk(apk, linkedMapOf(
+                "classes.dex" to byteArrayOf(100, 101, 120, 10),
+                "assets/jsons/translations/English.properties" to
+                    "Leads to: = \nStartWithCapitalLetter = false\nNew Game = New Game\n".toByteArray()
+            ))
+            val output = File(dir, "colon-game-ar.apk")
+            val assets = File("src/main/assets")
+            val fonts = LocaleSlotLocalizer.FontInjection { f -> File(assets, f.assetPath).readBytes() }
+            val report = LocaleSlotLocalizer.addArabicLocaleSlotWithFont(apk, output, fonts, fakeArabic)
+            val slot = readEntry(output, report.addedEntry)!!.toString(Charsets.UTF_8)
+            fun keysOf(text: String): Set<String> = text.split('\n')
+                .mapNotNull { line ->
+                    val index = line.indexOf('=')
+                    if (index <= 0) null else line.substring(0, index).trim()
+                }.toSet()
+            assertEquals(setOf("Leads to:", "StartWithCapitalLetter", "New Game"), keysOf(slot))
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
     fun refusesTranslationFolderGameThatAlreadyHasArabic() {
         runBlocking {
             val dir = createTempDir()
