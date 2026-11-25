@@ -229,6 +229,30 @@ class UnityFsBundleRewriterTest {
   parent.deleteRecursively()
  }
 
+
+ @Test fun refusesGrowthAboveHeapDerivedBudgetAndPreservesDestination() {
+  val node = FixtureNode("CAB-heap-budget", 4, ByteArray(100) { 1 })
+  val bundle = buildBundle(listOf(node))
+  val original = bundle.readBytes()
+  val output = File.createTempFile("arabify-heap-budget-output", ".unity3d")
+  output.writeText("keep existing output")
+
+  assertThrows(IllegalArgumentException::class.java) {
+   UnityFsBundleRewriter.rewriteNode(
+    bundle,
+    output,
+    node.path,
+    ByteArray(600 * 1024) { 2 },
+    maxHeapBytes = 32L * 1024L * 1024L
+   )
+  }
+
+  assertEquals("keep existing output", output.readText())
+  assertTrue("The source bundle must remain byte-identical", bundle.readBytes().contentEquals(original))
+  bundle.delete()
+  output.delete()
+ }
+
  @Test fun refusesExpandedStreamAboveTheConfiguredDecodedByteBudget() {
   val node = FixtureNode("CAB-budget", 4, ByteArray(100) { 1 })
   val bundle = buildBundle(listOf(node))
