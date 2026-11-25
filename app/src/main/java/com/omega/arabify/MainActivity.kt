@@ -57,6 +57,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
@@ -388,8 +389,8 @@ private fun ArabifyApp(context: Context) {
           Image(bitmap=appIcon,contentDescription="أيقونة التطبيق",modifier=Modifier.fillMaxSize().clip(CutCornerShape(6.dp)))
          }
          Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)) {
-          Text(app.label,color=ArabifyPalette.textPrimary,fontWeight=FontWeight.SemiBold,fontSize=14.sp)
-          Text(app.packageName,color=ArabifyPalette.textMuted,fontSize=10.sp)
+          Text(app.label,color=ArabifyPalette.textPrimary,fontWeight=FontWeight.SemiBold,fontSize=14.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
+          Text(app.packageName,color=ArabifyPalette.textMuted,fontSize=10.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
           if(app.splitCount>0) Text("حزمة أساسية + ${app.splitCount} ملفات Split إضافية",color=ArabifyPalette.warning,fontSize=10.sp)
          }
          // Row actions stay quiet - the gold belongs to primary CTAs. Selected
