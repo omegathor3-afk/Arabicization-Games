@@ -691,3 +691,11 @@ repackage + run-as).
 - Added four deterministic unit tests for a 256 MiB heap, the 32 MiB hard ceiling, preserving stricter caller budgets, and rejecting an unrealistically small heap.
 - This does **not** make the writer streaming and does not establish a safe bound for every allocation on every device. It deliberately trades support for large bundles for a lower OOM risk until the file-backed writer is implemented.
 - Validation on this commit is pending; no local Gradle environment is available through the GitHub-only editing session. CI must confirm the Kotlin compile, unit suite, Android fixture path and lint before this entry is treated as validated.
+
+
+## Entry 67 — gettext PO slot wired into the app pipeline; reports explain themselves (2026-11-25 ~15:00 EET)
+
+- `GettextPoLocalizer` was tested but had no production caller. The MainActivity asset flow now tries, in order: `LocaleSlotLocalizer` (folder-convention bundles), then `GettextPoLocalizer` (games shipping `po/messages.pot` + `ui/languages.xml` — an Arabic `ar.po` is added alongside the game's own languages with the font tier), then the in-place `AndroidAssetLocalizer` fallback. All three are generic conventions; no per-game branching was added.
+- `PoReport` now carries `skipReasons`, `stringsRepaired` and `repairReasons` (mirroring the existing `SlotReport` fields), so a skipped or post-translation-repaired string is explained, not just counted. `AssetLocalizationReport` carries the same fields up to the UI, and the app's own report screen prints the automated-repair count with its reasons and the skip-reason breakdown when present (Arabic labels, raw internal reason keys preserved for honesty).
+- Unit coverage: the placeholder-recovery fixture now asserts `stringsRepaired`/`repairReasons`; a new fixture with a digit-only translator output asserts the quality-gate skip reaches `skipReasons`. Standalone suite: 361/361 green. MainActivity and all main sources compile clean under the Kotlin Compose compiler plugin with the full dependency classpath (Gradle cold start still exceeds the sandbox limit).
+- Commits: `c00b6ba` (PoReport reasons), `37a8d5b` (report fields), `b0d416b` (pipeline wiring + report UI). Pushed on top of `ab6290d`; CI validation pending on `b0d416b`.
