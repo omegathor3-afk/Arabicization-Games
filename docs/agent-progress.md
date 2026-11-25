@@ -619,3 +619,55 @@ New agent run (fresh sandbox; toolchain re-provisioned; baseline suite green bef
 - GitHub annotation cap (10/check-run) fixed: all 12 swipe captures now in ONE combined annotation (760c516).
 
 **Follow-ups queued:** surface repaired counts in GettextPoLocalizer.PoReport; rename Unciv slot file to العربية.properties; seed GameSettings.json in CI to prove Arabic in-game; decide the on-device activation route (debuggable manifest + run-as vs dex patch).
+
+## Entry 64 — Unciv GREEN end-to-end; the Arabic menu is real (2026-11-25 ~09:15 EET)
+
+**Unciv locale slot CI passed completely on 2df5cad** — first fully green run:
+real on-device ML Kit translation of the 6,578-key file, all 6,579 template
+keys preserved, APK signed + verified + installed, booted into Arabic via
+seeded GameSettings.json, and the menu screenshot verified pixel-by-pixel:
+خيارات، ابدأ لعبة جديدة، تحميل لعبة، محرر الخريطة، إضافات، متعددة،
+الإصدار 5.0.1 — all correctly connected, no dropped letters (the تاراخ/ارع
+defect Omega caught on the 421ed0a screenshot is gone). The 12 captured
+frames pan the live map behind the already-Arabic menu (script had assumed
+a language picker; libGDX exposes no text nodes, so it couldn't tell).
+
+**Three fixes in one morning:**
+- fb95cda: shapeProperties split lines at '=' OR ':' — Unciv keys ending
+  in ':' ("Leads to: = ...") lost their '=' into the shaped value, breaking
+  key preservation (10 keys). Now '=' only, matching the writers. Regression
+  test builds a colon-key slot and asserts the key set.
+- e2ac68e: af6f1b7's placeholder-strip regex used '[^]]', which the JDK
+  accepts but Android ICU rejects — every connected test crashed with
+  PatternSyntaxException at once. Escaped ('[^\\]]'). RULE: any regex that
+  runs on-device must be ICU-safe; the JDK-only standalone suite cannot
+  catch this class.
+- 2df5cad: e2ac68e's Unciv run failed with NO annotation — the connected
+  test had actually PASSED and the run died on a silent launch-section path.
+  All silent paths (missing pulled APK, screencap, PNG validation) now emit
+  public annotations; a green test prints an explicit PASSED notice.
+
+**af6f1b7 guard improvement:** placeholder tokens stripped before word
+counts — false-positive not_english skips on the real Unciv English file
+dropped 201 → 22. Mindustry verification pending (00dfb2b added
+SourceLanguageGuard.kt to the real-translation path filter; it wasn't
+triggering on guard-only changes).
+
+**Empty-value convention verified working:** Unciv's file has 4,582 keys
+with empty values where the KEY is the display text — the pipeline
+translates the key (Delete => حذف observed shaped in the slot), while
+settings lines (StartWithCapitalLetter = false) pass through untouched.
+
+**"quickstart" stayed English — game-side, not ours:** the pinned dev
+build's quickstart button label is lowercase "quickstart", hardcoded /
+not wired to the translation table (the template key is "Quickstart" and
+the slot DOES contain its translation). Untranslatable via files.
+
+**Round-trip audit live:** 4/25 sampled real translations flagged for
+loose phrasing ("Cannot be hurried" => "Can not be hurry") — ML Kit
+quality signal, not a pipeline defect. Audit is now permanent CI evidence.
+
+**Next:** Mindustry real-translation guard verification on 00dfb2b; then
+Unity SerializedFile/UnityFS write-back (the big backlog item); Unciv
+phone-activation route needs Omega's call (Shizuku/root vs debuggable
+repackage + run-as).

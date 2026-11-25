@@ -46,18 +46,34 @@ jobs:
       echo "ARABIFY_UNITY_TEXTASSET_FIXTURE=$GITHUB_WORKSPACE/$TEXT_ASSET_FIXTURE" >> "$GITHUB_ENV"
       echo "ARABIFY_UNITY_TEXTASSET_ORACLE=$GITHUB_WORKSPACE/build/unitypy/textasset-oracle.properties" >> "$GITHUB_ENV"
    - name: Unit tests
-     run: gradle testDebugUnitTest
+     run: |
+      set -o pipefail
+      gradle testDebugUnitTest 2>&1 | tee build/unit-test-gradle.log
    - name: Surface failing unit tests as annotations
      if: failure()
      run: |
       python3 - <<'PY'
       import glob, xml.etree.ElementTree as ET
+      found = False
       for path in sorted(glob.glob('app/build/test-results/testDebugUnitTest/*.xml')):
           tree = ET.parse(path)
           for case in tree.getroot().iter('testcase'):
               for bad in list(case.iter('failure')) + list(case.iter('error')):
+                  found = True
                   msg = (bad.get('message') or '').replace('\n', ' ')[:300]
                   print(f"::notice::TEST-FAIL {case.get('classname')}.{case.get('name')}: {msg}")
+      if not found:
+          # No JUnit XML: gradle failed before/without running tests (compile
+          # error, dependency fetch, daemon crash). Quote the log tail so the
+          # cause is public - Actions logs need auth, annotations do not.
+          try:
+              lines = open('build/unit-test-gradle.log', encoding='utf-8', errors='replace').read().splitlines()
+          except OSError:
+              lines = []
+          interesting = [l for l in lines if any(k in l.lower() for k in ('error:', 'failed', 'exception', 'could not', '429'))]
+          tail = interesting[-6:] if interesting else lines[-6:]
+          summary = ' | '.join(l.strip()[:200] for l in tail) or '<no gradle log captured>'
+          print(f"::error::UNIT-TEST-STEP-FAILED without test XML (build/infra failure): {summary[:1500]}")
       PY
    - name: Upload unit test reports
      if: always()
