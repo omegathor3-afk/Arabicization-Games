@@ -20,7 +20,10 @@ internal data class AssetLocalizationReport(
  val bundleFilesTranslated: Int? = null,
  val bundleStringsTranslated: Int? = null,
  val fitWarnings: Int = 0,
- val fitWarningSamples: List<String> = emptyList()
+ val fitWarningSamples: List<String> = emptyList(),
+ val stringsRepaired: Int = 0,
+ val skipReasons: Map<String, Int> = emptyMap(),
+ val repairReasons: Map<String, Int> = emptyMap()
 )
 
 internal object AssetTextTransformer {
