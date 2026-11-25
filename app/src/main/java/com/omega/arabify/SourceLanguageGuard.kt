@@ -25,7 +25,10 @@ internal object SourceLanguageGuard {
         // false-pass costs one odd string. Five words is the balance.
         // Placeholder tokens ([unit], {0}, %1$s) are not words - counting them
         // convicted real English like "Provides [amountOfCulture] culture".
-        val stripped = text.replace(Regex("\\[[^]]*]|\\{[^}]*}|%[0-9]*\\$?[sdif]"), " ")
+        // Note: ']' and '}' are escaped inside the negated classes because
+        // Android's ICU regex engine rejects the unescaped '[^]]' idiom that
+        // the JDK accepts (caught by every connected test at once).
+        val stripped = text.replace(Regex("\\[[^\\]]*\\]|\\{[^\\}]*\\}|%[0-9]*\\$?[sdif]"), " ")
         val words = stripped.lowercase().split(Regex("[^a-z]+")).filter { it.isNotEmpty() }
         if (words.size >= 5 && words.count { it in ENGLISH_MARKERS } == 0) return Verdict.NOT_ENGLISH
         return Verdict.ENGLISH
