@@ -94,6 +94,25 @@ if [[ -s "$GENERATED_APK" ]]; then
     adb uninstall com.unciv.app || true
     adb install "$GENERATED_APK" || { launch_status=$?; note_failure "install of generated localized Unciv APK failed (exit $launch_status)"; }
     if [[ "$launch_status" -eq 0 ]]; then
+      # Unciv's language picker hides Arabic entirely (LocaleCode.Arabic is
+      # flagged unused upstream), but its translation loader reads
+      # jsons/translations/<settings.language>.properties with no such filter.
+      # Seed GameSettings.json so the game boots in Arabic directly. This is
+      # how activation works in CI; on-device activation needs the same file
+      # written (debuggable repackage + run-as) or a dex patch - see docs.
+      # google_apis emulators are userdebug, so adb root works there; run-as
+      # is the fallback for debuggable repackages.
+      SETTINGS_JSON='{"language":"العربية"}'
+      if adb root >/dev/null 2>&1; then
+        sleep 2
+        adb wait-for-device
+        adb shell "mkdir -p /data/data/com.unciv.app/files && echo '$SETTINGS_JSON' > /data/data/com.unciv.app/files/GameSettings.json"           && echo "::notice::Unciv GameSettings.json seeded with language=العربية via adb root"           || note_failure "failed to seed GameSettings.json via adb root"
+        adb unroot >/dev/null 2>&1 || true
+        sleep 2
+        adb wait-for-device
+      else
+        adb shell "run-as com.unciv.app sh -c "mkdir -p files && echo '$SETTINGS_JSON' > files/GameSettings.json""           && echo "::notice::Unciv GameSettings.json seeded with language=العربية via run-as"           || note_failure "failed to seed GameSettings.json (no adb root, run-as failed)"
+      fi
       # Unciv resolves the locale from the Android system locale through
       # libGDX; switch the emulator to Arabic so it selects bundle_ar.
       adb shell settings put system system_locales ar-EG || { launch_status=$?; note_failure "failed to switch emulator system locale to ar-EG (exit $launch_status)"; }
