@@ -28,7 +28,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CutCornerShape
@@ -345,14 +347,14 @@ private fun ArabifyApp(context: Context) {
   Surface(Modifier.fillMaxSize(),color=ArabifyPalette.canvas) {
    LazyColumn(Modifier.fillMaxSize().padding(horizontal=18.dp, vertical=16.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
     item {
-     Card(colors=CardDefaults.cardColors(containerColor=Color.Transparent),shape=CutCornerShape(28.dp),border=BorderStroke(1.dp,ArabifyPalette.outline)) {
+     HextechPanel(containerColor=Color.Transparent, contentPadding=PaddingValues(0.dp)) {
       Column(Modifier.fillMaxWidth().background(ArabifyGradients.hero).padding(24.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
        Text("OMEGA DEVELOPMENT LAB",color=ArabifyPalette.textMuted,fontSize=9.sp,fontWeight=FontWeight.Bold,letterSpacing=2.sp,fontFamily=ArabifyFontFamily)
        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
         Text("ARABIFY",style=TextStyle(fontFamily=ArabifyFontFamily,fontSize=30.sp,fontWeight=FontWeight.Black,letterSpacing=3.sp,brush=ArabifyGradients.wordmark))
         Text("LOCAL ENGINE  ·  0.2",color=ArabifyPalette.primary,fontSize=10.sp,fontWeight=FontWeight.Bold,fontFamily=ArabifyFontFamily)
        }
-       Box(Modifier.fillMaxWidth().height(2.dp).clip(CutCornerShape(2.dp)).background(ArabifyGradients.neon))
+       GoldDivider()
        Text("خلّي ألعابك تتكلم عربي",color=ArabifyPalette.textPrimary,fontSize=23.sp,fontWeight=FontWeight.Black,fontFamily=ArabifyFontFamily)
        Text("محرك لفحص الألعاب والتطبيقات، واكتشاف النصوص والخطوط، وتجربة التعريب بأمان على جهازك.",color=ArabifyPalette.textSecondary,fontSize=13.sp,lineHeight=20.sp,fontFamily=ArabifyFontFamily)
        Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically) {
@@ -367,9 +369,9 @@ private fun ArabifyApp(context: Context) {
      }
     }
     item {
-     Card(colors=CardDefaults.cardColors(containerColor=ArabifyPalette.surface),shape=CutCornerShape(22.dp),border=BorderStroke(1.dp,ArabifyPalette.outline)) {
+     HextechPanel(containerColor=ArabifyPalette.surface, contentPadding=PaddingValues(0.dp)) {
       Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
-       Text("اختر من تطبيقات وألعاب هاتفك",color=Color.White,fontSize=19.sp,fontWeight=FontWeight.Bold)
+       Text("اختر من تطبيقات وألعاب هاتفك",color=ArabifyPalette.textPrimary,fontSize=19.sp,fontWeight=FontWeight.Bold)
        Text("تظهر هنا التطبيقات المثبتة التي لها أيقونة تشغيل. اختر تطبيقًا لقراءة ملف التثبيت الأساسي محليًا.",color=ArabifyPalette.textSecondary,fontSize=12.sp)
        OutlinedTextField(value=appSearch,onValueChange={appSearch=it},label={Text("ابحث عن لعبة أو تطبيق")},modifier=Modifier.fillMaxWidth(),singleLine=true)
        val visibleApps=installedApps.filter { it.label.contains(appSearch,true) || it.packageName.contains(appSearch,true) }
@@ -379,17 +381,19 @@ private fun ArabifyApp(context: Context) {
        }
        if(visibleApps.isEmpty()) Text("لا توجد نتائج. تأكد من تثبيت التطبيق أو استخدم اختيار APK اليدوي.",color=ArabifyPalette.textMuted,fontSize=12.sp)
        visibleApps.forEach { app ->
-        Row(Modifier.fillMaxWidth().padding(vertical=5.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(11.dp)) {
+        val rowSelected=selectedInstalledApp?.packageName==app.packageName
+        Row(Modifier.fillMaxWidth().clip(CutCornerShape(10.dp)).background(if(rowSelected) ArabifyPalette.surfaceAccent else ArabifyPalette.surfaceRaised).border(1.dp,if(rowSelected) ArabifyPalette.outlineNeon else ArabifyPalette.outline,CutCornerShape(10.dp)).padding(horizontal=10.dp,vertical=7.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(11.dp)) {
          val appIcon=remember(app.packageName) { drawableToBitmap(context.packageManager.getApplicationIcon(app.packageName)).asImageBitmap() }
-         Image(bitmap=appIcon,contentDescription="أيقونة التطبيق",modifier=Modifier.height(44.dp).fillMaxWidth(0.13f))
+         Box(Modifier.size(44.dp).clip(CutCornerShape(10.dp)).background(ArabifyPalette.canvas).border(1.dp,ArabifyPalette.outlineNeon.copy(alpha=0.7f),CutCornerShape(10.dp)).padding(4.dp)) {
+          Image(bitmap=appIcon,contentDescription="أيقونة التطبيق",modifier=Modifier.fillMaxSize().clip(CutCornerShape(6.dp)))
+         }
          Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)) {
-          Text(app.label,color=Color.White,fontWeight=FontWeight.SemiBold,fontSize=14.sp)
+          Text(app.label,color=ArabifyPalette.textPrimary,fontWeight=FontWeight.SemiBold,fontSize=14.sp)
           Text(app.packageName,color=ArabifyPalette.textMuted,fontSize=10.sp)
           if(app.splitCount>0) Text("حزمة أساسية + ${app.splitCount} ملفات Split إضافية",color=ArabifyPalette.warning,fontSize=10.sp)
          }
-         // Row actions stay quiet - the neon belongs to primary CTAs. Selected
+         // Row actions stay quiet - the gold belongs to primary CTAs. Selected
          // rows get a subtle fill so state is still readable at a glance.
-         val rowSelected=selectedInstalledApp?.packageName==app.packageName
          OutlinedButton(onClick={
           selectedInstalledApp=app
           unityDeepReport=null;unityDeepError=null
@@ -400,7 +404,7 @@ private fun ArabifyApp(context: Context) {
            catch(e:Exception){error=e.message ?: "تعذر فحص التطبيق المثبت."}
            finally{busy=false;showLocalizationChoice=true}
           }
-         },enabled=!busy,
+         },enabled=!busy,shape=CutCornerShape(10.dp),
          colors=ButtonDefaults.outlinedButtonColors(
           containerColor=if(rowSelected) ArabifyPalette.surfaceAccent else Color.Transparent,
           contentColor=ArabifyPalette.primary),
@@ -418,7 +422,7 @@ private fun ArabifyApp(context: Context) {
      }
     }
     if(selectedInstalledApp!=null) item {
-     Card(colors=CardDefaults.cardColors(containerColor=ArabifyPalette.surfaceAccent),shape=CutCornerShape(20.dp),border=BorderStroke(1.dp,ArabifyPalette.outline)) {
+     HextechPanel(containerColor=ArabifyPalette.surfaceAccent, contentPadding=PaddingValues(0.dp)) {
       Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
        Text("نسخة احتياطية آمنة للعبة المختارة",color=ArabifyPalette.accent,fontWeight=FontWeight.Bold,fontSize=17.sp)
        Text("سيتم حفظ APK الأساسي وكل ملفات Split في ملف ZIP واحد، مع manifest يحتوي SHA-256 والحجم لكل ملف. يتم فحص النسخة بعد إنشائها وقبل السماح باستعادتها.",color=ArabifyPalette.textSecondary,fontSize=12.sp)
@@ -429,7 +433,7 @@ private fun ArabifyApp(context: Context) {
      }
     }
     item {
-     Card(colors=CardDefaults.cardColors(containerColor=ArabifyPalette.surface),shape=CutCornerShape(20.dp),border=BorderStroke(1.dp,ArabifyPalette.outline)) {
+     HextechPanel(containerColor=ArabifyPalette.surface, contentPadding=PaddingValues(0.dp)) {
       Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
        Text("استعادة نسخة APK احتياطية",color=ArabifyPalette.accent,fontWeight=FontWeight.Bold,fontSize=17.sp)
        Text("اختر ملف ARABIFY ZIP. سيتحقق التطبيق من manifest والأحجام وSHA-256، ثم يرسل كل ملفات APK إلى مُثبّت Android في جلسة واحدة، بما فيها ملفات Split.",color=ArabifyPalette.textSecondary,fontSize=12.sp)
@@ -444,7 +448,7 @@ private fun ArabifyApp(context: Context) {
      }
     }
     item {
-     Card(colors=CardDefaults.cardColors(containerColor=ArabifyPalette.surface),shape=CutCornerShape(20.dp),border=BorderStroke(1.dp,ArabifyPalette.outline)) {
+     HextechPanel(containerColor=ArabifyPalette.surface, contentPadding=PaddingValues(0.dp)) {
       Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
        Text("محرك الترجمة المحلي",color=Color.White,fontSize=18.sp,fontWeight=FontWeight.Bold)
        Text("تنبيه بوضوح: النسخة الحالية تستخدم نموذج ML Kit يتم تنزيله عند الطلب، وليس حزمة عربية/إنجليزية مضمّنة بالكامل. بعد التنزيل تعمل الترجمة النصية دون اتصال، لكن ذلك لا يعني تعريب كل ملفات اللعبة تلقائيًا.",color=ArabifyPalette.textSecondary,fontSize=12.sp)
@@ -472,7 +476,7 @@ private fun ArabifyApp(context: Context) {
      }
     }
     item {
-     Card(colors=CardDefaults.cardColors(containerColor=ArabifyPalette.surface),shape=CutCornerShape(20.dp)) {
+     HextechPanel(containerColor=ArabifyPalette.surface, contentPadding=PaddingValues(0.dp)) {
       Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
        Text("أو اختر ملف APK يدويًا",color=Color.White,fontSize=18.sp,fontWeight=FontWeight.Bold)
        Text("هذا الخيار احتياطي للتطبيقات التي لا تظهر في القائمة أو لملف APK خارجي.",color=ArabifyPalette.textSecondary,fontSize=13.sp)
@@ -485,7 +489,7 @@ private fun ArabifyApp(context: Context) {
     result?.let { scan ->
      item{SectionTitle("نتيجة الفحص")}
      item {
-      Card(colors=CardDefaults.cardColors(containerColor=ArabifyPalette.surface),border=BorderStroke(1.dp,ArabifyPalette.outline)) {
+      HextechPanel(containerColor=ArabifyPalette.surface, contentPadding=PaddingValues(0.dp)) {
        Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
         Text(scan.fileName,color=Color.White,fontWeight=FontWeight.Bold)
         Text("المحرك: ${scan.engine.displayName}",color=ArabifyPalette.accent)
@@ -496,7 +500,7 @@ private fun ArabifyApp(context: Context) {
       }
      }
      item {
-      Card(colors=CardDefaults.cardColors(containerColor=ArabifyPalette.surfaceAccent),shape=CutCornerShape(18.dp),border=BorderStroke(1.dp,ArabifyPalette.outline)) {
+      HextechPanel(containerColor=ArabifyPalette.surfaceAccent, contentPadding=PaddingValues(0.dp)) {
        Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
         Text("فحص الخطوط ودعم العربية",color=ArabifyPalette.accent,fontWeight=FontWeight.Bold,fontSize=17.sp)
         Text("يفحص ملفات TTF/OTF المضمنة، ويقيس تغطية الحروف العربية، ويتحقق من وجود سجلات arab في جدولي OpenType GSUB وGPOS قبل ترشيح الخط. الاسم والامتداد وحدهما لا يكفيان.",color=ArabifyPalette.textSecondary,fontSize=12.sp)
@@ -522,7 +526,7 @@ private fun ArabifyApp(context: Context) {
      }
      if(scan.engine==GameEngine.ANDROID) {
       item {
-       Card(colors=CardDefaults.cardColors(containerColor=ArabifyPalette.surface),shape=CutCornerShape(18.dp)) {
+       HextechPanel(containerColor=ArabifyPalette.surface, contentPadding=PaddingValues(0.dp)) {
         Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
          Text("تعريب موارد Android",color=ArabifyPalette.accent,fontWeight=FontWeight.Bold,fontSize=17.sp)
          Text("هذا المسار التجريبي يضيف موارد string عربية إلى resources.arsc. لا يشمل النصوص المخبأة داخل DEX أو محركات الألعاب.",color=ArabifyPalette.textSecondary,fontSize=12.sp)
@@ -565,7 +569,7 @@ private fun ArabifyApp(context: Context) {
      }
      if(scan.candidateFiles.isNotEmpty()) {
       item {
-       Card(colors=CardDefaults.cardColors(containerColor=ArabifyPalette.surface),shape=CutCornerShape(18.dp)) {
+       HextechPanel(containerColor=ArabifyPalette.surface, contentPadding=PaddingValues(0.dp)) {
         Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
          Text("تعريب ملفات النصوص داخل اللعبة",color=ArabifyPalette.accent,fontWeight=FontWeight.Bold,fontSize=17.sp)
          Text("يعالج هذا المسار ملفات JSON وTXT وProperties وStrings الموجودة داخل assets أو res/raw أو مجلدات localization/strings. يحافظ على مفاتيح JSON وخصائص الإعدادات والمتغيرات المعروفة.",color=ArabifyPalette.textSecondary,fontSize=12.sp)
@@ -633,7 +637,7 @@ private fun ArabifyApp(context: Context) {
      }
      scan.unityAssetInventory?.let { inventory ->
       item {
-       Card(colors=CardDefaults.cardColors(containerColor=ArabifyPalette.surface),shape=CutCornerShape(18.dp)) {
+       HextechPanel(containerColor=ArabifyPalette.surface, contentPadding=PaddingValues(0.dp)) {
         Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
          Text("جرد موارد Unity — قراءة فقط",color=ArabifyPalette.accent,fontWeight=FontWeight.Bold,fontSize=17.sp)
          Text(inventory.report,color=ArabifyPalette.textBody,fontSize=12.sp)
@@ -684,7 +688,7 @@ private fun ArabifyApp(context: Context) {
            if(deep.textAssetPreviews.isNotEmpty()) {
             Text("نصوص Unity المكتشفة — معاينة للقراءة فقط",color=ArabifyPalette.accent,fontWeight=FontWeight.Bold,fontSize=13.sp)
             deep.textAssetPreviews.forEach { preview ->
-             Card(colors=CardDefaults.cardColors(containerColor=ArabifyPalette.surfaceElevated),shape=CutCornerShape(14.dp)) {
+             HextechPanel(containerColor=ArabifyPalette.surfaceElevated, contentPadding=PaddingValues(0.dp)) {
               Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
                Text(preview.name.ifBlank { "TextAsset" },color=Color.White,fontWeight=FontWeight.SemiBold,fontSize=12.sp)
                Text(preview.serializedFilePath + " • PathID " + preview.pathId,color=ArabifyPalette.textMuted,fontSize=9.sp)
@@ -738,7 +742,7 @@ private fun ArabifyApp(context: Context) {
      items(scan.notes){note->Text("• $note",color=ArabifyPalette.warningText,fontSize=12.sp)}
     }
     if(result!=null || error!=null || localizationError!=null || assetError!=null) item {
-     Card(colors=CardDefaults.cardColors(containerColor=ArabifyPalette.surfaceAccent),shape=CutCornerShape(20.dp),border=BorderStroke(1.dp,ArabifyPalette.outline)) {
+     HextechPanel(containerColor=ArabifyPalette.surfaceAccent, contentPadding=PaddingValues(0.dp)) {
       Column(Modifier.fillMaxWidth().padding(16.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
        Text("التقرير الكامل — جاهز للنسخ والإرسال",color=ArabifyPalette.accent,fontWeight=FontWeight.Bold,fontSize=17.sp)
        Text("يجمع بيانات التطبيق ونتائج الفحص والخطوط والنصوص والملاحظات وأخطاء ونتائج التعريب في نص واحد.",color=ArabifyPalette.textSecondary,fontSize=12.sp)
@@ -758,7 +762,7 @@ private fun ArabifyApp(context: Context) {
 }
 
 @Composable
-private fun SectionTitle(value:String){Text(value,color=ArabifyPalette.primary,fontWeight=FontWeight.Bold,fontSize=16.sp)}
+private fun SectionTitle(value:String){HextechSectionHeader(value)}
 
 private const val MAX_APK_IMPORT_BYTES = 1_500L * 1024L * 1024L
 private const val CACHE_RESERVE_BYTES = 16L * 1024L * 1024L

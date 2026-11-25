@@ -2,9 +2,16 @@ package com.omega.arabify
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -15,7 +22,9 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -135,6 +144,52 @@ internal fun ArabifyTheme(content: @Composable () -> Unit) {
         ),
         content = content
     )
+}
+
+
+/** Thin gold rule with a center diamond - the LoL client divider. */
+@Composable
+internal fun GoldDivider(modifier: Modifier = Modifier) {
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.weight(1f).height(1.dp).background(Brush.horizontalGradient(listOf(Color.Transparent, ArabifyPalette.primary))))
+        Box(Modifier.padding(horizontal = 6.dp).size(5.dp).rotate(45f).background(ArabifyPalette.primary))
+        Box(Modifier.weight(1f).height(1.dp).background(Brush.horizontalGradient(listOf(ArabifyPalette.primary, Color.Transparent))))
+    }
+}
+
+/**
+ * LoL-client frame: cut corners, dark-gold outer border with a bright gold
+ * hairline inset - the hextech panel signature. Style match only.
+ */
+@Composable
+internal fun HextechPanel(
+    modifier: Modifier = Modifier,
+    containerColor: Color = ArabifyPalette.surface,
+    contentPadding: PaddingValues = PaddingValues(18.dp),
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(
+        modifier
+            .fillMaxWidth()
+            .clip(ArabifyCorners.card)
+            .background(containerColor)
+            .border(1.dp, ArabifyPalette.primaryDeep, ArabifyCorners.card)
+            .padding(4.dp)
+            .border(1.dp, ArabifyPalette.outlineNeon.copy(alpha = 0.55f), CutCornerShape(14.dp))
+            .padding(contentPadding),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        content = content
+    )
+}
+
+/** Gold diamond + label + fading rule - LoL section headers. */
+@Composable
+internal fun HextechSectionHeader(title: String, modifier: Modifier = Modifier) {
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.size(5.dp).rotate(45f).background(ArabifyPalette.primary))
+        Text(title, color = ArabifyPalette.primary, fontFamily = ArabifyFontFamily, fontWeight = FontWeight.Bold, fontSize = 15.sp, letterSpacing = 0.5.sp)
+        Box(Modifier.weight(1f).height(1.dp).background(Brush.horizontalGradient(listOf(ArabifyPalette.primaryDeep, Color.Transparent))))
+    }
 }
 
 /** Full-width neon call to action: the one glowing element per screen section. */
