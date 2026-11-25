@@ -23,7 +23,10 @@ internal object SourceLanguageGuard {
         // strings routinely contain no function words ("Hit one vehicle"),
         // and skipping real English costs a translation; a rare French
         // false-pass costs one odd string. Five words is the balance.
-        val words = text.lowercase().split(Regex("[^a-z]+")).filter { it.isNotEmpty() }
+        // Placeholder tokens ([unit], {0}, %1$s) are not words - counting them
+        // convicted real English like "Provides [amountOfCulture] culture".
+        val stripped = text.replace(Regex("\\[[^]]*]|\\{[^}]*}|%[0-9]*\\$?[sdif]"), " ")
+        val words = stripped.lowercase().split(Regex("[^a-z]+")).filter { it.isNotEmpty() }
         if (words.size >= 5 && words.count { it in ENGLISH_MARKERS } == 0) return Verdict.NOT_ENGLISH
         return Verdict.ENGLISH
     }
@@ -34,5 +37,15 @@ internal object SourceLanguageGuard {
         "the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "with", "is", "are",
         "you", "your", "new", "load", "save", "game", "play", "start", "exit", "quit",
         "options", "settings", "back", "next", "yes", "no", "ok", "cancel", "continue",
+        // Function words that appear in real game strings ("May our nations
+        // forever remain united!"); measured against Unciv's 6,578-string
+        // English.properties, whose false-positive count this list minimizes.
+        "at", "by", "vs", "we", "us", "our", "they", "them", "their", "it", "its",
+        "he", "she", "his", "her", "my", "mine", "me", "i", "am", "was", "were",
+        "be", "been", "being", "do", "does", "did", "may", "might", "must", "shall",
+        "will", "would", "can", "could", "should", "have", "has", "had", "not",
+        "but", "all", "any", "this", "that", "these", "those", "from", "into",
+        "out", "off", "up", "down", "every", "each", "per", "if", "then", "else",
+        "when", "while", "until", "before", "after", "between", "over", "under",
     )
 }

@@ -42,4 +42,13 @@ class SourceLanguageGuardTest {
         assertEquals(SourceLanguageGuard.Verdict.ENGLISH, SourceLanguageGuard.classify("Hit one vehicle"))
         assertEquals(SourceLanguageGuard.Verdict.ENGLISH, SourceLanguageGuard.classify("Wave incoming"))
     }
+
+    @Test
+    fun placeholderHeavyEnglishPasses() {
+        // regression: bracket/percent tokens are not words (Unciv false positives)
+        assertEquals(SourceLanguageGuard.Verdict.ENGLISH, SourceLanguageGuard.classify("Provides [amountOfCulture] culture at 30 Influence"))
+        assertEquals(SourceLanguageGuard.Verdict.ENGLISH, SourceLanguageGuard.classify("Gift [giftAmount] gold (+[influenceAmount] influence)"))
+        assertEquals(SourceLanguageGuard.Verdict.ENGLISH, SourceLanguageGuard.classify("May our nations forever remain united!"))
+        assertEquals(SourceLanguageGuard.Verdict.ENGLISH, SourceLanguageGuard.classify("THIS MEANS WAR! (Declare war)"))
+    }
 }
