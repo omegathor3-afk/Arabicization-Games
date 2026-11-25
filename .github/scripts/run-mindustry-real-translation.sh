@@ -206,22 +206,8 @@ upload_shot build/test-game/localized/real/mindustry-real-translation-screen.png
 # real screens and capture each one for human review. Tap coordinates are
 # measured on the fixed pixel_5 (1080x2340) menu layout.
 tour_status=0
-capture_screen() {
-  local name="$1" wait_s="$2"
-  sleep "$wait_s"
-  local fg
-  fg="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'topResumedActivity|mResumedActivity' | tail -n 1 | tr -d '\r')"
-  if [[ "$fg" != *"io.anuke.mindustry"* ]]; then
-    # Capture what IS on screen (crash dialog? launcher?) plus a logcat tail
-    # so a tour failure says whether the game crashed or the tap missed.
-    adb exec-out screencap -p > "build/test-game/localized/real/mindustry-tour-${name}-FAILSTATE.png" 2>/dev/null || true
-    [[ -s "build/test-game/localized/real/mindustry-tour-${name}-FAILSTATE.png" ]] && upload_shot "build/test-game/localized/real/mindustry-tour-${name}-FAILSTATE.png" "mindustry-tour-${name}-FAILSTATE"
-    local crash_tail
-    crash_tail=$(adb logcat -d -b crash -v time 2>/dev/null | tail -12 | cut -c1-180 | tr '\n' '|' | cut -c1-1500)
-    note_failure "Mindustry left the foreground during the in-game tour before ${name} (foreground=${fg}) :: crash log: ${crash_tail:-none}"
-    tour_status=1
-    return 1
-  fi
+snap_screen() {
+  local name="$1"
   adb exec-out screencap -p > "build/test-game/localized/real/mindustry-tour-${name}.png" || true
   if [[ ! -s "build/test-game/localized/real/mindustry-tour-${name}.png" ]]; then
     note_failure "in-game tour screenshot missing: ${name}"
@@ -232,20 +218,71 @@ capture_screen() {
   return 0
 }
 
+mindustry_foreground() {
+  adb shell dumpsys activity activities 2>/dev/null | grep -E 'topResumedActivity|mResumedActivity' | tail -n 1 | tr -d '\r'
+}
+
+collect_crash_evidence() {
+  # Native deaths (swiftshader GL kills) bypass the Java crash path; sweep the
+  # main logcat buffer and the tombstone dir so the annotation can tell an
+  # environment GPU kill from a real defect in the localized build.
+  local pid_state crash_tail native_tail tombstones
+  pid_state="$(adb shell pidof io.anuke.mindustry 2>/dev/null | tr -d '\r')"
+  crash_tail=$(adb logcat -d -b crash -v time 2>/dev/null | tail -12 | cut -c1-180 | tr '\n' '|' | cut -c1-1200)
+  native_tail=$(adb logcat -d -v time 2>/dev/null | grep -iE 'Fatal signal|tombstone|DEBUG' | tail -10 | cut -c1-180 | tr '\n' '|' | cut -c1-1200)
+  tombstones=$(adb shell 'ls -t /data/tombstones/ 2>/dev/null | head -3' 2>/dev/null | tr -d '\r' | tr '\n' ',')
+  echo "pid=${pid_state:-dead} tombstones=${tombstones:-none} crash=${crash_tail:-none} native=${native_tail:-none}"
+}
+
+tour_step() {
+  local name="$1" wait_s="$2" tap_x="$3" tap_y="$4"
+  adb shell input tap "$tap_x" "$tap_y" || true
+  sleep "$wait_s"
+  local fg
+  fg="$(mindustry_foreground)"
+  if [[ "$fg" == *"io.anuke.mindustry"* ]]; then
+    snap_screen "$name" || true
+    return
+  fi
+  # Evidence first, before touching anything: capture what IS on screen
+  # (crash dialog? launcher?) plus crash/tombstone state.
+  adb exec-out screencap -p > "build/test-game/localized/real/mindustry-tour-${name}-FAILSTATE.png" 2>/dev/null || true
+  [[ -s "build/test-game/localized/real/mindustry-tour-${name}-FAILSTATE.png" ]] && upload_shot "build/test-game/localized/real/mindustry-tour-${name}-FAILSTATE.png" "mindustry-tour-${name}-FAILSTATE"
+  local evidence
+  evidence="$(collect_crash_evidence)"
+  if [[ "$evidence" == *"Fatal signal"* ]]; then
+    note_failure "Mindustry CRASHED (native) during the in-game tour before ${name}; refusing to mask a possible real defect :: $evidence"
+    tour_status=1
+    return
+  fi
+  # No crash trace: swiftshader can silently kill or background the game on
+  # GPU-heavy screens (the 3D campaign planet). Relaunch once, re-navigate
+  # from the freshly loaded main menu, and label the retry capture honestly.
+  adb shell monkey -p io.anuke.mindustry -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
+  sleep 25
+  adb shell input tap "$tap_x" "$tap_y" || true
+  sleep "$wait_s"
+  fg="$(mindustry_foreground)"
+  if [[ "$fg" != *"io.anuke.mindustry"* ]]; then
+    note_failure "Mindustry left the foreground during the in-game tour before ${name} even after one relaunch (foreground=${fg}) :: $evidence"
+    tour_status=1
+    return
+  fi
+  echo "::warning::in-game tour needed one relaunch before ${name}; capture labeled after-relaunch (no crash evidence: ${evidence})"
+  snap_screen "${name}-after-relaunch" || true
+}
+
 # Settings screen: right column, third tile row on the pixel_5 menu grid.
-adb shell input tap 670 1364 || true
-capture_screen settings 6 || true
+tour_step settings 6 670 1364
 adb shell input keyevent KEYCODE_BACK >/dev/null 2>&1 || true
 sleep 3
 # Campaign planet/sector screen: left column, first tile row. The 3D planet
 # needs render time on swiftshader.
-adb shell input tap 411 845 || true
-capture_screen campaign-map 20 || true
+tour_step campaign-map 20 411 845
 adb shell input keyevent KEYCODE_BACK >/dev/null 2>&1 || true
 sleep 3
 # Custom game map list: left column, second tile row.
-adb shell input tap 411 1105 || true
-capture_screen custom-game-maps 8 || true
+tour_step custom-game-maps 8 411 1105
 
 [[ "$tour_status" -ne 0 ]] && exit "$tour_status"
 exit 0
