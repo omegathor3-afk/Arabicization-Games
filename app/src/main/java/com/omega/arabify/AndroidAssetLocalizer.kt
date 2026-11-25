@@ -153,6 +153,7 @@ internal object AssetTextTransformer {
   fun countRepair(reason:String){repairReasons[reason]=(repairReasons[reason] ?: 0)+1}
   suspend fun tx(value:String):String {
    if(!looksTranslatable(value)){skipped++;countSkip("not_translatable");return value}
+   if(SourceLanguageGuard.classify(value)==SourceLanguageGuard.Verdict.NOT_ENGLISH){skipped++;countSkip("source_language:not_english");return value}
    val glossaryHit=ArabicUiGlossary.translateExact(value)
    if(glossaryHit!=null){
     translated++

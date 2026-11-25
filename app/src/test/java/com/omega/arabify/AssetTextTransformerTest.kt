@@ -190,6 +190,15 @@ class AssetTextTransformerTest {
   assertEquals("source_language:not_english",result.reason)
  }
 
+ @Test fun transformSkipsNonEnglishSourceInMainPath()=runBlocking {
+  val source="greeting=Bonjour le monde entier maintenant\nstart=Start Game"
+  val result=AssetTextTransformer.transform("assets/bundle.properties",source){ "مترجم:$it" }
+  assertEquals(1,result.translated)
+  assertEquals(1,result.skipped)
+  assertEquals(1,result.skipReasons["source_language:not_english"])
+  assertTrue(result.text.contains("greeting=Bonjour le monde entier maintenant"))
+ }
+
  @Test fun transformValueStillTranslatesShortEnglish()=runBlocking {
   val result=AssetTextTransformer.transformValue("Options"){ "خيارات" }
   assertTrue(result.translated)
