@@ -36,6 +36,9 @@ internal object GettextPoLocalizer {
         val outputApk: File,
         val fontsMerged: List<String> = emptyList(),
         val fontReason: String? = null,
+        val skipReasons: Map<String, Int> = emptyMap(),
+        val stringsRepaired: Int = 0,
+        val repairReasons: Map<String, Int> = emptyMap(),
     )
 
     internal class FontInjection(val fontBytes: (SelectableFont) -> ByteArray)
@@ -76,10 +79,22 @@ internal object GettextPoLocalizer {
             // Translate everything first (plural singular + plural forms).
             var translated = 0
             var skipped = 0
+            var repaired = 0
+            val skipReasons = mutableMapOf<String, Int>()
+            val repairReasons = mutableMapOf<String, Int>()
+            fun bump(map: MutableMap<String, Int>, reason: String?) {
+                if (reason != null) map[reason] = (map[reason] ?: 0) + 1
+            }
             val arEntries = entries.map { entry ->
-                val singular = translateValue(entry.msgid, tx)
-                if (singular != null) translated++ else skipped++
-                val plural = entry.msgidPlural?.let { translateValue(it, tx) }
+                val singularResult = translateValue(entry.msgid, tx)
+                val singular = singularResult.text.takeIf { singularResult.translated && it.isNotBlank() }
+                if (singular != null) translated++ else { skipped++; bump(skipReasons, singularResult.reason) }
+                if (singularResult.repair != null) { repaired++; bump(repairReasons, singularResult.repair) }
+                val plural = entry.msgidPlural?.let { pluralId ->
+                    val pluralResult = translateValue(pluralId, tx)
+                    if (pluralResult.repair != null) { repaired++; bump(repairReasons, pluralResult.repair) }
+                    pluralResult.text.takeIf { pluralResult.translated && it.isNotBlank() }
+                }
                 entry to (singular to plural)
             }
 
@@ -134,7 +149,10 @@ internal object GettextPoLocalizer {
                 out.write(arBytes)
                 out.closeEntry()
             }
-            return PoReport(arPoPath, translated, skipped, outputApk, fontPlan.fontsMerged, fontPlan.reason)
+            return PoReport(
+                arPoPath, translated, skipped, outputApk, fontPlan.fontsMerged, fontPlan.reason,
+                skipReasons = skipReasons.toMap(), stringsRepaired = repaired, repairReasons = repairReasons.toMap(),
+            )
         }
     }
 
@@ -278,12 +296,11 @@ internal object GettextPoLocalizer {
         return entries
     }
 
-    private suspend fun translateValue(text: String, tx: suspend (String) -> String): String? {
-        if (text.isBlank()) return null
+    private suspend fun translateValue(text: String, tx: suspend (String) -> String): AssetTextTransformer.SingleResult {
+        if (text.isBlank()) return AssetTextTransformer.SingleResult(text, false, "not_translatable")
         // Keep gettext on the same reviewed path as loose assets: exact glossary,
         // placeholder/tag protection, and the conservative Arabic quality gate.
-        val result = AssetTextTransformer.transformValue(text, tx)
-        return result.text.takeIf { result.translated && it.isNotBlank() }
+        return AssetTextTransformer.transformValue(text, tx)
     }
 
     private fun buildArPo(

@@ -213,6 +213,46 @@ msgstr[1] ""
             assertFalse(arPo.contains("__ARABIFY_TOKEN_"))
             assertEquals(3, report.stringsTranslated)
             assertEquals(0, report.stringsSkipped)
+            // The dropped-placeholder repair is visible in the report, not
+            // just in the output text: "Collect %s" was recovered by the
+            // segmented tier (or marker recovery, depending on the path).
+            assertEquals(1, report.stringsRepaired)
+            assertEquals(1, (report.repairReasons["segmented_placeholders"] ?: 0) + (report.repairReasons["marker_recovered"] ?: 0))
+            assertTrue(report.skipReasons.isEmpty())
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun reportSurfacesSkipReasons() {
+        runBlocking {
+            // A translator that returns pure digits for one entry triggers the
+            // quality gate; the reason must reach PoReport, not collapse into
+            // a bare skip count.
+            val customPot = """msgid ""
+msgstr ""
+
+msgid "Play"
+msgstr ""
+
+msgid "Collect all five stars now"
+msgstr ""
+"""
+            val dir = createTempDir()
+            val input = buildGameApk(dir, customPot, "<Languages/>")
+            val output = File(dir, "skip-out.apk")
+            val fonts = GettextPoLocalizer.FontInjection {
+                throw AssertionError("No font merge expected for this fixture.")
+            }
+
+            val report = GettextPoLocalizer.addArabicGettextSlot(input, output, fonts) { value ->
+                if (value.startsWith("Collect")) "12345" else "العب"
+            }
+
+            assertEquals(1, report.stringsTranslated)
+            assertEquals(1, report.stringsSkipped)
+            assertEquals(1, report.skipReasons.size)
+            assertTrue(report.skipReasons.keys.first().startsWith("quality_gate:") || report.skipReasons.keys.first() == "not_translatable")
             dir.deleteRecursively()
         }
     }
