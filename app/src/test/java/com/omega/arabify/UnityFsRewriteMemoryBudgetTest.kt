@@ -14,9 +14,9 @@ class UnityFsRewriteMemoryBudgetTest {
             maxHeapBytes = 256L * mib
         )
 
-        assertEquals(8L * mib, result.maxTotalDecodedBytes)
-        assertEquals(8L * mib, result.maxDecodedBlockBytes)
-        assertEquals(8L * mib, result.maxCompressedBlockBytes)
+        assertEquals(4L * mib, result.maxTotalDecodedBytes)
+        assertEquals(4L * mib, result.maxDecodedBlockBytes)
+        assertEquals(4L * mib, result.maxCompressedBlockBytes)
         assertEquals(16L * mib, result.maxBlockInfoBytes)
         assertEquals(32L * mib, result.maxLzmaMemoryBytes)
         assertEquals(64L * mib, result.maxWorkingSetBytes)
@@ -29,9 +29,22 @@ class UnityFsRewriteMemoryBudgetTest {
             maxHeapBytes = 2L * 1024L * mib
         )
 
-        assertEquals(32L * mib, result.maxTotalDecodedBytes)
-        assertEquals(32L * mib, result.maxDecodedBlockBytes)
-        assertEquals(32L * mib, result.maxCompressedBlockBytes)
+        assertEquals(16L * mib, result.maxTotalDecodedBytes)
+        assertEquals(16L * mib, result.maxDecodedBlockBytes)
+        assertEquals(16L * mib, result.maxCompressedBlockBytes)
+    }
+
+
+    @Test
+    fun usesOneSixtyFourthOfHeapWhenCallerAllowsMore() {
+        val result = UnityFsRewriteMemoryBudget.constrain(
+            UnityFsDecodeLimits(),
+            maxHeapBytes = 512L * mib
+        )
+
+        assertEquals(8L * mib, result.maxTotalDecodedBytes)
+        assertEquals(8L * mib, result.maxDecodedBlockBytes)
+        assertEquals(8L * mib, result.maxCompressedBlockBytes)
     }
 
     @Test
