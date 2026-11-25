@@ -1,11 +1,13 @@
 package com.omega.arabify
 
 import java.io.File
+import java.util.concurrent.CancellationException
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -152,4 +154,79 @@ class ApkLocalizationAdaptersTest {
             dir.deleteRecursively()
         }
     }
+    private class ThrowingProbeAdapter(private val failure: Throwable) : ApkProbeAdapter() {
+        override val descriptor = AdapterDescriptor(
+            id = "adapter.test.throwing",
+            version = "1",
+            displayName = "Throwing test adapter",
+            inputKinds = setOf(ArtifactKind.APK),
+            outputKinds = emptySet(),
+            operations = emptySet(),
+        )
+
+        override suspend fun probeApk(input: ArtifactRef, budget: ResourceBudget): AdapterProbe {
+            throw failure
+        }
+    }
+
+    @Test
+    fun probePropagatesCancellationAndFatalErrors() = runBlocking {
+        val dir = createTempDir()
+        val apk = buildApk(dir, "probe.apk", mapOf("classes.dex" to "dex"))
+        val cancellation = CancellationException("cancel this probe")
+        val cancelled = runCatching {
+            ThrowingProbeAdapter(cancellation).probe(ref(apk), ResourceBudget())
+        }
+        assertSame(cancellation, cancelled.exceptionOrNull())
+
+        val fatal = AssertionError("fatal probe failure")
+        val failed = runCatching {
+            ThrowingProbeAdapter(fatal).probe(ref(apk), ResourceBudget())
+        }
+        assertSame(fatal, failed.exceptionOrNull())
+        dir.deleteRecursively()
+    }
+
+    @Test
+    fun probesHonorCallerEntryBudgetAndPlannerReportsBlocked() = runBlocking {
+        val dir = createTempDir()
+        val apk = buildApk(dir, "many-entries.apk", mapOf(
+            "assets/bundle.properties" to "Play=Play",
+            "assets/one.txt" to "one",
+            "assets/two.txt" to "two",
+        ))
+        val adapter = LibGdxLocaleSlotAdapter()
+        val budget = ResourceBudget(maxEntries = 2)
+        val probe = adapter.probe(ref(apk), budget)
+        assertFalse(probe.matched)
+        assertTrue(probe.blockedReason?.contains("entry count") == true)
+
+        val plan = LocalizationCapabilityPlanner(
+            LocalizationAdapterRegistry(listOf(adapter))
+        ).plan(ref(apk), setOf(AdapterOperation.INSPECT), budget)
+        assertEquals(CapabilityStatus.BLOCKED, plan.status)
+        assertTrue(plan.explanations.any { it.contains("blocked") })
+        dir.deleteRecursively()
+    }
+
+    @Test
+    fun probeOnlyReportsNeverClaimRealGameEmulatorEvidence() = runBlocking {
+        val dir = createTempDir()
+        val apk = buildApk(dir, "all-markers.apk", mapOf(
+            "assets/bundle.properties" to "Play=Play",
+            "assets/po/messages.pot" to "msgid \"Play\"\\nmsgstr \"\"\\n",
+            "assets/ui/languages.xml" to "<Languages/>",
+            "resources.arsc" to "fixture",
+            "assets/data/strings.json" to "{\"play\":\"Play\"}",
+        ))
+        val reports = listOf(
+            LibGdxLocaleSlotAdapter(),
+            GettextPoAdapter(),
+            AndroidResourcesAdapter(),
+            AndroidAssetsInPlaceAdapter(),
+        ).map { it.inspect(ref(apk), ResourceBudget()) }
+        assertTrue(reports.all { it.evidenceLevel == "UNIT_FIXTURE" })
+        dir.deleteRecursively()
+    }
+
 }

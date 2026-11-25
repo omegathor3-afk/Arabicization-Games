@@ -1,7 +1,10 @@
 package com.omega.arabify
 
 import java.io.File
+import java.util.concurrent.CancellationException
 import java.util.zip.ZipFile
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 /**
  * Phase A adapter wrappers: expose the existing APK localizers through the
@@ -13,8 +16,6 @@ import java.util.zip.ZipFile
  * (a lower level never proves a higher one).
  */
 
-private const val APK_PROBE_MAX_ENTRIES = 100_000
-
 private fun artifactToFile(input: ArtifactRef): File {
     val path = if (input.uri.startsWith("file://")) input.uri.removePrefix("file://") else input.uri
     val file = File(path)
@@ -24,23 +25,26 @@ private fun artifactToFile(input: ArtifactRef): File {
 
 private data class ApkMarkers(val names: List<String>, val truncated: Boolean)
 
-private fun scanApk(input: ArtifactRef, budget: ResourceBudget, keep: (String) -> Boolean): ApkMarkers {
+private suspend fun scanApk(input: ArtifactRef, budget: ResourceBudget, keep: (String, Long) -> Boolean): ApkMarkers {
     val file = artifactToFile(input)
     budget.requireInputWithinLimit(file.length())
+    val coroutineContext = currentCoroutineContext()
     val matches = mutableListOf<String>()
     var truncated = false
     ZipFile(file).use { zip ->
         val entries = zip.entries()
         var count = 0
         while (entries.hasMoreElements()) {
-            val entry = entries.nextElement()
             count++
-            require(count <= APK_PROBE_MAX_ENTRIES) { "عدد عناصر APK يتجاوز حد الفحص الآمن." }
-            if (!entry.isDirectory && keep(entry.name)) {
+            budget.requireEntryCountWithinLimit(count)
+            if ((count and 0x3f) == 0) coroutineContext.ensureActive()
+            val entry = entries.nextElement()
+            if (!entry.isDirectory && keep(entry.name, entry.size)) {
                 if (matches.size < 8) matches += entry.name else truncated = true
             }
         }
     }
+    coroutineContext.ensureActive()
     return ApkMarkers(matches, truncated)
 }
 
@@ -49,12 +53,22 @@ internal abstract class ApkProbeAdapter : LocalizationAdapter {
         if (input.kind != ArtifactKind.APK && input.kind != ArtifactKind.UNKNOWN) {
             return AdapterProbe(descriptor.id, matched = false, confidence = 0, evidence = listOf("not an APK artifact"))
         }
-        return runCatching { probeApk(input, budget) }.getOrElse { error ->
-            AdapterProbe(descriptor.id, matched = false, confidence = 0, blockedReason = "probe failed: ${error.message}")
+        currentCoroutineContext().ensureActive()
+        return try {
+            probeApk(input, budget)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            AdapterProbe(
+                descriptor.id,
+                matched = false,
+                confidence = 0,
+                blockedReason = "probe failed: ${error.message ?: error.javaClass.simpleName}"
+            )
         }
     }
 
-    protected abstract fun probeApk(input: ArtifactRef, budget: ResourceBudget): AdapterProbe
+    protected abstract suspend fun probeApk(input: ArtifactRef, budget: ResourceBudget): AdapterProbe
 }
 
 /** libGDX folder-convention slot (Unciv, Mindustry): bundle.properties / translations/English.properties. */
@@ -70,8 +84,8 @@ internal class LibGdxLocaleSlotAdapter : ApkProbeAdapter() {
         priority = 300,
     )
 
-    override fun probeApk(input: ArtifactRef, budget: ResourceBudget): AdapterProbe {
-        val markers = scanApk(input, budget) { name ->
+    override suspend fun probeApk(input: ArtifactRef, budget: ResourceBudget): AdapterProbe {
+        val markers = scanApk(input, budget) { name, _ ->
             // Mirrors LocaleSlotLocalizer.baseBundlePattern / translationFolderPattern.
             name.endsWith("bundle.properties") || name.endsWith("translations/English.properties")
         }
@@ -84,14 +98,14 @@ internal class LibGdxLocaleSlotAdapter : ApkProbeAdapter() {
     }
 
     override suspend fun inspect(input: ArtifactRef, budget: ResourceBudget): AdapterReport {
-        val markers = scanApk(input, budget) { name ->
+        val markers = scanApk(input, budget) { name, _ ->
             name.endsWith("bundle.properties") || name.endsWith("translations/English.properties")
         }
         return AdapterReport(
             descriptor.id, AdapterOperation.INSPECT,
             processed = markers.names.size, succeeded = 0, skipped = 0,
             warnings = listOf("probe-level inventory only; string counts are produced by the localization run"),
-            evidenceLevel = "REAL_GAME_EMULATOR",
+            evidenceLevel = "UNIT_FIXTURE",
         )
     }
 }
@@ -109,10 +123,10 @@ internal class GettextPoAdapter : ApkProbeAdapter() {
         priority = 200,
     )
 
-    override fun probeApk(input: ArtifactRef, budget: ResourceBudget): AdapterProbe {
+    override suspend fun probeApk(input: ArtifactRef, budget: ResourceBudget): AdapterProbe {
         // Mirrors GettextPoLocalizer.potPattern / languagesXmlPattern.
-        val pot = scanApk(input, budget) { name -> name.endsWith("po/messages.pot") }
-        val langs = scanApk(input, budget) { name -> name.endsWith("ui/languages.xml") }
+        val pot = scanApk(input, budget) { name, _ -> name.endsWith("po/messages.pot") }
+        val langs = scanApk(input, budget) { name, _ -> name.endsWith("ui/languages.xml") }
         val matched = pot.names.isNotEmpty() && langs.names.isNotEmpty()
         return AdapterProbe(
             descriptor.id,
@@ -124,12 +138,12 @@ internal class GettextPoAdapter : ApkProbeAdapter() {
     }
 
     override suspend fun inspect(input: ArtifactRef, budget: ResourceBudget): AdapterReport {
-        val pot = scanApk(input, budget) { name -> name.endsWith("po/messages.pot") || name.endsWith("ui/languages.xml") }
+        val pot = scanApk(input, budget) { name, _ -> name.endsWith("po/messages.pot") || name.endsWith("ui/languages.xml") }
         return AdapterReport(
             descriptor.id, AdapterOperation.INSPECT,
             processed = pot.names.size, succeeded = 0, skipped = 0,
             warnings = listOf("probe-level inventory only; string counts are produced by the localization run"),
-            evidenceLevel = "REAL_GAME_EMULATOR",
+            evidenceLevel = "UNIT_FIXTURE",
         )
     }
 }
@@ -147,8 +161,8 @@ internal class AndroidResourcesAdapter : ApkProbeAdapter() {
         priority = 100,
     )
 
-    override fun probeApk(input: ArtifactRef, budget: ResourceBudget): AdapterProbe {
-        val markers = scanApk(input, budget) { name -> name == "resources.arsc" }
+    override suspend fun probeApk(input: ArtifactRef, budget: ResourceBudget): AdapterProbe {
+        val markers = scanApk(input, budget) { name, _ -> name == "resources.arsc" }
         return AdapterProbe(
             descriptor.id,
             matched = markers.names.isNotEmpty(),
@@ -158,12 +172,12 @@ internal class AndroidResourcesAdapter : ApkProbeAdapter() {
     }
 
     override suspend fun inspect(input: ArtifactRef, budget: ResourceBudget): AdapterReport {
-        val markers = scanApk(input, budget) { name -> name == "resources.arsc" }
+        val markers = scanApk(input, budget) { name, _ -> name == "resources.arsc" }
         return AdapterReport(
             descriptor.id, AdapterOperation.INSPECT,
             processed = markers.names.size, succeeded = 0, skipped = 0,
             warnings = listOf("arsc presence only; translatable-string counts need the binary table parse, deferred to the localization run"),
-            evidenceLevel = "REAL_GAME_EMULATOR",
+            evidenceLevel = "UNIT_FIXTURE",
         )
     }
 }
@@ -181,37 +195,30 @@ internal class AndroidAssetsInPlaceAdapter : ApkProbeAdapter() {
         priority = 0,
     )
 
-    override fun probeApk(input: ArtifactRef, budget: ResourceBudget): AdapterProbe {
-        val file = artifactToFile(input)
-        budget.requireInputWithinLimit(file.length())
-        val markers = mutableListOf<String>()
-        var truncated = false
-        ZipFile(file).use { zip ->
-            val entries = zip.entries()
-            var count = 0
-            while (entries.hasMoreElements()) {
-                val entry = entries.nextElement()
-                count++
-                require(count <= APK_PROBE_MAX_ENTRIES) { "عدد عناصر APK يتجاوز حد الفحص الآمن." }
-                if (!entry.isDirectory && AndroidAssetLocalizer.isSupportedTextAsset(entry.name, entry.size)) {
-                    if (markers.size < 8) markers += entry.name else truncated = true
-                }
-            }
+    override suspend fun probeApk(input: ArtifactRef, budget: ResourceBudget): AdapterProbe {
+        val markers = scanApk(input, budget) { name, size ->
+            AndroidAssetLocalizer.isSupportedTextAsset(name, size)
         }
         return AdapterProbe(
             descriptor.id,
-            matched = markers.isNotEmpty(),
-            confidence = if (markers.isNotEmpty()) 60 else 0,
-            evidence = markers + (if (truncated) listOf("(more matches not listed)") else emptyList()),
+            matched = markers.names.isNotEmpty(),
+            confidence = if (markers.names.isNotEmpty()) 60 else 0,
+            evidence = markers.names + (if (markers.truncated) listOf("(more matches not listed)") else emptyList()),
         )
     }
 
     override suspend fun inspect(input: ArtifactRef, budget: ResourceBudget): AdapterReport {
-        val probe = probeApk(input, budget)
+        val markers = scanApk(input, budget) { name, size ->
+            AndroidAssetLocalizer.isSupportedTextAsset(name, size)
+        }
+        val warnings = buildList {
+            add("in-place rewrite is the last-resort path; probe lists candidate files only (first 8)")
+            if (markers.truncated) add("additional candidate files were omitted from this bounded inventory")
+        }
         return AdapterReport(
             descriptor.id, AdapterOperation.INSPECT,
-            processed = probe.evidence.size, succeeded = 0, skipped = 0,
-            warnings = listOf("in-place rewrite is the last-resort path; probe lists candidate files only (first 8)"),
+            processed = markers.names.size, succeeded = 0, skipped = 0,
+            warnings = warnings,
             evidenceLevel = "UNIT_FIXTURE",
         )
     }

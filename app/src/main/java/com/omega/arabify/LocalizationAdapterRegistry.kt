@@ -37,7 +37,9 @@ internal class LocalizationCapabilityPlanner(private val registry: LocalizationA
             adapter to probe
         }
         val matched = probes.filter { it.second.matched }
-        val blocked = matched.filter { it.second.blockedReason != null }
+        // An unmatched probe can still be blocked by an explicit format or
+        // resource-budget precondition; do not misreport that as UNSUPPORTED.
+        val blocked = probes.filter { it.second.blockedReason != null }
         val usable = matched.filter { it.second.blockedReason == null }.sortedWith(
             compareByDescending<Pair<LocalizationAdapter, AdapterProbe>> { it.second.confidence }
                 .thenByDescending { it.first.descriptor.priority }.thenBy { it.first.descriptor.id }
