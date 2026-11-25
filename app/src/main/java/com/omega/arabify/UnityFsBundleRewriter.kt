@@ -49,7 +49,8 @@ internal object UnityFsBundleRewriter {
         output: File,
         nodePath: String,
         replacement: ByteArray,
-        limits: UnityFsDecodeLimits = UnityFsDecodeLimits()
+        limits: UnityFsDecodeLimits = UnityFsDecodeLimits(),
+        maxHeapBytes: Long = Runtime.getRuntime().maxMemory()
     ): UnityFsRewriteReport {
         require(input.isFile) { "ملف UnityFS الأصلي غير موجود." }
         require(input.canonicalFile != output.canonicalFile) {
@@ -64,7 +65,7 @@ internal object UnityFsBundleRewriter {
         // Keep the multi-array rewrite/verification pipeline within a conservative
         // fraction of the Android app heap. This is a safety gate, not a substitute
         // for the still-pending file-backed streaming rewrite.
-        val rewriteLimits = UnityFsRewriteMemoryBudget.constrain(limits)
+        val rewriteLimits = UnityFsRewriteMemoryBudget.constrain(limits, maxHeapBytes)
         // Parse header and block info exactly like the decoder does.
         val (header, rawHeader, blockInfo, originalStream) = readBundle(input, rewriteLimits)
         val target = blockInfo.nodes.singleOrNull { it.path == nodePath }
@@ -73,7 +74,7 @@ internal object UnityFsBundleRewriter {
         val delta = replacement.size.toLong() - target.size
         val newStreamSize = Math.addExact(originalStream.size.toLong(), delta)
         require(
-            newStreamSize in 1L..limits.maxTotalDecodedBytes &&
+            newStreamSize in 1L..rewriteLimits.maxTotalDecodedBytes &&
                 newStreamSize <= Int.MAX_VALUE.toLong()
         ) {
             "حجم البيانات المفكوكة بعد إعادة البناء يتجاوز الحد الآمن للذاكرة أو حد الفهرسة."
