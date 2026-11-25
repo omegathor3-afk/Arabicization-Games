@@ -76,7 +76,12 @@ mkdir -p build/test-game/localized
 adb install build/test-game/unciv.apk || { install_rc=$?; note_failure "adb install of pinned Unciv APK failed (exit $install_rc)"; exit $install_rc; }
 
 test_status=0
-run_connected_test com.omega.arabify.UncivLocaleSlotInstrumentedTest || test_status=$?
+# Real translation: the screenshot evidence needs real Arabic, not pseudo
+# strings - the seeded GameSettings.json boots the game into the slot.
+gradle connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=com.omega.arabify.UncivLocaleSlotInstrumentedTest \
+  -Pandroid.testInstrumentationRunnerArguments.translationMode=real \
+  --stacktrace || test_status=$?
 
 OUTPUT_DIR="build/test-game/localized/pulled-evidence"
 mkdir -p "$OUTPUT_DIR"

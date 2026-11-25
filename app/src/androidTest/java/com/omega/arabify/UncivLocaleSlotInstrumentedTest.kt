@@ -57,11 +57,31 @@ class UncivLocaleSlotInstrumentedTest {
             val signed = File(context.cacheDir, "unciv-slot-ar.apk")
             unsigned.delete()
             signed.delete()
+            val mode = InstrumentationRegistry.getArguments().getString("translationMode", "pseudo")
+            val translator = if (mode == "real") OfflineArabicTranslator(context) else null
             try {
-                val report = LocaleSlotLocalizer.addArabicLocaleSlot(installedGameApk, unsigned) { text ->
-                    val trimmed = text.trim()
-                    if (trimmed.length >= 3) "عر${trimmed.length}" else text
+                if (translator != null) {
+                    Log.i("UncivSlot", "translationMode=real: downloading the ML Kit English-Arabic model")
+                    translator.prepareForOfflineUse(requireWifi = false)
+                    assertTrue(
+                        "ML Kit Arabic model is unavailable on this emulator; cannot produce a real-translation build",
+                        translator.isArabicModelDownloaded()
+                    )
                 }
+                // Font tier + Presentation Forms-B shaping: on-device evidence
+                // (2026-11-25) shows Unciv renders slot text reversed without it.
+                val fonts = LocaleSlotLocalizer.FontInjection { f ->
+                    context.assets.open(f.assetPath).use { it.readBytes() }
+                }
+                val report = LocaleSlotLocalizer.addArabicLocaleSlotWithFont(installedGameApk, unsigned, fonts) { text ->
+                    if (translator != null) {
+                        if (text.isBlank()) text else translator.translateEnglishToArabic(text)
+                    } else {
+                        val trimmed = text.trim()
+                        if (trimmed.length >= 3) "عر${trimmed.length}" else text
+                    }
+                }
+                Log.i("UncivSlot", "font=${report.fontReplaced} reason=${report.fontReason}")
                 Log.i("UncivSlot", "slot=${report.addedEntry} translated=${report.stringsTranslated} skipped=${report.stringsSkipped}")
                 assertEquals("assets/jsons/translations/العربية.properties", report.addedEntry)
                 assertTrue("Too few Unciv strings translated: ${report.stringsTranslated}", report.stringsTranslated > 1000)
