@@ -89,9 +89,17 @@ if [[ "$fg" != *"com.omega.arabify"* ]]; then
 fi
 
 # Confirm the requested Arabic system locale is active before taking evidence.
-locale="$(adb shell settings get system system_locales | tr -d '\r')"
+# The setting can come back null right after boot on swiftshader (observed
+# flake on 30c3956); re-apply and re-check a few times before failing.
+locale=""
+for attempt in 1 2 3 4 5 6; do
+  locale="$(adb shell settings get system system_locales | tr -d '\r')"
+  [[ "$locale" == *"ar-EG"* ]] && break
+  adb shell settings put system system_locales ar-EG >/dev/null 2>&1 || true
+  sleep 5
+done
 if [[ "$locale" != *"ar-EG"* ]]; then
-  note_failure "emulator locale is not ar-EG: $locale"
+  note_failure "emulator locale is not ar-EG after retries: $locale"
   exit 1
 fi
 
