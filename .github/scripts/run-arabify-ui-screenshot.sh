@@ -112,9 +112,11 @@ adb exec-out screencap -p > build/arabify-ui/arabify-ui-top-motion.png
 # Retry the gesture, and do not label a duplicate top-of-screen capture as a
 # scrolled screenshot. The hierarchy must change after the scroll.
 scrolled=0
-for attempt in 1 2 3; do
+# With animations enabled the first swipe can land during a recomposition
+# burst and do nothing; give the scroll more attempts and settle time.
+for attempt in 1 2 3 4 5; do
   adb shell input swipe 540 2100 540 320 900 || true
-  sleep 2
+  sleep 3
   dump_hierarchy build/arabify-ui/after-scroll.xml || { note_failure "could not capture the post-scroll accessibility hierarchy"; exit 1; }
   if python3 - build/arabify-ui/before-scroll.xml build/arabify-ui/after-scroll.xml <<'PY'
 import sys
