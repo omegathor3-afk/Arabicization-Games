@@ -87,6 +87,13 @@ OUTPUT_DIR="build/test-game/localized/pulled-evidence"
 mkdir -p "$OUTPUT_DIR"
 adb pull /sdcard/Download/ARABIFY/unciv-arabic.apk "$OUTPUT_DIR/unciv-arabic.apk" || true
 adb pull /sdcard/Download/ARABIFY/unciv-report.txt "$OUTPUT_DIR/unciv-report.txt" || true
+adb pull /sdcard/Download/ARABIFY/unciv-roundtrip.txt "$OUTPUT_DIR/unciv-roundtrip.txt" || true
+if [[ -s "$OUTPUT_DIR/unciv-roundtrip.txt" ]]; then
+  echo "::notice::ROUNDTRIP-AUDIT $(head -2 "$OUTPUT_DIR/unciv-roundtrip.txt" | tr '\n' ' ')"
+  tail -n +3 "$OUTPUT_DIR/unciv-roundtrip.txt" | head -5 | while IFS= read -r sample; do
+    [[ -n "$sample" ]] && echo "::notice::ROUNDTRIP-FLAGGED ${sample:0:250}"
+  done
+fi
 
 GENERATED_APK="$OUTPUT_DIR/unciv-arabic.apk"
 launch_status=0

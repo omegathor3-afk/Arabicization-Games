@@ -32,6 +32,26 @@ internal class OfflineArabicTranslator(context: Context) {
   translator.downloadModelIfNeeded(conditionsBuilder.build()).await()
  }
 
+ // Reverse direction exists for round-trip verification audits (CI evidence
+ // paths), not for the user-facing pipeline.
+ private val backTranslator = Translation.getClient(
+  TranslatorOptions.Builder()
+   .setSourceLanguage(TranslateLanguage.ARABIC)
+   .setTargetLanguage(TranslateLanguage.ENGLISH)
+   .build()
+ )
+
+ suspend fun prepareReverseForOfflineUse(requireWifi: Boolean = true) {
+  val conditionsBuilder = DownloadConditions.Builder()
+  if (requireWifi) conditionsBuilder.requireWifi()
+  backTranslator.downloadModelIfNeeded(conditionsBuilder.build()).await()
+ }
+
+ suspend fun translateArabicToEnglish(text: String): String {
+  require(text.isNotBlank()) { "النص فارغ." }
+  return backTranslator.translate(text).await()
+ }
+
  suspend fun isArabicModelDownloaded(): Boolean {
   val downloadedLanguages = RemoteModelManager.getInstance()
    .getDownloadedModels(TranslateRemoteModel::class.java)
@@ -54,5 +74,5 @@ internal class OfflineArabicTranslator(context: Context) {
   return result
  }
 
- fun close() = translator.close()
+ fun close() { translator.close(); backTranslator.close() }
 }

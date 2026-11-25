@@ -24,8 +24,12 @@ import java.util.zip.ZipFile
  * LocaleCode.Arabic is flagged unused upstream - activation happens via the
  * GameSettings.json the CI script seeds, not the picker).
  *
- * Translation uses a deterministic pseudo-Arabic stand-in (see
- * MindustryLocaleSlotInstrumentedTest for the rationale).
+ * Translation uses a deterministic pseudo-Arabic stand-in by default (see
+ * MindustryLocaleSlotInstrumentedTest for the rationale); CI passes
+ * translationMode=real to exercise the true ML Kit engine. In real mode the
+ * test also runs a RoundTripVerifier audit on up to 25 engine translations
+ * (translate back to English, compare content words) and publishes the flag
+ * rate as CI evidence - heuristic signal, never a hard failure.
  */
 @RunWith(AndroidJUnit4::class)
 class UncivLocaleSlotInstrumentedTest {
@@ -59,6 +63,10 @@ class UncivLocaleSlotInstrumentedTest {
             signed.delete()
             val mode = InstrumentationRegistry.getArguments().getString("translationMode", "pseudo")
             val translator = if (mode == "real") OfflineArabicTranslator(context) else null
+            val roundTrip = RoundTripVerifier()
+            var roundTripAudited = 0
+            var roundTripFlagged = 0
+            val roundTripFlaggedSamples = mutableListOf<String>()
             try {
                 if (translator != null) {
                     Log.i("UncivSlot", "translationMode=real: downloading the ML Kit English-Arabic model")
@@ -67,6 +75,7 @@ class UncivLocaleSlotInstrumentedTest {
                         "ML Kit Arabic model is unavailable on this emulator; cannot produce a real-translation build",
                         translator.isArabicModelDownloaded()
                     )
+                    translator.prepareReverseForOfflineUse(requireWifi = false)
                 }
                 // Font tier + Presentation Forms-B shaping: on-device evidence
                 // (2026-11-25) shows Unciv renders slot text reversed without it.
@@ -75,12 +84,37 @@ class UncivLocaleSlotInstrumentedTest {
                 }
                 val report = LocaleSlotLocalizer.addArabicLocaleSlotWithFont(installedGameApk, unsigned, fonts) { text ->
                     if (translator != null) {
-                        if (text.isBlank()) text else translator.translateEnglishToArabic(text)
+                        if (text.isBlank()) {
+                            text
+                        } else {
+                            val arabic = translator.translateEnglishToArabic(text)
+                            // Round-trip audit on a sample of mid-length strings:
+                            // translate back and compare content words. Flags are
+                            // evidence for the CI report, never a rewrite.
+                            if (roundTripAudited < 25 && text.trim().length in 10..80) {
+                                try {
+                                    val back = translator.translateArabicToEnglish(arabic)
+                                    val verdict = roundTrip.verify(text.trim(), back)
+                                    roundTripAudited++
+                                    if (!verdict.trustworthy) {
+                                        roundTripFlagged++
+                                        if (roundTripFlaggedSamples.size < 5) {
+                                            roundTripFlaggedSamples +=
+                                                "$text => $arabic => $back (missing: ${verdict.missingWords.take(4).joinToString(", ")})"
+                                        }
+                                    }
+                                } catch (error: Exception) {
+                                    Log.w("UncivSlot", "round-trip audit sample failed", error)
+                                }
+                            }
+                            arabic
+                        }
                     } else {
                         val trimmed = text.trim()
                         if (trimmed.length >= 3) "عر${trimmed.length}" else text
                     }
                 }
+                Log.i("UncivSlot", "round-trip audit: audited=$roundTripAudited flagged=$roundTripFlagged")
                 Log.i("UncivSlot", "font=${report.fontReplaced} reason=${report.fontReason}")
                 Log.i("UncivSlot", "slot=${report.addedEntry} translated=${report.stringsTranslated} skipped=${report.stringsSkipped}")
                 assertEquals("assets/jsons/translations/العربية.properties", report.addedEntry)
@@ -134,7 +168,13 @@ class UncivLocaleSlotInstrumentedTest {
                         "slotEntry=${report.addedEntry}\n" +
                         "translatedStrings=${report.stringsTranslated}\n" +
                         "skippedStrings=${report.stringsSkipped}\n" +
+                        "fitWarnings=${report.fitWarnings}\n" +
                         "signatureVerified=${verification.isVerified}\n"
+                )
+                val roundTripFile = File(evidenceDir, "unciv-roundtrip.txt")
+                roundTripFile.writeText(
+                    "audited=$roundTripAudited\nflagged=$roundTripFlagged\n" +
+                        roundTripFlaggedSamples.joinToString("\n") + "\n"
                 )
 
                 fun publishToDownloads(source: File, displayName: String, mimeType: String) {
@@ -159,6 +199,7 @@ class UncivLocaleSlotInstrumentedTest {
                 }
                 publishToDownloads(preservedApk, "unciv-arabic.apk", "application/vnd.android.package-archive")
                 publishToDownloads(reportFile, "unciv-report.txt", "text/plain")
+                publishToDownloads(roundTripFile, "unciv-roundtrip.txt", "text/plain")
                 Log.i("UncivSlot", "Published signed localized Unciv APK and report to Downloads/ARABIFY")
             } finally {
                 unsigned.delete()
