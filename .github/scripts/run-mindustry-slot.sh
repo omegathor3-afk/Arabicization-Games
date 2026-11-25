@@ -171,20 +171,24 @@ if [[ -s "$GENERATED_APK" ]]; then
           adb shell settings put system screen_off_timeout 1800000 >/dev/null 2>&1 || true
           adb shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
           last_ok_shot="build/test-game/localized/mindustry-last-foreground.png"
-          for tick in $(seq 1 12); do
-            sleep 5
-            fg_now="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'topResumedActivity|mResumedActivity' | tail -n 1 | tr -d '\r')"
-            if [[ "$fg_now" == *"io.anuke.mindustry"* ]]; then
-              adb exec-out screencap -p > "$last_ok_shot.tmp" 2>/dev/null && [[ -s "$last_ok_shot.tmp" ]] && mv "$last_ok_shot.tmp" "$last_ok_shot" && last_ok_tick=$tick
-            else
-              echo "game left foreground at tick $tick (~$((tick*5))s)" > build/test-game/localized/game-exit-tick.txt
-              break
-            fi
-          done
+          tick_capture() {
+            last_ok_tick=0
+            for tick in $(seq 1 12); do
+              sleep 5
+              fg_now="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'topResumedActivity|mResumedActivity' | tail -n 1 | tr -d '\r')"
+              if [[ "$fg_now" == *"io.anuke.mindustry"* ]]; then
+                adb exec-out screencap -p > "$last_ok_shot.tmp" 2>/dev/null && [[ -s "$last_ok_shot.tmp" ]] && mv "$last_ok_shot.tmp" "$last_ok_shot" && last_ok_tick=$tick
+              else
+                echo "game left foreground at tick $tick (~$((tick*5))s)" > build/test-game/localized/game-exit-tick.txt
+                return 1
+              fi
+            done
+            return 0
+          }
+          tick_capture || true
           foreground="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'topResumedActivity|mResumedActivity' | tail -n 1 | tr -d '\r')"
           game_pid="$(adb shell pidof io.anuke.mindustry 2>/dev/null | tr -d '\r')"
           if [[ -z "$game_pid" || "$foreground" != *"io.anuke.mindustry"* ]]; then
-            launch_status=1
             adb logcat -d -v time > build/test-game/localized/game-exit-logcat.txt || true
             adb logcat -d -b crash -v time >> build/test-game/localized/game-exit-logcat.txt 2>/dev/null || true
             game_files="$( (adb shell 'ls -R /sdcard/Android/data/io.anuke.mindustry/files 2>/dev/null | head -40'; for f in $(adb shell 'ls /sdcard/Android/data/io.anuke.mindustry/files/crashes/* /sdcard/Android/data/io.anuke.mindustry/files/last_log.txt /sdcard/Android/data/io.anuke.mindustry/files/logs/* 2>/dev/null' | tr -d '\r' | head -3); do echo "== $f"; adb shell "tail -n 40 $f" 2>/dev/null; done) | cut -c1-200 | tr '\n' '|' | cut -c1-4500)"
@@ -195,8 +199,35 @@ if [[ -s "$GENERATED_APK" ]]; then
             if [[ -s "build/test-game/localized/mindustry-last-foreground.png" ]]; then
               upload_shot build/test-game/localized/mindustry-last-foreground.png "mindustry-last-foreground-frame-tick-${last_ok_tick:-0}"
             fi
-            note_failure "Mindustry left the foreground ($(cat build/test-game/localized/game-exit-tick.txt 2>/dev/null)) before screenshot capture; pid=$game_pid foreground=$foreground :: logcat: ${logcat_tail:-unavailable}"
-          else
+            if [[ "$sys_lines" == *"FATAL"* || "$sys_lines" == *"lowmemorykiller"* || "$sys_lines" == *"ANR in"* || "$game_lines" == *"FATAL EXCEPTION"* ]]; then
+              # A crash or system kill is a real defect signal; never retry past it.
+              launch_status=1
+              note_failure "Mindustry CRASHED or was killed before screenshot capture ($(cat build/test-game/localized/game-exit-tick.txt 2>/dev/null)); pid=$game_pid foreground=$foreground :: logcat: ${logcat_tail:-unavailable}"
+            else
+              # Documented startup race: Android refreshes package info
+              # ("ApplicationInfo updating") right after launch and Mindustry
+              # quits on the pause (System.exit status 0, no crash). The
+              # 16:12 run proved it. Relaunch once; the refresh is done by then.
+              echo "::warning::Mindustry exited during the startup frame loop without a crash signature (documented package-refresh race); relaunching once before failing :: logcat: ${logcat_tail:-unavailable}"
+              adb shell am force-stop io.anuke.mindustry >/dev/null 2>&1 || true
+              adb shell am start -W -n "$LAUNCH_COMPONENT" >/dev/null 2>&1 || true
+              for relaunch_wait in $(seq 1 30); do
+                game_pid="$(adb shell pidof io.anuke.mindustry 2>/dev/null | tr -d '\r')"
+                foreground="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'topResumedActivity|mResumedActivity' | tail -n 1 | tr -d '\r')"
+                [[ -n "$game_pid" && "$foreground" == *"io.anuke.mindustry"* ]] && break
+                sleep 2
+              done
+              rm -f build/test-game/localized/game-exit-tick.txt
+              tick_capture || true
+              foreground="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'topResumedActivity|mResumedActivity' | tail -n 1 | tr -d '\r')"
+              game_pid="$(adb shell pidof io.anuke.mindustry 2>/dev/null | tr -d '\r')"
+              if [[ -z "$game_pid" || "$foreground" != *"io.anuke.mindustry"* ]]; then
+                launch_status=1
+                note_failure "Mindustry left the foreground ($(cat build/test-game/localized/game-exit-tick.txt 2>/dev/null)) before screenshot capture even after one relaunch; pid=$game_pid foreground=$foreground :: logcat: ${logcat_tail:-unavailable}"
+              fi
+            fi
+          fi
+          if [[ "$launch_status" -eq 0 ]]; then
             printf 'pid=%s\nforeground=%s\n' "$game_pid" "$foreground" > build/test-game/localized/game-process.txt
             echo "foreground_package=io.anuke.mindustry" > build/test-game/localized/ui-smoke-validation.txt
             echo "foreground_activity=$foreground" >> build/test-game/localized/ui-smoke-validation.txt
