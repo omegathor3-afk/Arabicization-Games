@@ -1,5 +1,13 @@
 package com.omega.arabify
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -8,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -24,7 +33,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -32,6 +45,9 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
 import androidx.compose.ui.unit.sp
 
 /**
@@ -98,6 +114,26 @@ internal object ArabifySpacing {
     val large = 16.dp
     val xLarge = 24.dp
     val xxLarge = 32.dp
+}
+
+/** Animated brushed-gold sweep for wordmarks - shimmer moves across the text. */
+@Composable
+internal fun rememberGoldShimmerBrush(): Brush {
+    val transition = rememberInfiniteTransition()
+    val t = transition.animateFloat(
+        initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(3600, easing = LinearEasing))
+    )
+    val hi = t.value
+    return Brush.linearGradient(
+        colorStops = arrayOf(
+            0f to ArabifyPalette.primaryDeep,
+            (hi - 0.18f).coerceIn(0f, 1f) to ArabifyPalette.primary,
+            hi to ArabifyPalette.textPrimary,
+            (hi + 0.18f).coerceIn(0f, 1f) to ArabifyPalette.primary,
+            1f to ArabifyPalette.primaryDeep,
+        )
+    )
 }
 
 internal object ArabifyCorners {
@@ -174,6 +210,23 @@ internal fun HextechPanel(
             .clip(ArabifyCorners.card)
             .background(containerColor)
             .border(1.dp, ArabifyPalette.primaryDeep, ArabifyCorners.card)
+            .drawWithContent {
+                drawContent()
+                // Small gold diamond ornaments on the frame's top edge - the
+                // hextech notch, drawn here so every panel carries it.
+                val half = 2.6.dp.toPx()
+                val y = 6.dp.toPx()
+                for (x in listOf(14.dp.toPx(), size.width - 14.dp.toPx())) {
+                    val path = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(x, y - half)
+                        lineTo(x + half, y)
+                        lineTo(x, y + half)
+                        lineTo(x - half, y)
+                        close()
+                    }
+                    drawPath(path, ArabifyPalette.primary.copy(alpha = 0.9f))
+                }
+            }
             .padding(4.dp)
             .border(1.dp, ArabifyPalette.outlineNeon.copy(alpha = 0.55f), CutCornerShape(14.dp))
             .padding(contentPadding),
@@ -185,8 +238,13 @@ internal fun HextechPanel(
 /** Gold diamond + label + fading rule - LoL section headers. */
 @Composable
 internal fun HextechSectionHeader(title: String, modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition()
+    val spin = transition.animateFloat(
+        initialValue = 0f, targetValue = 90f,
+        animationSpec = infiniteRepeatable(tween(4200, easing = LinearEasing))
+    )
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(Modifier.size(5.dp).rotate(45f).background(ArabifyPalette.primary))
+        Box(Modifier.size(5.dp).rotate(45f + spin.value).background(ArabifyPalette.primary))
         Text(title, color = ArabifyPalette.primary, fontFamily = ArabifyFontFamily, fontWeight = FontWeight.Bold, fontSize = 15.sp, letterSpacing = 0.5.sp)
         Box(Modifier.weight(1f).height(1.dp).background(Brush.horizontalGradient(listOf(ArabifyPalette.primaryDeep, Color.Transparent))))
     }
@@ -201,6 +259,11 @@ internal fun ArabifyCtaButton(
     enabled: Boolean = true,
 ) {
     val shape = ArabifyCorners.control
+    val transition = rememberInfiniteTransition()
+    val pulse = transition.animateFloat(
+        initialValue = 0.45f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1700, easing = FastOutSlowInEasing), RepeatMode.Reverse)
+    )
     Button(
         onClick = onClick,
         enabled = enabled,
@@ -215,10 +278,56 @@ internal fun ArabifyCtaButton(
         modifier = modifier
             .fillMaxWidth()
             .height(52.dp)
+            .shadow(if (enabled) 10.dp + 8.dp * pulse.value else 0.dp, shape, ambientColor = ArabifyPalette.primary, spotColor = ArabifyPalette.primary)
             .clip(shape)
             .background(if (enabled) ArabifyGradients.neon else Brush.linearGradient(listOf(ArabifyPalette.surfaceElevated, ArabifyPalette.surfaceElevated)))
-            .border(1.dp, if (enabled) ArabifyPalette.primary.copy(alpha = 0.7f) else ArabifyPalette.outline, shape),
+            .border(1.dp, if (enabled) ArabifyPalette.primary.copy(alpha = 0.55f + 0.4f * pulse.value) else ArabifyPalette.outline, shape),
     ) {
         Text(text, fontFamily = ArabifyFontFamily, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+    }
+}
+
+
+/**
+ * Animated hextech backdrop: two slow-drifting radial glows (teal top, gold
+ * bottom, breathing) and a field of rising ember particles with flicker.
+ * Fully procedural and original - no assets. Drawn behind the sheet content.
+ */
+@Composable
+internal fun HextechBackdrop(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition()
+    val t = transition.animateFloat(
+        initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(14000, easing = LinearEasing))
+    )
+    Canvas(modifier.fillMaxSize()) {
+        val w = size.width
+        val h = size.height
+        val phase = t.value * 2f * Math.PI.toFloat()
+        drawRect(
+            Brush.radialGradient(
+                listOf(ArabifyPalette.tertiary.copy(alpha = 0.15f), Color.Transparent),
+                center = Offset(w * (0.30f + 0.20f * sin(phase)), h * 0.18f),
+                radius = w * 0.9f
+            )
+        )
+        drawRect(
+            Brush.radialGradient(
+                listOf(ArabifyPalette.primary.copy(alpha = 0.10f + 0.05f * sin(phase * 2f)), Color.Transparent),
+                center = Offset(w * (0.70f - 0.15f * cos(phase)), h * 0.85f),
+                radius = w
+            )
+        )
+        val emberCount = 26
+        for (i in 0 until emberCount) {
+            val fx = ((i * 2654435761L) % 1000) / 1000f
+            val speed = 0.15f + ((i * 40503) % 100) / 100f * 0.35f
+            val offset = ((i * 97) % 100) / 100f
+            val y = h * (1f - ((t.value * speed + offset) % 1f))
+            val x = w * (fx + 0.02f * sin(phase + i))
+            val flicker = 0.25f + 0.55f * abs(sin(phase * 3f + i * 1.7f))
+            val color = if (i % 3 == 0) ArabifyPalette.tertiary else ArabifyPalette.primary
+            drawCircle(color.copy(alpha = flicker * 0.5f), radius = 1.5.dp.toPx() + (i % 3), center = Offset(x, y))
+        }
     }
 }

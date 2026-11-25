@@ -95,6 +95,14 @@ dump_hierarchy build/arabify-ui/before-scroll.xml || { note_failure "could not c
 adb exec-out screencap -p > build/arabify-ui/arabify-ui-top.png
 [[ -s build/arabify-ui/arabify-ui-top.png ]] || { note_failure "top screenshot missing"; exit 1; }
 
+# Motion evidence: a second capture of the same view 3s later. The animated
+# backdrop (drifting glows, rising embers), wordmark shimmer, CTA glow pulse
+# and spinning header diamonds must change pixels between the two frames; the
+# upload step publishes both so the diff can be inspected.
+sleep 3
+adb exec-out screencap -p > build/arabify-ui/arabify-ui-top-motion.png
+[[ -s build/arabify-ui/arabify-ui-top-motion.png ]] || { note_failure "motion screenshot missing"; exit 1; }
+
 # Retry the gesture, and do not label a duplicate top-of-screen capture as a
 # scrolled screenshot. The hierarchy must change after the scroll.
 scrolled=0
@@ -154,5 +162,6 @@ for name in ("arabify-ui-top.png", "arabify-ui-scrolled.png"):
     print(f"{name}: {width}x{height}, {len(data)} bytes")
 PY
 upload_shot build/arabify-ui/arabify-ui-top.png "arabify-ui-top"
+upload_shot build/arabify-ui/arabify-ui-top-motion.png "arabify-ui-top-motion"
 upload_shot build/arabify-ui/arabify-ui-scrolled.png "arabify-ui-scrolled"
 exit 0

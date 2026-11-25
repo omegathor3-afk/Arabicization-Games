@@ -346,13 +346,15 @@ private fun ArabifyApp(context: Context) {
    dismissButton={TextButton(onClick={showLocalizationChoice=false}){Text("ليس الآن")}}
   )
   Surface(Modifier.fillMaxSize(),color=ArabifyPalette.canvas) {
-   LazyColumn(Modifier.fillMaxSize().padding(horizontal=18.dp, vertical=16.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+   Box(Modifier.fillMaxSize()) {
+    HextechBackdrop()
+    LazyColumn(Modifier.fillMaxSize().padding(horizontal=18.dp, vertical=16.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
     item {
      HextechPanel(containerColor=Color.Transparent, contentPadding=PaddingValues(0.dp)) {
       Column(Modifier.fillMaxWidth().background(ArabifyGradients.hero).padding(24.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
        Text("OMEGA DEVELOPMENT LAB",color=ArabifyPalette.textMuted,fontSize=9.sp,fontWeight=FontWeight.Bold,letterSpacing=2.sp,fontFamily=ArabifyFontFamily)
        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
-        Text("ARABIFY",style=TextStyle(fontFamily=ArabifyFontFamily,fontSize=30.sp,fontWeight=FontWeight.Black,letterSpacing=3.sp,brush=ArabifyGradients.wordmark))
+        Text("ARABIFY",style=TextStyle(fontFamily=ArabifyFontFamily,fontSize=30.sp,fontWeight=FontWeight.Black,letterSpacing=3.sp,brush=rememberGoldShimmerBrush()))
         Text("LOCAL ENGINE  ·  0.2",color=ArabifyPalette.primary,fontSize=10.sp,fontWeight=FontWeight.Bold,fontFamily=ArabifyFontFamily)
        }
        GoldDivider()
@@ -755,6 +757,7 @@ private fun ArabifyApp(context: Context) {
     item {
      Spacer(Modifier.height(8.dp))
      Text("الإصدار 0.2.0 — خيار بدء التعريب وتقرير موحد قابل للنسخ.",color=ArabifyPalette.textDisabled,fontSize=11.sp)
+    }
     }
    }
   }
