@@ -129,7 +129,13 @@ internal object LocaleSlotLocalizer {
             var fontBytes: ByteArray? = null
             var fontReason: String? = null
             var shapeArabicSlot = false
-            if (fonts != null && isGdx) {
+            // Shaping+font injection applies to BOTH conventions. Folder-
+            // convention games (Unciv-style) rendered logical Arabic through
+            // their own text stack and dropped/mangled glyphs on device
+            // (تاريخ rendered as تارايخ, عرب lost its ب) - their renderer
+            // does not do full Arabic shaping, so they need the same
+            // Presentation Forms-B visual order + catalog font as libGDX.
+            if (fonts != null) {
                 val fe = candidates.firstOrNull { mainFontPattern.containsMatchIn(it) }
                 if (fe != null) {
                     val gameFont = zip.getInputStream(zip.getEntry(fe)).use {
