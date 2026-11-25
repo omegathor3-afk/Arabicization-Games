@@ -142,7 +142,6 @@ class AssetTextTransformerTest {
   assertEquals(0, result.skipped)
  }
 
-}
 
  @Test fun mangledMarkerIsRecoveredInsteadOfRejected()=runBlocking {
   val source="wave=Wave {0} incoming"
@@ -176,3 +175,4 @@ class AssetTextTransformerTest {
   assertEquals("segmented_placeholders",result.repair)
   assertTrue(result.text.contains("{0}"))
  }
+}
