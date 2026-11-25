@@ -185,6 +185,7 @@ class ApkLocalizationAdaptersTest {
         }
         assertSame(fatal, failed.exceptionOrNull())
         dir.deleteRecursively()
+        Unit
     }
 
     @Test
@@ -207,6 +208,7 @@ class ApkLocalizationAdaptersTest {
         assertEquals(CapabilityStatus.BLOCKED, plan.status)
         assertTrue(plan.explanations.any { it.contains("blocked") })
         dir.deleteRecursively()
+        Unit
     }
 
     @Test
@@ -227,6 +229,7 @@ class ApkLocalizationAdaptersTest {
         ).map { it.inspect(ref(apk), ResourceBudget()) }
         assertTrue(reports.all { it.evidenceLevel == "UNIT_FIXTURE" })
         dir.deleteRecursively()
+        Unit
     }
 
 }
