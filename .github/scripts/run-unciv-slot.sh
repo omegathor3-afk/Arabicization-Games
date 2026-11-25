@@ -46,7 +46,8 @@ upload_shot() {
 
 run_connected_test() {
   local test_class="$1"
-  gradle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class="$test_class" --stacktrace && return 0
+  shift
+  gradle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class="$test_class" "$@" --stacktrace && return 0
   local status=$?
   local details
   details=$(python3 - <<'PYX'
@@ -78,10 +79,10 @@ adb install build/test-game/unciv.apk || { install_rc=$?; note_failure "adb inst
 test_status=0
 # Real translation: the screenshot evidence needs real Arabic, not pseudo
 # strings - the seeded GameSettings.json boots the game into the slot.
-gradle connectedDebugAndroidTest \
-  -Pandroid.testInstrumentationRunnerArguments.class=com.omega.arabify.UncivLocaleSlotInstrumentedTest \
-  -Pandroid.testInstrumentationRunnerArguments.translationMode=real \
-  --stacktrace || test_status=$?
+# run_connected_test surfaces the failing assertion from the result XML as a
+# public check-run annotation (Actions logs need auth; annotations do not).
+run_connected_test com.omega.arabify.UncivLocaleSlotInstrumentedTest \
+  -Pandroid.testInstrumentationRunnerArguments.translationMode=real || test_status=$?
 
 OUTPUT_DIR="build/test-game/localized/pulled-evidence"
 mkdir -p "$OUTPUT_DIR"
