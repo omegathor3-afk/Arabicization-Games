@@ -83,6 +83,9 @@ test_status=0
 # public check-run annotation (Actions logs need auth; annotations do not).
 run_connected_test com.omega.arabify.UncivLocaleSlotInstrumentedTest \
   -Pandroid.testInstrumentationRunnerArguments.translationMode=real || test_status=$?
+if [[ "$test_status" -eq 0 ]]; then
+  echo "::notice::UncivLocaleSlotInstrumentedTest PASSED (real translation; slot built, signed and verified on-device)"
+fi
 
 OUTPUT_DIR="build/test-game/localized/pulled-evidence"
 mkdir -p "$OUTPUT_DIR"
@@ -96,6 +99,9 @@ if [[ -s "$OUTPUT_DIR/unciv-roundtrip.txt" ]]; then
   done
 fi
 
+if [[ -s "$OUTPUT_DIR/unciv-arabic.apk" ]]; then
+  echo "::notice::LAUNCH pulled localized APK ($(stat -c%s "$OUTPUT_DIR/unciv-arabic.apk") bytes)"
+fi
 GENERATED_APK="$OUTPUT_DIR/unciv-arabic.apk"
 launch_status=0
 if [[ -s "$GENERATED_APK" ]]; then
@@ -273,7 +279,7 @@ PYVIS
           echo "WARNING: Android UIAutomator did not expose a hierarchy for the launched game. The instrumentation test verified the slot content, APK signature and install; screenshot and foreground-process checks remain required." > build/test-game/localized/ui-smoke-validation.txt
           cat /tmp/arabify-uiautomator-dump.log >> build/test-game/localized/ui-smoke-validation.txt 2>/dev/null || true
         fi
-        adb exec-out screencap -p > build/test-game/localized/unciv-arabic-screen.png || launch_status=$?
+        adb exec-out screencap -p > build/test-game/localized/unciv-arabic-screen.png || { launch_status=$?; note_failure "screencap of the localized Unciv screen failed (exit $launch_status)"; }
         if [[ ! -s build/test-game/localized/unciv-arabic-screen.png ]]; then
           echo "Localized game screenshot is missing or empty." >&2
           note_failure "localized Unciv screenshot missing or empty after launch"
@@ -292,7 +298,10 @@ if width < 320 or height < 480:
     raise SystemExit(f"Localized game screenshot dimensions are too small: {width}x{height}.")
 print(f"Localized game screenshot verified: {width}x{height}, {len(data)} bytes.")
 PY
-          if [[ "$?" -ne 0 ]]; then launch_status=1; fi
+          if [[ "$?" -ne 0 ]]; then
+            launch_status=1
+            note_failure "localized Unciv screenshot failed PNG validation"
+          fi
         fi
         adb logcat -d -v time > build/test-game/localized/game-launch-logcat.txt || true
         upload_shot build/test-game/localized/unciv-arabic-screen.png "unciv-arabic-screen"
@@ -301,6 +310,8 @@ PY
   fi
 else
   echo "Translated Unciv APK was not exported to the shared Downloads collection." >&2
+  downloads_listing=$(adb shell ls -la /sdcard/Download/ARABIFY/ 2>&1 | head -20 | tr '\n' ' ')
+  note_failure "localized Unciv APK missing after a green test: /sdcard/Download/ARABIFY listing: ${downloads_listing:-<empty>}"
   if [[ "$test_status" -eq 0 ]]; then test_status=1; fi
 fi
 if [[ "$test_status" -eq 0 && "$launch_status" -ne 0 ]]; then
