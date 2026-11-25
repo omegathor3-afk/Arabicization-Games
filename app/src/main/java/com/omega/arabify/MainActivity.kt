@@ -280,9 +280,32 @@ private fun ArabifyApp(context: Context) {
         AssetLocalizationReport(
          scan.packageName,
          1,1,slotReport.stringsTranslated,slotReport.stringsSkipped,slotSigned,
-         fitWarnings=slotReport.fitWarnings,fitWarningSamples=slotReport.fitWarningSamples
+         fitWarnings=slotReport.fitWarnings,fitWarningSamples=slotReport.fitWarningSamples,
+         stringsRepaired=slotReport.stringsRepaired,skipReasons=slotReport.skipReasons,
+         repairReasons=slotReport.repairReasons
         )
-       } else AndroidAssetLocalizer.localize(context,input,File(context.cacheDir,"arabify-assets-$stamp-unsigned.apk"),File(context.cacheDir,"arabify-assets-$stamp-signed.apk"),offlineTranslator,onProgress = { done: Int, total: Int -> scope.launch { assetProgress=done to total } })
+       } else {
+        // Gettext slot (games shipping po/messages.pot + ui/languages.xml):
+        // adds an Arabic ar.po alongside the game's own languages instead
+        // of rewriting English strings in place, with the font tier.
+        val poUnsigned=File(context.cacheDir,"arabify-po-$stamp-unsigned.apk")
+        val poSigned=File(context.cacheDir,"arabify-po-$stamp-signed.apk")
+        val poFonts=GettextPoLocalizer.FontInjection { f -> context.assets.open(f.assetPath).use { it.readBytes() } }
+        val poReport=runCatching {
+         GettextPoLocalizer.addArabicGettextSlot(input,poUnsigned,poFonts) { text ->
+          if(text.isBlank()) text else offlineTranslator.translateEnglishToArabic(text)
+         }
+        }.getOrNull()
+        if(poReport!=null) {
+         ApkSigningService.signAndVerify(context,poUnsigned,poSigned)
+         AssetLocalizationReport(
+          scan.packageName,
+          1,1,poReport.stringsTranslated,poReport.stringsSkipped,poSigned,
+          stringsRepaired=poReport.stringsRepaired,skipReasons=poReport.skipReasons,
+          repairReasons=poReport.repairReasons
+         )
+        } else AndroidAssetLocalizer.localize(context,input,File(context.cacheDir,"arabify-assets-$stamp-unsigned.apk"),File(context.cacheDir,"arabify-assets-$stamp-signed.apk"),offlineTranslator,onProgress = { done: Int, total: Int -> scope.launch { assetProgress=done to total } })
+       }
       }
      }
      assetReport=report;generatedApk=report.outputApk
@@ -331,6 +354,12 @@ private fun ArabifyApp(context: Context) {
   localizationError?.let { appendLine("خطأ تعريب Android: $it") }
   assetReport?.let { report ->
    appendLine("ملفات النصوص: ${report.filesTranslated}/${report.filesDiscovered}؛ مترجم ${report.stringsTranslated}؛ متروك ${report.stringsSkipped}")
+   if(report.stringsRepaired>0) {
+    appendLine("إصلاحات آلية بعد الترجمة: ${report.stringsRepaired} (" + report.repairReasons.entries.joinToString("، ") { it.key + ": " + it.value } + ")")
+   }
+   if(report.skipReasons.isNotEmpty()) {
+    appendLine("أسباب ترك بعض النصوص: " + report.skipReasons.entries.joinToString("، ") { it.key + ": " + it.value })
+   }
    if(report.fitWarnings>0) {
     appendLine("تحذيرات احتمال تجاوز العرض (تقدير آلي وليس قياس خط فعلي): ${report.fitWarnings}")
     report.fitWarningSamples.forEach { appendLine("  " + it) }
