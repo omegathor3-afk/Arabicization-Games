@@ -85,6 +85,18 @@ class TranslationMemory(
         return sb.toString().replace(Regex(" +"), " ").trim()
     }
 
+    /**
+     * Fuzzy hits are only safe when both strings carry the same placeholder
+     * pattern - otherwise the stored translation slots the wrong arguments.
+     * Callers compare signatures before accepting a fuzzy match.
+     */
+    internal fun placeholderSignature(value: String): String =
+        placeholderRegex.findAll(value).map { it.value }.sorted().joinToString(" ")
+
+    private val placeholderRegex = Regex(
+        "%\\d*\\$?[sdifx]|%\\([^)]+\\)s|%[0-9]*\\.?[0-9]*[sdif]|\\{[^}]*\\}"
+    )
+
     internal fun similarity(a: String, b: String): Double {
         if (a == b) return 1.0
         val maxLen = maxOf(a.length, b.length)

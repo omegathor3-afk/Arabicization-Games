@@ -59,6 +59,19 @@ class TranslationMemoryTest {
     }
 
     @Test
+    fun placeholderSignaturesMatchShapeNotOrder() {
+        val tm = TranslationMemory()
+        assertEquals(
+            tm.placeholderSignature("Deal %1${'$'}d damage to {target}"),
+            tm.placeholderSignature("{target} takes %1${'$'}d damage"),
+        )
+        assertNotEquals(
+            tm.placeholderSignature("Deal %d damage"),
+            tm.placeholderSignature("Deal %d damage in %d turns"),
+        )
+    }
+
+    @Test
     fun newestWriteWins() {
         val tm = TranslationMemory()
         tm.add("Play", "العب")

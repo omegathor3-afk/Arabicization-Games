@@ -13,6 +13,12 @@ internal fun hasArabicTranslationModel(downloadedLanguages: Set<String>): Boolea
  TranslateLanguage.ARABIC in downloadedLanguages
 
 internal class OfflineArabicTranslator(context: Context) {
+ private val translationMemory = TranslationMemory()
+
+ /** Translation-memory counters for the activity report. */
+ val translationMemoryStats: String
+  get() = with(translationMemory) { "TM exact=$exactHits fuzzy=$fuzzyHits miss=$misses size=$size" }
+
  private val translator = Translation.getClient(
   TranslatorOptions.Builder()
    .setSourceLanguage(TranslateLanguage.ENGLISH)
@@ -37,7 +43,15 @@ internal class OfflineArabicTranslator(context: Context) {
 
  suspend fun translateEnglishToArabic(text: String): String {
   require(text.isNotBlank()) { "النص فارغ." }
-  return translator.translate(text).await()
+  val hit = translationMemory.lookup(text)
+  if (hit.kind == TranslationMemory.MatchKind.EXACT) return hit.translation
+  if (hit.kind == TranslationMemory.MatchKind.FUZZY &&
+      translationMemory.placeholderSignature(text) == translationMemory.placeholderSignature(hit.source)) {
+   return hit.translation
+  }
+  val result = translator.translate(text).await()
+  translationMemory.add(text, result)
+  return result
  }
 
  fun close() = translator.close()
