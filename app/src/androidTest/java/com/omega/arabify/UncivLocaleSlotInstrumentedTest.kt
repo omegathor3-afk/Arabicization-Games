@@ -100,7 +100,10 @@ class UncivLocaleSlotInstrumentedTest {
                             .toSet()
                         assertEquals("Template keys were not preserved in the Arabic file", keysOf(baseText), keysOf(slotText))
                         assertTrue("Arabic directives missing", slotText.contains("StartWithCapitalLetter = false"))
-                        assertTrue("Slot contains no Arabic text", slotText.any { it.code in 0x0600..0x06FF })
+                        // Values are pre-shaped to visual-order Presentation Forms-B for
+                        // the bidi-less renderer, so Arabic shows up in the FE70-FEFF
+                        // block rather than (or alongside) the base 0600-06FF block.
+                        assertTrue("Slot contains no Arabic text", slotText.any { it.code in 0x0600..0x06FF || it.code in 0xFB50..0xFEFF })
                         val originalNames = original.entries().asSequence().map { it.name }.toList()
                         var compared = 0
                         for (name in originalNames) {
