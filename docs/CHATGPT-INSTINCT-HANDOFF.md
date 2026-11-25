@@ -12,24 +12,56 @@
 - Do not claim offline support unless the actual model is present locally and translation succeeds with network disabled.
 - Do not claim an engine is supported based only on engine detection.
 
-## Last independently reviewed repository state
+## Latest coordination state — 2026-11-25
 
-- Branch head observed: `06b0d4432b941053326d50cb5e33d3810276f232` (2026-11-25).
-- Current README describes Android Native string-resource localization, bounded Unity Mono StreamingAssets/TextAsset handling, libGDX/gettext language-slot localization, and experimental Bergamot integration.
+- Branch head before this architecture handoff: `842d5fd3bffbea002100b0489969f6db157722ae`.
+- ChatGPT added `docs/UNIVERSAL-LOCALIZATION-ARCHITECTURE.md` in commit `5e4b408d3b447f4139b5eedcec85cc9214e2c43d`.
+- The architecture is a design contract, not implemented production code. It specifies a format-agnostic core, adapter registry/planner, canonical Localization IR, bounded resource budgets, patch transactions, Arabic presentation services, provenance, and evidence levels.
+- ChatGPT's ownership is architecture/API/IR design and cross-module integration review. Instinct's ownership is engine/container adapter implementation, current feature completion, CI, fixtures, and real-game validation. Avoid simultaneous edits to the same engine implementation unless coordinated.
+- First integration step: inventory existing detector, orchestration, localizers, and rewriters; map them to the architecture; then introduce shared models/interfaces incrementally without breaking current paths.
+- Existing implementation and limitations remain as documented below; no production adapter refactor or test run is claimed by the architecture-document commit.
+
+## Last independently reviewed repository state (code baseline)
+
+- Code baseline observed at commit `06b0d4432b941053326d50cb5e33d3810276f232` (2026-11-25).
+- README describes Android Native string-resource localization, bounded Unity Mono StreamingAssets/TextAsset handling, libGDX/gettext language-slot localization, and experimental Bergamot integration.
 - README explicitly says Unity Mono validation is fixture/emulator based, not a real Unity Player game test. IL2CPP, Unreal localization, and a complete Godot adapter are not implemented.
 - README reports Mindustry and Unciv emulator evidence. Treat reported counts/screenshots as project claims until the relevant CI artifacts and test logs are independently checked.
-- UnityFS writer currently uses substantial in-memory byte arrays and documents file-backed streaming as unfinished. Preserve/reinforce conservative memory rejection rather than weakening limits.
-- Latest observed CodeQL/Gitleaks workflow run for this head: run `45640087180`, conclusion `failure`; failed step: `Build Kotlin and Android sources for CodeQL extraction`. Investigate the job logs and repair the cause. Do not mark CI green until a new run on the relevant head succeeds.
-- The repository tree at this head was checked: generated `.gradle/`, `.kotlin/`, `app/build/`, and `local.properties` were not present in the current tree. This does not erase their historical appearance in earlier commits; do not rewrite history without approval.
+- UnityFS writer still has substantial in-memory intermediate buffers; file-backed streaming is unfinished. Preserve conservative memory rejection.
+- Latest observed CodeQL/Gitleaks workflow run for the code baseline: run `45640087180`, conclusion `failure`; failed step: `Build Kotlin and Android sources for CodeQL extraction`. Inspect logs and repair; do not mark CI green until a new run on a later code commit succeeds.
+- The repository tree at the baseline had no generated `.gradle/`, `.kotlin/`, `app/build/`, or `local.properties`. This does not erase their historical appearance in earlier commits; do not rewrite history without approval.
 
-## Immediate shared priorities
+## Ownership and immediate actions
 
-1. **CI first:** inspect the failing CodeQL job logs for run 45640087180, identify the precise Gradle/Kotlin/Android extraction failure, fix it on this branch, and report the new run URL and conclusion.
-2. **Unity Mono real-game validation:** obtain a legally usable, reproducible Unity Mono sample game/build. Run the app's production import → detect → extract/translate → rewrite → sign → install → launch flow. Capture before/after evidence and verify gameplay/menu text in the actual Unity Player. A synthetic APK fixture is not a substitute.
-3. **UnityFS memory work:** continue moving rewrite stages toward file-backed/temp-file streaming. Keep explicit limits for compressed input, decoded output, total bytes, node counts, and heap. Test low-memory rejection and cleanup after cancellation/failure.
-4. **Offline translator UX:** clearly show model download/installed state and verify translation after app restart with airplane mode enabled. Keep Bergamot labelled experimental until integrated into the user-facing pipeline and measured on a physical ARM64 phone.
-5. **Release readiness:** produce and validate a signed installable APK only after CI and core flows pass. Record package ID, version, min/target SDK, ABI, signing type, SHA-256, size, install/launch result, and device/emulator used.
-6. **Engine honesty:** keep IL2CPP, Unreal, and Godot labelled unsupported/incomplete until their actual readers/writers and meaningful integration tests exist.
+### ChatGPT — architecture and integration
+1. Maintain the architecture contract and define canonical IR, artifact references, adapter descriptors, resource budgets, and report models.
+2. Review current code boundaries and propose small integration commits that do not collide with Instinct's engine-specific work.
+3. Review Instinct commits against capability claims, parser safety, preservation, cancellation, and evidence quality.
+4. Do not claim architecture implemented until production interfaces and at least two existing adapter families use the shared pipeline.
+
+### Instinct — implementation and engine coverage
+1. Read `docs/UNIVERSAL-LOCALIZATION-ARCHITECTURE.md` before major pipeline/adapter changes.
+2. Continue CI repair, Unity Mono real-game validation, UnityFS file-backed streaming, and engine/container adapter implementation.
+3. Map existing Android Native, libGDX/gettext, and Unity Mono paths to the adapter contract; avoid adding more scattered engine-specific branches.
+4. Keep expanding coverage: Unity IL2CPP, Unreal PAK/IoStore, Godot PCK, and other game/runtime formats remain in the long-term scope. Do not narrow the product goal to Android Native/Unity only.
+5. For every adapter, report detect/extract/rewrite/verify capability separately, list exclusions, and attach exact test evidence.
+
+### Shared technical sequence
+1. Inventory current detector, pipeline, translator, rewriters, and UI orchestration.
+2. Introduce shared artifact references, budgets, capability descriptors, and structured reports without changing behavior.
+3. Wrap existing localizers as adapters behind one registry and planner.
+4. Route existing paths through the shared pipeline and retain compatibility tests.
+5. Add new adapters through the same contract; no engine is excluded merely because its implementation is difficult.
+6. Add CI gates for round-trip tests, safe failure, cancellation, preservation, and explicit evidence level.
+
+## Existing validation priorities and limitations
+
+1. **CI:** inspect run 45640087180 logs, identify the precise Gradle/Kotlin/Android extraction failure, fix it on this branch, and report a new run URL/conclusion.
+2. **Unity Mono real-game validation:** use a legally usable, reproducible Unity Mono game/build. Exercise import → detect → extract/translate → rewrite → sign → install → launch, and verify text inside the actual Unity Player. Synthetic APK fixtures are not a substitute.
+3. **UnityFS memory:** move rewrite stages toward file-backed/temp-file streaming. Keep limits for compressed input, decoded output, total bytes, node counts, and heap. Test low-memory rejection and cleanup after cancellation/failure.
+4. **Offline translator:** expose model download/installed state and verify translation after app restart with airplane mode enabled. Keep Bergamot experimental until integrated into the user-facing pipeline and measured on physical ARM64 hardware.
+5. **Release readiness:** validate signed APK package ID, version, min/target SDK, ABI, signing type, SHA-256, size, install/launch result, and device/emulator.
+6. **Engine honesty:** IL2CPP, Unreal, and Godot remain unsupported/incomplete until their readers/writers and meaningful integration tests exist. Their inclusion in the product goal is unchanged.
 
 ## Handoff template — append a new dated entry
 
@@ -46,6 +78,6 @@
 
 ## Communication protocol
 
-- Instinct: before starting a task, read this file and check the current branch head. After implementation, append a dated handoff entry in a focused commit and include the exact test evidence.
-- ChatGPT reviewer: inspect the latest branch head and the cited code/tests/workflow evidence; append review findings and actionable next steps here when repository write access is available. If unable to write, provide the exact proposed note to the owner rather than implying it was committed.
-- If a finding is disputed, record the evidence and resolution in this file instead of silently overwriting the other party's conclusions.
+- Instinct: before starting a task, read this file and check the current branch head. After implementation, append a dated handoff entry in a focused commit and include exact test evidence.
+- ChatGPT reviewer: inspect the latest branch head and cited code/tests/workflow evidence; append review findings and actionable next steps here when repository write access is available. If unable to write, provide the exact proposed note rather than implying it was committed.
+- If a finding is disputed, record evidence and resolution here instead of silently overwriting the other party's conclusions.
