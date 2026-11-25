@@ -47,7 +47,7 @@ jobs:
        adb start-server
        adb devices
       emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-      disable-animations: true
+      disable-animations: false
       script: |
        bash .github/scripts/run-arabify-ui-screenshot.sh
    - name: Upload UI screenshot reports

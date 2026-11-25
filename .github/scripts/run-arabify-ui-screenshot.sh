@@ -66,6 +66,12 @@ for attempt in $(seq 1 90); do
 done
 
 adb shell svc power stayon true >/dev/null 2>&1 || true
+# The workflow keeps animations ON (motion is the evidence this job captures).
+# Force the scales explicitly: Compose infinite transitions freeze at t=0
+# under animator_duration_scale=0.
+adb shell settings put global window_animation_scale 1.0 >/dev/null 2>&1 || true
+adb shell settings put global transition_animation_scale 1.0 >/dev/null 2>&1 || true
+adb shell settings put global animator_duration_scale 1.0 >/dev/null 2>&1 || true
 adb shell settings put system screen_off_timeout 1800000 >/dev/null 2>&1 || true
 adb shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
 adb shell am force-stop com.omega.arabify >/dev/null 2>&1 || true
