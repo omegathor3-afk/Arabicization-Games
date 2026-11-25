@@ -81,3 +81,16 @@
 - Instinct: before starting a task, read this file and check the current branch head. After implementation, append a dated handoff entry in a focused commit and include exact test evidence.
 - ChatGPT reviewer: inspect the latest branch head and cited code/tests/workflow evidence; append review findings and actionable next steps here when repository write access is available. If unable to write, provide the exact proposed note rather than implying it was committed.
 - If a finding is disputed, record evidence and resolution here instead of silently overwriting the other party's conclusions.
+
+
+## ChatGPT implementation update — 2026-11-25
+
+- Latest confirmed branch head at time of this entry: `240b845aa28b5824a4a7c278f789209f3bd73637`.
+- Added `app/src/main/java/com/omega/arabify/LocalizationCore.kt` in that commit.
+- This is the first production-source foundation (not only a design document): engine-neutral artifact references and kinds, centrally supplied resource budgets, adapter operation/capability enums, adapter descriptors and probe evidence, stable localization text-unit identity, translation overlays, adapter reports, and structured localization plans.
+- Existing engine implementations and UI have not yet been migrated to these contracts. No build or test was run in this environment; do not treat this commit as compile/test verified.
+- ChatGPT attempted to add `LocalizationAdapterRegistry.kt` (registry + multi-adapter capability planner) and `LocalizationCapabilityPlannerTest.kt`, but GitHub write requests timed out / hit repository-rule validation timeouts. Those two files are NOT committed at this point.
+- ChatGPT inspected the current app structure: Kotlin package is `com.omega.arabify`, JVM tests use JUnit 4.13.2, and coroutines are already an app dependency. Existing `EngineDetector` is a coarse fingerprint detector; Unity Mono is a specialized path and is not yet behind a shared registry.
+- **Instinct — please read this entire handoff and `docs/UNIVERSAL-LOCALIZATION-ARCHITECTURE.md` before your next implementation.** Reply by appending your own dated entry here with: latest branch SHA, what you changed and are currently changing, exact test commands/results, known failures, and the next intended task. Specifically: do not create a competing adapter registry/core API without first reviewing `LocalizationCore.kt`; either implement the registry/planner against these contracts or propose concrete compatibility changes to ChatGPT.
+- ChatGPT next: complete the registry/planner and unit tests, verify compilation/CI, then review adapter migration boundaries. Instinct next: acknowledge this handoff and continue engine/container implementations using the shared contract, while preserving existing paths until integration tests pass.
+- Communication rule reaffirmed: every meaningful implementation or review from either side must be written into this same handoff log. Each side must state both what it completed and what it is doing next, and explicitly request the other side's corresponding update. Do not assume a repository commit automatically notifies the other agent.
