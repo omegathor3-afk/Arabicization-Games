@@ -18,7 +18,9 @@ internal data class AssetLocalizationReport(
  val stringsSkipped: Int,
  val outputApk: File,
  val bundleFilesTranslated: Int? = null,
- val bundleStringsTranslated: Int? = null
+ val bundleStringsTranslated: Int? = null,
+ val fitWarnings: Int = 0,
+ val fitWarningSamples: List<String> = emptyList()
 )
 
 internal object AssetTextTransformer {
@@ -27,7 +29,7 @@ internal object AssetTextTransformer {
  // glossary phrases never reach the MT engine.
  private val phraseTermBase by lazy { PhraseTermBase(ArabicUiGlossary.terms) }
 
- data class Result(val text:String,val translated:Int,val skipped:Int,val skipReasons:Map<String,Int> = emptyMap(),val repaired:Int = 0,val repairReasons:Map<String,Int> = emptyMap())
+ data class Result(val text:String,val translated:Int,val skipped:Int,val skipReasons:Map<String,Int> = emptyMap(),val repaired:Int = 0,val repairReasons:Map<String,Int> = emptyMap(),val fitWarnings:Int = 0,val fitWarningSamples:List<String> = emptyList())
 
  suspend fun transform(
   path:String,
@@ -90,13 +92,13 @@ internal object AssetTextTransformer {
   if(glossaryHit!=null){
    val prefix=value.takeWhile{it.isWhitespace()}
    val suffix=value.takeLastWhile{it.isWhitespace()}
-   return SingleResult(prefix+glossaryHit+suffix,true)
+   return SingleResult(prefix+glossaryHit+suffix,true,fitWarning=fitWarningFor(value,glossaryHit))
   }
   val phraseHit=phraseTermBase.compose(value.trim())
   if(phraseHit!=null){
    val prefix=value.takeWhile{it.isWhitespace()}
    val suffix=value.takeLastWhile{it.isWhitespace()}
-   return SingleResult(prefix+phraseHit.text+suffix,true,null,"phrase_term_base")
+   return SingleResult(prefix+phraseHit.text+suffix,true,null,"phrase_term_base",fitWarningFor(value,phraseHit.text))
   }
   // Never feed non-English source to the EN->AR engine: a string that is
   // actually French/CJK/etc. would produce garbage attributed to us. Arabic
@@ -128,13 +130,19 @@ internal object AssetTextTransformer {
    if(!quality.accepted)SingleResult(value,false,"quality_gate:"+quality.reason)
    else {
     val restored=PlaceholderProtector.restore(result,protected)
-    if(restored.isBlank())SingleResult(value,false,"blank_after_restore")else SingleResult(restored,true,null,repair)
+    if(restored.isBlank())SingleResult(value,false,"blank_after_restore")else SingleResult(restored,true,null,repair,fitWarningFor(value,restored))
    }
   }catch(cancelled:CancellationException){throw cancelled}
   catch(_:Exception){SingleResult(value,false,"translator_error")}
  }
 
- data class SingleResult(val text:String,val translated:Boolean,val reason:String? = null,val repair:String? = null)
+ data class SingleResult(val text:String,val translated:Boolean,val reason:String? = null,val repair:String? = null,val fitWarning:String? = null)
+
+ internal fun fitWarningFor(source:String,translation:String):String? {
+  val est=TextFitEstimator.estimate(source.trim(),translation.trim())
+  if(!est.overflowRisk)return null
+  return source.trim().take(40)+" -> "+translation.trim().take(40)+" ("+"%.2f".format(est.widthRatio)+"x)"
+ }
 
  suspend fun transform(
   path:String,
@@ -151,12 +159,19 @@ internal object AssetTextTransformer {
   val repairReasons=mutableMapOf<String,Int>()
   fun countSkip(reason:String){skipReasons[reason]=(skipReasons[reason] ?: 0)+1}
   fun countRepair(reason:String){repairReasons[reason]=(repairReasons[reason] ?: 0)+1}
+  var fitWarnings=0
+  val fitWarningSamples=mutableListOf<String>()
+  fun countFit(source:String,out:String){
+   val warning=fitWarningFor(source,out)
+   if(warning!=null){fitWarnings++;if(fitWarningSamples.size<10)fitWarningSamples+=warning}
+  }
   suspend fun tx(value:String):String {
    if(!looksTranslatable(value)){skipped++;countSkip("not_translatable");return value}
    if(SourceLanguageGuard.classify(value)==SourceLanguageGuard.Verdict.NOT_ENGLISH){skipped++;countSkip("source_language:not_english");return value}
    val glossaryHit=ArabicUiGlossary.translateExact(value)
    if(glossaryHit!=null){
     translated++
+    countFit(value,glossaryHit)
     val prefix=value.takeWhile{it.isWhitespace()}
     val suffix=value.takeLastWhile{it.isWhitespace()}
     return prefix+glossaryHit+suffix
@@ -165,6 +180,7 @@ internal object AssetTextTransformer {
    if(phraseHit!=null){
     translated++
     countRepair("phrase_term_base")
+    countFit(value,phraseHit.text)
     val prefix=value.takeWhile{it.isWhitespace()}
     val suffix=value.takeLastWhile{it.isWhitespace()}
     return prefix+phraseHit.text+suffix
@@ -197,7 +213,7 @@ internal object AssetTextTransformer {
     if(!quality.accepted){skipped++;countSkip("quality_gate:"+quality.reason);value}
     else {
      val restored=PlaceholderProtector.restore(result,protected)
-     if(restored.isBlank()){skipped++;countSkip("blank_after_restore");value}else{translated++;restored}
+     if(restored.isBlank()){skipped++;countSkip("blank_after_restore");value}else{translated++;countFit(value,restored);restored}
     }
    }catch(cancelled:CancellationException){throw cancelled}
    catch(_:Exception){skipped++;countSkip("translator_error");value}
@@ -211,7 +227,7 @@ internal object AssetTextTransformer {
      root.startsWith("[") -> transformArray(JSONArray(root),::tx).toString(2)
      else -> source.also{skipped++;countSkip("unsupported_json_root")}
     }
-    Result(output,translated,skipped,skipReasons,repaired,repairReasons)
+    Result(output,translated,skipped,skipReasons,repaired,repairReasons,fitWarnings,fitWarningSamples)
    }catch(cancelled:CancellationException){throw cancelled}
    catch(_:Exception){Result(source,0,1,mapOf("unparseable" to 1))}
    "properties" -> {
@@ -229,11 +245,11 @@ internal object AssetTextTransformer {
       }
      }
     }
-    Result(output.joinToString("\n"),translated,skipped,skipReasons,repaired,repairReasons)
+    Result(output.joinToString("\n"),translated,skipped,skipReasons,repaired,repairReasons,fitWarnings,fitWarningSamples)
    }
    "csv" -> {
     val output=transformCsv(source,::tx){skipped++;countSkip("csv_structure")}
-    Result(output,translated,skipped,skipReasons,repaired,repairReasons)
+    Result(output,translated,skipped,skipReasons,repaired,repairReasons,fitWarnings,fitWarningSamples)
    }
    "strings" -> {
     val pattern=Regex("^(\\s*\"(?:\\\\.|[^\"])*\"\\s*=\\s*\")(.*?)(\"\\s*;\\s*)$")
@@ -243,14 +259,14 @@ internal object AssetTextTransformer {
      if(match==null){if(line.trim().isNotEmpty()&&!line.trim().startsWith("//")){skipped++;countSkip("malformed_line")};output+=line}
      else output+=match.groupValues[1]+tx(match.groupValues[2])+match.groupValues[3]
     }
-    Result(output.joinToString("\n"),translated,skipped,skipReasons,repaired,repairReasons)
+    Result(output.joinToString("\n"),translated,skipped,skipReasons,repaired,repairReasons,fitWarnings,fitWarningSamples)
    }
    "txt" -> {
     val output=mutableListOf<String>()
     for(line in source.split("\n")) {
      output+=if(line.isBlank()||line.trimStart().startsWith("#"))line else tx(line)
     }
-    Result(output.joinToString("\n"),translated,skipped,skipReasons,repaired,repairReasons)
+    Result(output.joinToString("\n"),translated,skipped,skipReasons,repaired,repairReasons,fitWarnings,fitWarningSamples)
    }
    else -> Result(source,0,1,mapOf("unsupported_extension" to 1))
   }

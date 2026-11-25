@@ -279,7 +279,8 @@ private fun ArabifyApp(context: Context) {
         ApkSigningService.signAndVerify(context,slotUnsigned,slotSigned)
         AssetLocalizationReport(
          scan.packageName,
-         1,1,slotReport.stringsTranslated,slotReport.stringsSkipped,slotSigned
+         1,1,slotReport.stringsTranslated,slotReport.stringsSkipped,slotSigned,
+         fitWarnings=slotReport.fitWarnings,fitWarningSamples=slotReport.fitWarningSamples
         )
        } else AndroidAssetLocalizer.localize(context,input,File(context.cacheDir,"arabify-assets-$stamp-unsigned.apk"),File(context.cacheDir,"arabify-assets-$stamp-signed.apk"),offlineTranslator,onProgress = { done: Int, total: Int -> scope.launch { assetProgress=done to total } })
       }
@@ -328,7 +329,13 @@ private fun ArabifyApp(context: Context) {
   translationError?.let { appendLine("خطأ الترجمة: $it") }
   localizationReport?.let { appendLine("موارد Android: ${it.translatedStrings}/${it.discoveredStrings} نصًا") }
   localizationError?.let { appendLine("خطأ تعريب Android: $it") }
-  assetReport?.let { appendLine("ملفات النصوص: ${it.filesTranslated}/${it.filesDiscovered}؛ مترجم ${it.stringsTranslated}؛ متروك ${it.stringsSkipped}") }
+  assetReport?.let { report ->
+   appendLine("ملفات النصوص: ${report.filesTranslated}/${report.filesDiscovered}؛ مترجم ${report.stringsTranslated}؛ متروك ${report.stringsSkipped}")
+   if(report.fitWarnings>0) {
+    appendLine("تحذيرات احتمال تجاوز العرض (تقدير آلي وليس قياس خط فعلي): ${report.fitWarnings}")
+    report.fitWarningSamples.forEach { appendLine("  " + it) }
+   }
+  }
   assetError?.let { appendLine("خطأ تعريب الملفات: $it") }
   if(localizeBusy) appendLine("حالة التعريب: ${localizationProgress.first}/${localizationProgress.second}")
   if(assetBusy) appendLine("حالة تعريب الملفات: ${assetProgress.first}/${assetProgress.second}")

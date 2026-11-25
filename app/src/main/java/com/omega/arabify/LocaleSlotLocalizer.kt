@@ -47,7 +47,9 @@ internal object LocaleSlotLocalizer {
         val fontReason: String? = null,
         val skipReasons: Map<String, Int> = emptyMap(),
         val stringsRepaired: Int = 0,
-        val repairReasons: Map<String, Int> = emptyMap()
+        val repairReasons: Map<String, Int> = emptyMap(),
+        val fitWarnings: Int = 0,
+        val fitWarningSamples: List<String> = emptyList()
     )
 
     private val mainFontPattern = Regex("(^|/)fonts/font\\.(woff|ttf|otf)$")
@@ -244,7 +246,7 @@ internal object LocaleSlotLocalizer {
                 out.write(slotBytes)
                 out.closeEntry()
             }
-            return SlotReport(base, slotPath, result.translated, result.skipped, outputApk, fontEntryName, fontReason, result.skipReasons, result.repaired, result.repairReasons)
+            return SlotReport(base, slotPath, result.translated, result.skipped, outputApk, fontEntryName, fontReason, result.skipReasons, result.repaired, result.repairReasons, result.fitWarnings, result.fitWarningSamples)
         }
     }
 
@@ -299,6 +301,8 @@ internal object LocaleSlotLocalizer {
         var repaired = 0
         val skipReasons = mutableMapOf<String, Int>()
         val repairReasons = mutableMapOf<String, Int>()
+        var fitWarnings = 0
+        val fitWarningSamples = mutableListOf<String>()
         fun countSkip(reason: String) {
             skipReasons[reason] = (skipReasons[reason] ?: 0) + 1
         }
@@ -330,6 +334,7 @@ internal object LocaleSlotLocalizer {
             if (result.translated) {
                 translated++
                 result.repair?.let { repaired++; countRepair(it) }
+                result.fitWarning?.let { fitWarnings++; if (fitWarningSamples.size < 10) fitWarningSamples += it }
                 output += "$key = ${result.text}"
             } else {
                 skipped++
@@ -337,6 +342,6 @@ internal object LocaleSlotLocalizer {
                 output += if (value.isEmpty()) "$key = " else line
             }
         }
-        return AssetTextTransformer.Result(output.joinToString("\n"), translated, skipped, skipReasons, repaired, repairReasons)
+        return AssetTextTransformer.Result(output.joinToString("\n"), translated, skipped, skipReasons, repaired, repairReasons, fitWarnings, fitWarningSamples)
     }
 }

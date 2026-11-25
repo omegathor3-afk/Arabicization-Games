@@ -199,6 +199,13 @@ class AssetTextTransformerTest {
   assertTrue(result.text.contains("greeting=Bonjour le monde entier maintenant"))
  }
 
+ @Test fun transformReportsFitWarningsForLongArabic()=runBlocking {
+  val result=AssetTextTransformer.transform("assets/bundle.properties","unit=Zephyr"){ "وحدة زفير المحمولة بعيدة المدى جداً" }
+  assertEquals(1,result.translated)
+  assertEquals(1,result.fitWarnings)
+  assertTrue(result.fitWarningSamples.isNotEmpty())
+ }
+
  @Test fun transformValueStillTranslatesShortEnglish()=runBlocking {
   val result=AssetTextTransformer.transformValue("Options"){ "خيارات" }
   assertTrue(result.translated)
