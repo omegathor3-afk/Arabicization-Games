@@ -6,6 +6,28 @@ import com.reandroid.arsc.chunk.TableBlock
 import com.reandroid.arsc.value.ResConfig
 import java.io.File
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+
+
+
+/**
+ * Run one recoverable resource-localization step without converting structured
+ * coroutine cancellation into an ordinary skipped-string result.
+ */
+internal suspend fun runRecoverableLocalizationStep(
+ onFailure: (Exception) -> Unit,
+ block: suspend () -> Unit
+) {
+ try {
+  block()
+ } catch (cancelled: CancellationException) {
+  throw cancelled
+ } catch (error: Exception) {
+  onFailure(error)
+ }
+}
 
 internal data class AndroidLocalizationReport(
  val packageName: String,
@@ -65,6 +87,9 @@ internal object AndroidResourceLocalizer {
    var skipped = 0
    val arabicConfig = ResConfig.parse("-ar")
    sources.forEachIndexed { index, (name, source) ->
+    // Some entries are glossary hits or already localized and may not suspend;
+    // check cancellation on every iteration, not only inside the translator.
+    currentCoroutineContext().ensureActive()
     val existing = packageBlock.getEntry(arabicConfig, "string", name)
     if (existing != null && !existing.isNull()) {
      existingArabic++
@@ -79,7 +104,7 @@ internal object AndroidResourceLocalizer {
     // Exact UI labels use a small reviewed glossary; longer phrases still
     // go through the offline translator and its placeholder/quality checks.
     val protected = PlaceholderProtector.protect(source)
-    try {
+    runRecoverableLocalizationStep(onFailure = { skipped++ }) {
      val translatedText = ArabicUiGlossary.translateExact(source)
       ?: translate(protected.text)
      val expectedTokens = protected.markers
@@ -91,8 +116,6 @@ internal object AndroidResourceLocalizer {
       packageBlock.getOrCreate(arabicConfig, "string", name).setValueAsString(restored)
       translated++
      }
-    } catch (e: Exception) {
-     skipped++
     }
     onProgress(index + 1, sources.size)
    }
