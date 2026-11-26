@@ -104,6 +104,14 @@ if [[ "$test_status" -eq 0 ]]; then
   echo "::notice::UncivLocaleSlotInstrumentedTest PASSED (real translation; slot built, signed and verified on-device)"
 fi
 
+# Phase B dispatch evidence: the exact planner-dispatch path MainActivity
+# now runs, executed on-device against the real game (deterministic pseudo
+# translation; mechanics only, so no ML Kit download).
+run_connected_test com.omega.arabify.DispatchPathInstrumentedTest || test_status=$?
+if [[ "$test_status" -eq 0 ]]; then
+  echo "::notice::DispatchPathInstrumentedTest PASSED (planner dispatch localized the real game through the slot wrapper; host-signed output verified)"
+fi
+
 # The long connected-test run (ML Kit translating 6.5k strings on
 # swiftshader) can drop the adb connection; observed 2026-11-25: green
 # test, then every pull failed with "device offline". Reconnect first.
