@@ -1,9 +1,12 @@
 package com.omega.arabify
 
 import java.io.File
+import java.io.FilterInputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 /**
  * Gettext tier (Pixel Wheels layout): games that ship gettext .po files plus a
@@ -63,6 +66,8 @@ internal object GettextPoLocalizer {
     ): PoReport {
         require(inputApk.isFile) { "ملف APK الأصلي غير موجود." }
         require(inputApk.absoluteFile != outputApk.absoluteFile) { "لا يمكن الكتابة فوق ملف APK الأصلي." }
+        val coroutineContext = currentCoroutineContext()
+        coroutineContext.ensureActive()
 
         ZipFile(inputApk).use { zip ->
             val names = zip.entries().asSequence().filter { !it.isDirectory }.map { it.name }.toList()
@@ -81,6 +86,7 @@ internal object GettextPoLocalizer {
             // A generated ar.po is useless if the game cannot register an Arabic FontSet.
             val languagesXml = readEntry(zip, languagesPath, MAX_POT_BYTES).toString(Charsets.UTF_8)
             val fontPlan = planFonts(zip, languagesXml, fonts)
+            coroutineContext.ensureActive()
             if (fontPlan.fontSetId == null) {
                 throw UnsupportedOperationException(
                     "تعذر إنشاء خانة عربية قابلة للاستخدام: ${fontPlan.reason ?: "تعذر توفير FontSet بخط عربي."}"
@@ -97,6 +103,7 @@ internal object GettextPoLocalizer {
                 if (reason != null) map[reason] = (map[reason] ?: 0) + 1
             }
             val arEntries = entries.map { entry ->
+                coroutineContext.ensureActive()
                 val singularResult = translateValue(entry.msgid, tx)
                 val singular = singularResult.text.takeIf { singularResult.translated && it.isNotBlank() }
                 if (singular != null) translated++ else { skipped++; bump(skipReasons, singularResult.reason) }
@@ -108,19 +115,25 @@ internal object GettextPoLocalizer {
                 }
                 entry to (singular to plural)
             }
+            coroutineContext.ensureActive()
 
             // A registered Arabic FontSet is the gate: even an already-Arabic TTF
             // needs visual-order shaping because this gettext/libGDX path has no bidi engine.
             val arPo = buildArPo(arEntries, shaped = true)
             val newLanguagesXml = patchLanguagesXml(languagesXml, fontPlan)
 
-            outputApk.parentFile?.mkdirs()
-            val countingOutput = CountingOutputStream(outputApk.outputStream().buffered())
-            ZipOutputStream(countingOutput).use { out ->
+            var outputStarted = false
+            var outputComplete = false
+            try {
+                outputApk.parentFile?.mkdirs()
+                outputStarted = true
+                val countingOutput = CountingOutputStream(outputApk.outputStream().buffered())
+                ZipOutputStream(countingOutput).use { out ->
                 val all = zip.entries()
                 var written = 0
                 var copiedArchiveBytes = 0L
                 while (all.hasMoreElements()) {
+                    coroutineContext.ensureActive()
                     val entry = all.nextElement()
                     written++
                     require(written <= MAX_ARCHIVE_ENTRIES) { "عدد عناصر APK يتجاوز حد إعادة البناء الآمن." }
@@ -138,7 +151,19 @@ internal object GettextPoLocalizer {
                         val remaining = MAX_TOTAL_REBUILT_BYTES - copiedArchiveBytes
                         require(remaining >= 0L) { "الحجم المفكوك للأرشيف تجاوز حد إعادة البناء الآمن." }
                         val entryBudget = minOf(MAX_SINGLE_REBUILT_ENTRY_BYTES, remaining)
-                        val copied = zip.getInputStream(entry).use { BoundedArchiveInput.copy(it, out, entryBudget) }
+                        val copied = zip.getInputStream(entry).use { input ->
+                            val cancellableInput = object : FilterInputStream(input) {
+                                override fun read(): Int {
+                                    coroutineContext.ensureActive()
+                                    return super.read()
+                                }
+                                override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                                    coroutineContext.ensureActive()
+                                    return super.read(buffer, offset, length)
+                                }
+                            }
+                            BoundedArchiveInput.copy(cancellableInput, out, entryBudget)
+                        }
                         require(entry.size < 0L || copied == entry.size) {
                             "حجم عنصر ZIP الفعلي لا يطابق بياناته: ${entry.name}"
                         }
@@ -147,6 +172,7 @@ internal object GettextPoLocalizer {
                     out.closeEntry()
                 }
                 for ((name, bytes) in fontPlan.newFontEntries) {
+                    coroutineContext.ensureActive()
                     require(bytes.size.toLong() <= MAX_SINGLE_REBUILT_ENTRY_BYTES) { "الخط المدمج تجاوز حد الحجم الآمن." }
                     out.putNextEntry(ZipEntry(name))
                     out.write(bytes)
@@ -157,11 +183,16 @@ internal object GettextPoLocalizer {
                 out.putNextEntry(ZipEntry(arPoPath))
                 out.write(arBytes)
                 out.closeEntry()
+                }
+                coroutineContext.ensureActive()
+                outputComplete = true
+                return PoReport(
+                    arPoPath, translated, skipped, outputApk, fontPlan.fontsMerged, fontPlan.reason,
+                    skipReasons = skipReasons.toMap(), stringsRepaired = repaired, repairReasons = repairReasons.toMap(),
+                )
+            } finally {
+                if (outputStarted && !outputComplete) outputApk.delete()
             }
-            return PoReport(
-                arPoPath, translated, skipped, outputApk, fontPlan.fontsMerged, fontPlan.reason,
-                skipReasons = skipReasons.toMap(), stringsRepaired = repaired, repairReasons = repairReasons.toMap(),
-            )
         }
     }
 

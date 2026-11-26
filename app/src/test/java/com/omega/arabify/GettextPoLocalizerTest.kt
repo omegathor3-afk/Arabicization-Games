@@ -5,6 +5,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.runBlocking
+import java.util.concurrent.CancellationException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
@@ -184,6 +185,27 @@ msgstr ""
             assertFalse(report.addedEntry.isEmpty())
             dir.deleteRecursively()
         }
+    }
+
+    @Test
+    fun cancellationDuringTranslationPropagatesWithoutCreatingOutput() {
+        val dir = createTempDir()
+        val input = buildGameApk(dir)
+        val output = File(dir, "cancelled-out.apk")
+        val assets = File("src/main/assets")
+        val fonts = GettextPoLocalizer.FontInjection { f -> File(assets, f.assetPath).readBytes() }
+
+        val error = assertThrows(CancellationException::class.java) {
+            runBlocking {
+                GettextPoLocalizer.addArabicGettextSlot(input, output, fonts) {
+                    throw CancellationException("cancelled gettext translation")
+                }
+            }
+        }
+
+        assertTrue(error.message!!.contains("cancelled gettext"))
+        assertFalse("cancelled translation must not emit a partial APK", output.exists())
+        dir.deleteRecursively()
     }
 
     @Test
