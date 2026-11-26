@@ -113,6 +113,14 @@ class DispatchPathInstrumentedTest {
             val signed = File(context.cacheDir, "gettext-dispatch-ar.apk")
             signed.delete()
 
+            // apksig requires a real binary AndroidManifest.xml to determine minSdk.
+            // Reuse the installed target APK's manifest rather than making a fake
+            // ZIP-only fixture that cannot pass the host signing step.
+            val manifestBytes = ZipFile(context.applicationInfo.sourceDir).use { apk ->
+                val manifest = apk.getEntry("AndroidManifest.xml")
+                    ?: error("Installed ARABIFY APK is missing AndroidManifest.xml")
+                apk.getInputStream(manifest).use { it.readBytes() }
+            }
             val amiri = context.assets.open("fonts/Amiri-Regular.ttf").use { it.readBytes() }
             val pot = "msgid \"\"\nmsgstr \"\"\n\"Content-Type: text/plain; charset=UTF-8\\n\"\n\n" +
                 "#: core/src/Menu.java:1\nmsgid \"New Game\"\nmsgstr \"\"\n\n" +
@@ -130,6 +138,7 @@ class DispatchPathInstrumentedTest {
             val fixture = File(stage, "pw.apk")
             ZipOutputStream(fixture.outputStream().buffered()).use { zip ->
                 linkedMapOf(
+                    "AndroidManifest.xml" to manifestBytes,
                     "classes.dex" to byteArrayOf(100, 101, 120, 10),
                     "assets/po/messages.pot" to pot.toByteArray(),
                     "assets/po/de.po" to "msgid \"\"\nmsgstr \"\"\n".toByteArray(),
