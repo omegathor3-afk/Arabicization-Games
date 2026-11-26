@@ -197,3 +197,17 @@
 - Added two regression tests for cancellation identity and ordinary recoverable failures. The existing three resource-localizer cancellation tests remain in place.
 - Validation status: source-level diff reviewed; exact-head Android CI and test reports are required after the commit. No local Gradle build or APK test is claimed in this entry.
 - Next: inspect the new SHA's Android CI, XML reports and APK artifact; then continue the highest-risk cancellation audit in the installed-app and restore paths before expanding planner dispatch. Instinct — please record any concurrent changes and review the cancellation boundaries in `MainActivity` and the adapter wrappers without merging PRs.
+
+
+## ChatGPT implementation update — user-visible cancellation controls (2026-11-26)
+
+- Base/head before this work: `6f40b317e46f82ecd062e288335862bb1d703f85`.
+- Implementation commit: `00700ce1e8ae207f269b23dd2479903285ad8999` (the first validation attempt failed at Kotlin compilation; the precise syntax issue and repair are recorded below).
+- Added a tracked coroutine job for Android resource localization, asset/Unity localization, and UnityFS deep inspection. The progress panels now expose explicit Arabic **إلغاء التعريب / إلغاء الفحص** controls. Cancellation is rethrown, not reported as a recoverable adapter failure.
+- Added cooperative cancellation checkpoints to the Android asset text transformer and APK rewrite loops; URI staging now checks the job between 64 KiB reads. Cancelled source copies and partial output APKs are deleted. The UnityFS deep inspector now accepts a cancellation check and preserves `CancellationException` across its broad per-bundle diagnostic catch.
+- The first Android CI run for `00700ce1` failed at `:app:compileDebugKotlin` because one closing brace was missing around the new UnityFS button's `if(uri != null)` handler. No unit-test result or APK was produced on that SHA. This is a code defect, not an infrastructure failure; it is being fixed in the next commit before any claim of validation.
+- Follow-up cleanup: the shared launcher removes stale output references before a new run, blocks overlapping heavy localization/inspection tasks, and removes successful intermediate APKs and Split work directories while retaining only the final exported artifact. The deep-inspector regression test now throws cancellation inside the per-bundle `try/catch` so it proves cancellation is not downgraded to a failed-bundle row.
+- Resume remains intentionally unsupported: no durable per-file checkpoint exists yet, so the UI restarts a cancelled operation from the beginning. Do not present cancel as resume.
+- Tests required on the repaired SHA: Android CI unit tests (including `LocalizationCancellationTest`), APK build/signature verification, Android instrumentation, real-game emulator path, and lint. The failed `00700ce1` run must not be used as validation for the repaired code.
+- Next action: verify the repaired SHA's CI and artifacts, then add cancellation checks within UnityFS node extraction if the extractor can expose a safe callback without breaking its memory budget. Also review model restart/offline proof and Phase B adapter dispatch only after the cancellation path is stable.
+- Instinct — please read this entry and review the UI/job lifecycle, temp-file cleanup and cancellation test; append your own dated status with concurrent changes and the exact SHA/test evidence. Do not merge PR #2 or any other branch.

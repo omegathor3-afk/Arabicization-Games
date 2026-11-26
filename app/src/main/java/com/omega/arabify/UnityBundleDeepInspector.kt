@@ -338,6 +338,7 @@ internal object UnityBundleDeepInspector {
                     val bundleFile = File(workDirectory, "bundle-" + index + ".bin")
                     val outputDirectory = File(workDirectory, "cab-" + index)
                     try {
+                        cancellationCheck()
                         val copied = zip.getInputStream(entry).use { input ->
                             FileOutputStream(bundleFile).use { output ->
                                 BoundedArchiveInput.copy(input, output, limits.maxSingleBundleBytes)
@@ -368,6 +369,7 @@ internal object UnityBundleDeepInspector {
                             return@forEachIndexed
                         }
 
+                        cancellationCheck()
                         val decoded = UnityFsBundleExtractor.extract(
                             bundleFile = bundleFile,
                             scratchDirectory = workDirectory,
@@ -418,18 +420,21 @@ internal object UnityBundleDeepInspector {
                         val extractedFiles = mutableListOf<File>()
                         Files.walk(outputDirectory.toPath()).use { paths ->
                             paths.forEach { path ->
+                                cancellationCheck()
                                 if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
                                     extractedFiles += path.toFile()
                                 }
                             }
                         }
                         extractedFiles.take(limits.maxNodes).forEach { extracted ->
+                            cancellationCheck()
                             val size = extracted.length()
                             if (size !in 20..limits.maxSerializedMetadataBytes) return@forEach
                             val prefix = FileInputStream(extracted).use { input ->
                                 val buffer = ByteArray(minOf(48L, size).toInt())
                                 var offset = 0
                                 while (offset < buffer.size) {
+                                    cancellationCheck()
                                     val count = input.read(buffer, offset, buffer.size - offset)
                                     if (count < 0) break
                                     offset += count
@@ -507,6 +512,7 @@ internal object UnityBundleDeepInspector {
                                     textAssetReadLimitReached = true
                                 } else {
                                     selection.objects.forEach textAssetLoop@ { textObject ->
+                                        cancellationCheck()
                                         val objectBudget = minOf(
                                             limits.maxTextAssetObjectBytes,
                                             remainingTextAssetBytes
