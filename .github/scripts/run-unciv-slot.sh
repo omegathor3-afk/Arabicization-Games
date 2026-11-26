@@ -157,8 +157,8 @@ if [[ -s "$GENERATED_APK" ]]; then
     launch_status=1
     note_failure "apksigner verification failed for the generated localized Unciv APK"
   else
-    adb uninstall com.unciv.app || true
-    adb install "$GENERATED_APK" || { launch_status=$?; note_failure "install of generated localized Unciv APK failed (exit $launch_status)"; }
+    adb_with_reconnect uninstall com.unciv.app || true
+    adb_with_reconnect install "$GENERATED_APK" || { launch_status=1; note_failure "install of generated localized Unciv APK failed"; }
     if [[ "$launch_status" -eq 0 ]]; then
       # Unciv's language picker hides Arabic entirely (LocaleCode.Arabic is
       # flagged unused upstream), but its translation loader reads
@@ -169,19 +169,22 @@ if [[ -s "$GENERATED_APK" ]]; then
       # google_apis emulators are userdebug, so adb root works there; run-as
       # is the fallback for debuggable repackages.
       SETTINGS_JSON='{"language":"العربية"}'
-      if adb root >/dev/null 2>&1; then
+      if adb_with_reconnect root >/dev/null 2>&1; then
         sleep 2
         adb wait-for-device
-        adb shell "mkdir -p /data/data/com.unciv.app/files && echo '$SETTINGS_JSON' > /data/data/com.unciv.app/files/GameSettings.json"           && echo "::notice::Unciv GameSettings.json seeded with language=العربية via adb root"           || note_failure "failed to seed GameSettings.json via adb root"
+        adb_with_reconnect shell "mkdir -p /data/data/com.unciv.app/files && echo '$SETTINGS_JSON' > /data/data/com.unciv.app/files/GameSettings.json"           && echo "::notice::Unciv GameSettings.json seeded with language=العربية via adb root"           || note_failure "failed to seed GameSettings.json via adb root"
         adb unroot >/dev/null 2>&1 || true
         sleep 2
         adb wait-for-device
       else
-        adb shell "run-as com.unciv.app sh -c "mkdir -p files && echo '$SETTINGS_JSON' > files/GameSettings.json""           && echo "::notice::Unciv GameSettings.json seeded with language=العربية via run-as"           || note_failure "failed to seed GameSettings.json (no adb root, run-as failed)"
+        adb_with_reconnect shell "run-as com.unciv.app sh -c "mkdir -p files && echo '$SETTINGS_JSON' > files/GameSettings.json""           && echo "::notice::Unciv GameSettings.json seeded with language=العربية via run-as"           || note_failure "failed to seed GameSettings.json (no adb root, run-as failed)"
       fi
       # Unciv resolves the locale from the Android system locale through
       # libGDX; switch the emulator to Arabic so it selects bundle_ar.
-      adb shell settings put system system_locales ar-EG || { launch_status=$?; note_failure "failed to switch emulator system locale to ar-EG (exit $launch_status)"; }
+      # All adb calls in this launch section go through adb_with_reconnect:
+      # on 5004c0a the link flapped after the evidence pulls and plain adb
+      # calls here failed (no adb root, locale switch exit 1).
+      adb_with_reconnect shell settings put system system_locales ar-EG || { launch_status=1; note_failure "failed to switch emulator system locale to ar-EG"; }
       if [[ "$launch_status" -eq 0 ]]; then
         timeout 30 adb reboot || { launch_status=$?; note_failure "adb reboot after locale switch failed or timed out"; }
         if [[ "$launch_status" -eq 0 ]]; then
