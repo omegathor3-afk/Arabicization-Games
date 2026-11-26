@@ -90,6 +90,20 @@ PYX
 }
 
 mkdir -p build/test-game/localized
+# Wait for a stable adb device before anything else (observed 2026-11-26
+# on d54f46b: step died at 4m42s of a usual 10m with NO annotation - adb
+# never came up or hung before the first annotated command).
+adb_ready=0
+for attempt in $(seq 1 24); do
+  adb_state=$(adb get-state 2>/dev/null | tr -d '\r')
+  [[ "$adb_state" == "device" ]] && { adb_ready=1; break; }
+  adb reconnect 2>/dev/null || adb reconnect offline 2>/dev/null || true
+  sleep 5
+done
+if [[ "$adb_ready" -ne 1 ]]; then
+  note_failure "emulator never became adb-ready before the Mindustry slot test (adb state: ${adb_state:-unknown})"
+  exit 1
+fi
 adb install build/test-game/mindustry.apk || { install_rc=$?; note_failure "adb install of pinned Mindustry APK failed (exit $install_rc)"; exit $install_rc; }
 
 test_status=0
