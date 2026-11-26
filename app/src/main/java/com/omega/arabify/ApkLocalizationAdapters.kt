@@ -36,6 +36,9 @@ internal data class AdapterRuntimeDeps(
     val stagingDir: File,
     val fontBytes: (SelectableFont) -> ByteArray,
     val translate: suspend (String) -> String,
+    // Coarse (done,total) progress; only the resources and in-place cores
+    // report it today, the slot/gettext localizers take no progress callback.
+    val onProgress: (Int, Int) -> Unit = { _, _ -> },
 )
 
 /**
@@ -287,7 +290,7 @@ internal class AndroidResourcesAdapter(private val deps: AdapterRuntimeDeps? = n
         val file = artifactToFile(input)
         budget.requireInputWithinLimit(file.length())
         val output = runtime.outputFor(input, "arsc-unsigned")
-        val report = AndroidResourceLocalizer.transformEnglishStringsToUnsigned(file, output, runtime.translate)
+        val report = AndroidResourceLocalizer.transformEnglishStringsToUnsigned(file, output, runtime.translate, runtime.onProgress)
         val summary = AdapterReport(
             descriptor.id, AdapterOperation.EXTRACT,
             processed = report.discoveredStrings,
@@ -358,6 +361,7 @@ internal class AndroidAssetsInPlaceAdapter(private val deps: AdapterRuntimeDeps?
             // Package flags need the host's PackageManager; assume the safe
             // default and say so until the dispatch host supplies them.
             extractNativeLibs = false,
+            onProgress = runtime.onProgress,
             tx = runtime.translate,
         )
         val summary = AdapterReport(
@@ -398,6 +402,21 @@ internal object ArabifyAdapters {
             LibGdxLocaleSlotAdapter(deps),
             GettextPoAdapter(deps),
             AndroidResourcesAdapter(deps),
+            AndroidAssetsInPlaceAdapter(deps),
+        )
+    )
+
+    /**
+     * The MainActivity asset chain as a dispatch registry: slot -> gettext
+     * -> in-place, exactly the manual fallback order. Android resources is
+     * deliberately NOT in this chain (it lives in the installed-app and
+     * second file-pick paths); adding it here is a behavior change parked
+     * in the handoff until confirmed.
+     */
+    fun runtimeChainRegistry(deps: AdapterRuntimeDeps): LocalizationAdapterRegistry = LocalizationAdapterRegistry(
+        listOf(
+            LibGdxLocaleSlotAdapter(deps),
+            GettextPoAdapter(deps),
             AndroidAssetsInPlaceAdapter(deps),
         )
     )
