@@ -98,7 +98,8 @@ msgstr ""
             assertEquals("adapter.libgdx.localeslot", summary.adapterId)
             assertEquals(AdapterOperation.EXTRACT, summary.operation)
             assertEquals(1, summary.succeeded)
-            assertEquals("UNIT_FIXTURE", summary.evidenceLevel)
+            // Slot extract is emulator-verified via DispatchPathInstrumentedTest.
+            assertEquals("EMULATOR_CI", summary.evidenceLevel)
             val out = adapter.lastLocalizationOutput
             assertNotNull(out)
             val slotText = readEntry(out!!.outputApk, out.report.addedEntry)!!.toString(Charsets.UTF_8)

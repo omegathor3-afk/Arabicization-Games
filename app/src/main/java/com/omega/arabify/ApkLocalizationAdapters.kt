@@ -176,8 +176,10 @@ internal class LibGdxLocaleSlotAdapter(private val deps: AdapterRuntimeDeps? = n
             succeeded = report.stringsTranslated,
             skipped = report.stringsSkipped,
             warnings = report.fitWarningSamples.take(3),
-            // Honest until the wrapper dispatch path itself runs in emulator CI.
-            evidenceLevel = "UNIT_FIXTURE",
+            // DispatchPathInstrumentedTest runs this exact wrapper through
+            // PlannerDispatch on real Unciv on the emulator (green 2026-11-26,
+            // Unciv slot CI on eb21f61). Other wrappers stay UNIT_FIXTURE.
+            evidenceLevel = "EMULATOR_CI",
         )
         lastLocalizationOutput = AdapterLocalizationOutput.LocaleSlot(report, summary)
         return summary
