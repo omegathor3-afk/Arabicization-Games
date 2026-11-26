@@ -241,8 +241,13 @@ internal class GettextPoAdapter(private val deps: AdapterRuntimeDeps? = null) : 
             processed = report.stringsTranslated + report.stringsSkipped,
             succeeded = report.stringsTranslated,
             skipped = report.stringsSkipped,
-            // Honest until the wrapper dispatch path itself runs in emulator CI.
-            evidenceLevel = "UNIT_FIXTURE",
+            // DispatchPathInstrumentedTest runs this exact wrapper through
+            // PlannerDispatch on a synthetic gettext fixture on the emulator
+            // (green 2026-11-26, Unciv slot CI run 45877164859 on 35297fd).
+            // Caveat: the cross-font merge path inside GettextPoLocalizer is
+            // NOT exercised there (fixture uses Amiri for every font slot),
+            // so merge stays unit-fixture evidence.
+            evidenceLevel = "EMULATOR_CI",
         )
         lastLocalizationOutput = AdapterLocalizationOutput.Gettext(report, summary)
         return summary

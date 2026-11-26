@@ -122,6 +122,9 @@ msgstr ""
             val summary = adapter.extract(ref(gettextApk(dir)), ResourceBudget())
             assertEquals("adapter.gettext.po", summary.adapterId)
             assertTrue(summary.succeeded >= 1)
+            // Gettext extract is emulator-verified via DispatchPathInstrumentedTest
+            // (cross-font merge path stays unit-fixture evidence).
+            assertEquals("EMULATOR_CI", summary.evidenceLevel)
             val out = adapter.lastLocalizationOutput
             assertNotNull(out)
             val arPo = readEntry(out!!.outputApk, out.report.addedEntry)!!.toString(Charsets.UTF_8)
