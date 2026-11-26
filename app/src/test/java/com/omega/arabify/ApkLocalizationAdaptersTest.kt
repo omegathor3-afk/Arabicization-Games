@@ -120,7 +120,7 @@ class ApkLocalizationAdaptersTest {
     }
 
     @Test
-    fun plannerReportsInspectOnlyBecauseWrappersDeclareNoRewriteYet() {
+    fun plannerReportsPartialBecauseWrappersDeclareNoRewriteYet() {
         runBlocking {
             val dir = createTempDir()
             val apk = buildApk(dir, "gdx.apk", mapOf("assets/bundle.properties" to "Play=Play"))
@@ -130,9 +130,10 @@ class ApkLocalizationAdaptersTest {
                 setOf(AdapterOperation.INSPECT, AdapterOperation.EXTRACT, AdapterOperation.REWRITE),
                 ResourceBudget(),
             )
-            // Honesty check: Phase A wrappers declare INSPECT only, so the
-            // planner must NOT report rewrite support for them.
-            assertEquals(CapabilityStatus.INSPECT_ONLY, plan.status)
+            // Honesty check: Phase B wrappers declare INSPECT+EXTRACT (slot
+            // and gettext only) but never REWRITE, so the planner must NOT
+            // report rewrite support and the status stays PARTIAL.
+            assertEquals(CapabilityStatus.PARTIAL, plan.status)
             assertTrue(plan.missingOperations.contains(AdapterOperation.REWRITE))
             assertEquals("adapter.libgdx.localeslot", plan.selectedAdapters.first().id)
             dir.deleteRecursively()

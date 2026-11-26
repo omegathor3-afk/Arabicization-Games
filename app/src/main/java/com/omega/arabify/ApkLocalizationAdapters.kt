@@ -25,6 +25,42 @@ private fun artifactToFile(input: ArtifactRef): File {
 
 private data class ApkMarkers(val names: List<String>, val truncated: Boolean)
 
+/**
+ * Runtime dependencies a wrapper needs to actually execute its wrapped
+ * localizer: a staging directory for the output APK, the app's font bytes
+ * loader, and the shared translation callback (term bases, repair tiers and
+ * quality gates live behind it). Phase B decision (handoff 2026-11-26):
+ * translation stays adapter-internal; sink-based extraction is Phase C.
+ */
+internal data class AdapterRuntimeDeps(
+    val stagingDir: File,
+    val fontBytes: (SelectableFont) -> ByteArray,
+    val translate: suspend (String) -> String,
+)
+
+/**
+ * Native-report carrier returned alongside the AdapterReport summary, per
+ * the sealed-variant design accepted in the handoff on 2026-11-26: the
+ * summary never replaces skipReasons/repairReasons/fitWarnings/font details.
+ */
+internal sealed class AdapterLocalizationOutput {
+    abstract val summary: AdapterReport
+    abstract val outputApk: File
+
+    data class LocaleSlot(val report: LocaleSlotLocalizer.SlotReport, override val summary: AdapterReport) : AdapterLocalizationOutput() {
+        override val outputApk: File get() = report.outputApk
+    }
+
+    data class Gettext(val report: GettextPoLocalizer.PoReport, override val summary: AdapterReport) : AdapterLocalizationOutput() {
+        override val outputApk: File get() = report.outputApk
+    }
+}
+
+private fun AdapterRuntimeDeps.outputFor(input: ArtifactRef, tag: String): File {
+    val safe = input.id.replace(Regex("[^A-Za-z0-9._-]"), "_")
+    return File(stagingDir, "$safe-$tag.apk")
+}
+
 private suspend fun scanApk(input: ArtifactRef, budget: ResourceBudget, keep: (String, Long) -> Boolean): ApkMarkers {
     val file = artifactToFile(input)
     budget.requireInputWithinLimit(file.length())
@@ -72,17 +108,21 @@ internal abstract class ApkProbeAdapter : LocalizationAdapter {
 }
 
 /** libGDX folder-convention slot (Unciv, Mindustry): bundle.properties / translations/English.properties. */
-internal class LibGdxLocaleSlotAdapter : ApkProbeAdapter() {
+internal class LibGdxLocaleSlotAdapter(private val deps: AdapterRuntimeDeps? = null) : ApkProbeAdapter() {
     override val descriptor = AdapterDescriptor(
         id = "adapter.libgdx.localeslot",
         version = "0.1.0",
         displayName = "libGDX locale-slot (bundle_ar)",
         inputKinds = setOf(ArtifactKind.APK),
         outputKinds = setOf(ArtifactKind.APK),
-        operations = setOf(AdapterOperation.INSPECT),
+        operations = setOf(AdapterOperation.INSPECT, AdapterOperation.EXTRACT),
         formatIds = setOf("libgdx-properties-bundle"),
         priority = 300,
     )
+
+    /** The most recent extraction's native report, set by [extract]. */
+    var lastLocalizationOutput: AdapterLocalizationOutput.LocaleSlot? = null
+        private set
 
     override suspend fun probeApk(input: ArtifactRef, budget: ResourceBudget): AdapterProbe {
         val markers = scanApk(input, budget) { name, _ ->
@@ -108,20 +148,46 @@ internal class LibGdxLocaleSlotAdapter : ApkProbeAdapter() {
             evidenceLevel = "UNIT_FIXTURE",
         )
     }
+
+    override suspend fun extract(input: ArtifactRef, budget: ResourceBudget): AdapterReport {
+        val runtime = deps
+            ?: throw UnsupportedOperationException("${descriptor.id}: EXTRACT needs runtime deps (staging dir, fonts, translate)")
+        val file = artifactToFile(input)
+        budget.requireInputWithinLimit(file.length())
+        val output = runtime.outputFor(input, "slot")
+        val report = LocaleSlotLocalizer.addArabicLocaleSlotWithFont(
+            file, output, LocaleSlotLocalizer.FontInjection(runtime.fontBytes), runtime.translate,
+        )
+        val summary = AdapterReport(
+            descriptor.id, AdapterOperation.EXTRACT,
+            processed = report.stringsTranslated + report.stringsSkipped,
+            succeeded = report.stringsTranslated,
+            skipped = report.stringsSkipped,
+            warnings = report.fitWarningSamples.take(3),
+            // Honest until the wrapper dispatch path itself runs in emulator CI.
+            evidenceLevel = "UNIT_FIXTURE",
+        )
+        lastLocalizationOutput = AdapterLocalizationOutput.LocaleSlot(report, summary)
+        return summary
+    }
 }
 
 /** gettext slot: po/messages.pot + ui/languages.xml (both required, mirroring GettextPoLocalizer). */
-internal class GettextPoAdapter : ApkProbeAdapter() {
+internal class GettextPoAdapter(private val deps: AdapterRuntimeDeps? = null) : ApkProbeAdapter() {
     override val descriptor = AdapterDescriptor(
         id = "adapter.gettext.po",
         version = "0.1.0",
         displayName = "gettext PO slot (ar.po)",
         inputKinds = setOf(ArtifactKind.APK),
         outputKinds = setOf(ArtifactKind.APK),
-        operations = setOf(AdapterOperation.INSPECT),
+        operations = setOf(AdapterOperation.INSPECT, AdapterOperation.EXTRACT),
         formatIds = setOf("gettext-po"),
         priority = 200,
     )
+
+    /** The most recent extraction's native report, set by [extract]. */
+    var lastLocalizationOutput: AdapterLocalizationOutput.Gettext? = null
+        private set
 
     override suspend fun probeApk(input: ArtifactRef, budget: ResourceBudget): AdapterProbe {
         // Mirrors GettextPoLocalizer.potPattern / languagesXmlPattern.
@@ -145,6 +211,27 @@ internal class GettextPoAdapter : ApkProbeAdapter() {
             warnings = listOf("probe-level inventory only; string counts are produced by the localization run"),
             evidenceLevel = "UNIT_FIXTURE",
         )
+    }
+
+    override suspend fun extract(input: ArtifactRef, budget: ResourceBudget): AdapterReport {
+        val runtime = deps
+            ?: throw UnsupportedOperationException("${descriptor.id}: EXTRACT needs runtime deps (staging dir, fonts, translate)")
+        val file = artifactToFile(input)
+        budget.requireInputWithinLimit(file.length())
+        val output = runtime.outputFor(input, "po")
+        val report = GettextPoLocalizer.addArabicGettextSlot(
+            file, output, GettextPoLocalizer.FontInjection(runtime.fontBytes), runtime.translate,
+        )
+        val summary = AdapterReport(
+            descriptor.id, AdapterOperation.EXTRACT,
+            processed = report.stringsTranslated + report.stringsSkipped,
+            succeeded = report.stringsTranslated,
+            skipped = report.stringsSkipped,
+            // Honest until the wrapper dispatch path itself runs in emulator CI.
+            evidenceLevel = "UNIT_FIXTURE",
+        )
+        lastLocalizationOutput = AdapterLocalizationOutput.Gettext(report, summary)
+        return summary
     }
 }
 
@@ -230,6 +317,21 @@ internal object ArabifyAdapters {
         listOf(
             LibGdxLocaleSlotAdapter(),
             GettextPoAdapter(),
+            AndroidResourcesAdapter(),
+            AndroidAssetsInPlaceAdapter(),
+        )
+    )
+
+    /**
+     * Registry wired for real execution: the slot and gettext wrappers can
+     * EXTRACT through their wrapped localizers. The resources and in-place
+     * wrappers stay INSPECT-only until their Context-dependent executors are
+     * wired (Phase B step 1b).
+     */
+    fun runtimeRegistry(deps: AdapterRuntimeDeps): LocalizationAdapterRegistry = LocalizationAdapterRegistry(
+        listOf(
+            LibGdxLocaleSlotAdapter(deps),
+            GettextPoAdapter(deps),
             AndroidResourcesAdapter(),
             AndroidAssetsInPlaceAdapter(),
         )
