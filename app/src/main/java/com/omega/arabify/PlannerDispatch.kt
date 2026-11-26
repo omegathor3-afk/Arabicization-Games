@@ -10,8 +10,10 @@ import java.util.concurrent.CancellationException
  * testable; MainActivity only supplies the registry and consumes the result.
  *
  * Ordering is the planner's: confidence desc, then descriptor priority desc,
- * then id. The Arabify wrapper priorities (300/200/100/0) keep today's
- * manual chain order: locale slot -> gettext -> resources -> in-place.
+ * then id. On the real registry that yields slot -> gettext -> in-place ->
+ * resources (probe confidences 90/90/60/40, the slot/gettext tie broken by
+ * priority 300/200), which matches the actual MainActivity chain: resources rewriting is NOT a chain step there; it lives
+ * in the installed-app and second file-pick paths.
  */
 internal data class DispatchResult(
     val plan: LocalizationPlan,

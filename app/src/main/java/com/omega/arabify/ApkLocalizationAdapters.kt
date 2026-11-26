@@ -54,6 +54,15 @@ internal sealed class AdapterLocalizationOutput {
     data class Gettext(val report: GettextPoLocalizer.PoReport, override val summary: AdapterReport) : AdapterLocalizationOutput() {
         override val outputApk: File get() = report.outputApk
     }
+
+    data class AndroidResources(val report: AndroidLocalizationReport, override val summary: AdapterReport) : AdapterLocalizationOutput() {
+        // unsigned until the dispatch host signs (the core is Context-free)
+        override val outputApk: File get() = report.signedApk
+    }
+
+    data class AssetsInPlace(val report: AssetLocalizationReport, override val summary: AdapterReport) : AdapterLocalizationOutput() {
+        override val outputApk: File get() = report.outputApk
+    }
 }
 
 private fun AdapterRuntimeDeps.outputFor(input: ArtifactRef, tag: String): File {
@@ -236,17 +245,21 @@ internal class GettextPoAdapter(private val deps: AdapterRuntimeDeps? = null) : 
 }
 
 /** Android native string resources (resources.arsc). Present in nearly every APK, so low confidence. */
-internal class AndroidResourcesAdapter : ApkProbeAdapter() {
+internal class AndroidResourcesAdapter(private val deps: AdapterRuntimeDeps? = null) : ApkProbeAdapter() {
     override val descriptor = AdapterDescriptor(
         id = "adapter.android.resources",
         version = "0.1.0",
         displayName = "Android string resources (arsc)",
         inputKinds = setOf(ArtifactKind.APK),
         outputKinds = setOf(ArtifactKind.APK),
-        operations = setOf(AdapterOperation.INSPECT),
+        operations = setOf(AdapterOperation.INSPECT, AdapterOperation.EXTRACT),
         formatIds = setOf("android-arsc"),
         priority = 100,
     )
+
+    /** The most recent extraction's native report, set by [extract]. */
+    var lastLocalizationOutput: AdapterLocalizationOutput.AndroidResources? = null
+        private set
 
     override suspend fun probeApk(input: ArtifactRef, budget: ResourceBudget): AdapterProbe {
         val markers = scanApk(input, budget) { name, _ -> name == "resources.arsc" }
@@ -267,20 +280,44 @@ internal class AndroidResourcesAdapter : ApkProbeAdapter() {
             evidenceLevel = "UNIT_FIXTURE",
         )
     }
+
+    override suspend fun extract(input: ArtifactRef, budget: ResourceBudget): AdapterReport {
+        val runtime = deps
+            ?: throw UnsupportedOperationException("${descriptor.id}: EXTRACT needs runtime deps (staging dir, translate)")
+        val file = artifactToFile(input)
+        budget.requireInputWithinLimit(file.length())
+        val output = runtime.outputFor(input, "arsc-unsigned")
+        val report = AndroidResourceLocalizer.transformEnglishStringsToUnsigned(file, output, runtime.translate)
+        val summary = AdapterReport(
+            descriptor.id, AdapterOperation.EXTRACT,
+            processed = report.discoveredStrings,
+            succeeded = report.translatedStrings,
+            skipped = report.skippedStrings + report.existingArabicStrings,
+            warnings = listOf("output APK is unsigned; the dispatch host finalizes signing"),
+            // Honest until the wrapper dispatch path itself runs in emulator CI.
+            evidenceLevel = "UNIT_FIXTURE",
+        )
+        lastLocalizationOutput = AdapterLocalizationOutput.AndroidResources(report, summary)
+        return summary
+    }
 }
 
 /** In-place asset text fallback (lowest priority; last resort of the dispatch chain). */
-internal class AndroidAssetsInPlaceAdapter : ApkProbeAdapter() {
+internal class AndroidAssetsInPlaceAdapter(private val deps: AdapterRuntimeDeps? = null) : ApkProbeAdapter() {
     override val descriptor = AdapterDescriptor(
         id = "adapter.android.assets.inplace",
         version = "0.1.0",
         displayName = "In-place asset text rewrite (fallback)",
         inputKinds = setOf(ArtifactKind.APK),
         outputKinds = setOf(ArtifactKind.APK),
-        operations = setOf(AdapterOperation.INSPECT),
+        operations = setOf(AdapterOperation.INSPECT, AdapterOperation.EXTRACT),
         formatIds = setOf("generic-text-assets"),
         priority = 0,
     )
+
+    /** The most recent extraction's native report, set by [extract]. */
+    var lastLocalizationOutput: AdapterLocalizationOutput.AssetsInPlace? = null
+        private set
 
     override suspend fun probeApk(input: ArtifactRef, budget: ResourceBudget): AdapterProbe {
         val markers = scanApk(input, budget) { name, size ->
@@ -309,6 +346,35 @@ internal class AndroidAssetsInPlaceAdapter : ApkProbeAdapter() {
             evidenceLevel = "UNIT_FIXTURE",
         )
     }
+
+    override suspend fun extract(input: ArtifactRef, budget: ResourceBudget): AdapterReport {
+        val runtime = deps
+            ?: throw UnsupportedOperationException("${descriptor.id}: EXTRACT needs runtime deps (staging dir, translate)")
+        val file = artifactToFile(input)
+        budget.requireInputWithinLimit(file.length())
+        val output = runtime.outputFor(input, "inplace-unsigned")
+        val report = AndroidAssetLocalizer.transformToUnsignedApk(
+            file, output,
+            // Package flags need the host's PackageManager; assume the safe
+            // default and say so until the dispatch host supplies them.
+            extractNativeLibs = false,
+            tx = runtime.translate,
+        )
+        val summary = AdapterReport(
+            descriptor.id, AdapterOperation.EXTRACT,
+            processed = report.stringsTranslated + report.stringsSkipped,
+            succeeded = report.stringsTranslated,
+            skipped = report.stringsSkipped,
+            warnings = listOf(
+                "output APK is unsigned; the dispatch host finalizes signing",
+                "package flags unavailable without a host Context; extractNativeLibs assumed false",
+            ) + report.fitWarningSamples.take(2),
+            // Honest until the wrapper dispatch path itself runs in emulator CI.
+            evidenceLevel = "UNIT_FIXTURE",
+        )
+        lastLocalizationOutput = AdapterLocalizationOutput.AssetsInPlace(report, summary)
+        return summary
+    }
 }
 
 /** The app's adapter registry: one wrapper per existing APK localizer, chain order preserved by priority. */
@@ -323,17 +389,16 @@ internal object ArabifyAdapters {
     )
 
     /**
-     * Registry wired for real execution: the slot and gettext wrappers can
-     * EXTRACT through their wrapped localizers. The resources and in-place
-     * wrappers stay INSPECT-only until their Context-dependent executors are
-     * wired (Phase B step 1b).
+     * Registry wired for real execution: every wrapper can EXTRACT through
+     * its wrapped localizer's JVM-pure core. Outputs are UNSIGNED APKs; the
+     * dispatch host (MainActivity) owns the Context that signs them.
      */
     fun runtimeRegistry(deps: AdapterRuntimeDeps): LocalizationAdapterRegistry = LocalizationAdapterRegistry(
         listOf(
             LibGdxLocaleSlotAdapter(deps),
             GettextPoAdapter(deps),
-            AndroidResourcesAdapter(),
-            AndroidAssetsInPlaceAdapter(),
+            AndroidResourcesAdapter(deps),
+            AndroidAssetsInPlaceAdapter(deps),
         )
     )
 }
