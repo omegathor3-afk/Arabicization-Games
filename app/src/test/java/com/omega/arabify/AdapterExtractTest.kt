@@ -311,4 +311,39 @@ msgstr ""
             Unit
         }
     }
+    // ---------- Phase B step 2: chain registry + progress wiring ----------
+
+    @Test
+    fun runtimeChainRegistryMirrorsTheManualAssetChain() {
+        val ids = ArabifyAdapters.runtimeChainRegistry(deps(createTempDir())).all().map { it.descriptor.id }
+        assertEquals(
+            listOf(
+                "adapter.libgdx.localeslot",
+                "adapter.gettext.po",
+                "adapter.android.assets.inplace",
+            ),
+            ids,
+        )
+    }
+
+    @Test
+    fun assetsInPlaceExtractReportsProgressThroughDeps() {
+        runBlocking {
+            val dir = createTempDir()
+            val apk = assetsOnlyApk(dir)
+            val progress = mutableListOf<Pair<Int, Int>>()
+            val runtimeDeps = AdapterRuntimeDeps(
+                stagingDir = dir,
+                fontBytes = { f -> File("src/main/assets", f.assetPath).readBytes() },
+                translate = { text -> "العربية ${text.length}" },
+                onProgress = { done, total -> progress += done to total },
+            )
+            val adapter = AndroidAssetsInPlaceAdapter(runtimeDeps)
+            adapter.extract(ref(apk), ResourceBudget())
+            assertTrue("in-place extraction must report progress", progress.isNotEmpty())
+            assertEquals(progress.last().first, progress.last().second)
+            dir.deleteRecursively()
+            Unit
+        }
+    }
 }
