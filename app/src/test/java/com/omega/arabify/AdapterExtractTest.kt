@@ -174,4 +174,30 @@ msgstr ""
             Unit
         }
     }
+    @Test
+    fun dispatchRecordsFontGateFailureWhenGettextCannotRegisterArabic() {
+        runBlocking {
+            // Gettext fixture WITHOUT a usable FontSet: the localizer's font
+            // gate (e0eb75f) refuses to emit a raw unshaped ar.po, and the
+            // dispatch must record that failure honestly instead of masking
+            // it. No other wrapper declares EXTRACT yet, so dispatch ends in
+            // LocalizationDispatchException carrying the gate's reason.
+            val dir = createTempDir()
+            val apk = File(dir, "po-nofonts.apk")
+            val pot = "msgid \"\"\nmsgstr \"\"\n\"Content-Type: text/plain; charset=UTF-8\\n\"\n\nmsgid \"Play\"\nmsgstr \"\"\n"
+            writeApk(apk, mapOf(
+                "classes.dex" to byteArrayOf(100, 101, 120, 10),
+                "assets/po/messages.pot" to pot.toByteArray(),
+                "assets/ui/languages.xml" to "<Languages/>".toByteArray(),
+            ))
+            val registry = ArabifyAdapters.runtimeRegistry(deps(dir))
+            val error = assertThrows(LocalizationDispatchException::class.java) {
+                runBlocking { PlannerDispatch(registry).dispatch(ref(apk), ResourceBudget()) }
+            }
+            assertEquals(listOf("adapter.gettext.po"), error.attempted)
+            assertTrue(error.failures.single().contains("FontSet") || error.failures.single().contains("خط"))
+            dir.deleteRecursively()
+            Unit
+        }
+    }
 }
