@@ -249,9 +249,9 @@ msgstr[1] ""
             }
 
             val arPo = String(readEntry(output, "assets/po/ar.po")!!, Charsets.UTF_8)
-            assertTrue(arPo.contains("msgid \"Quit\"\nmsgstr \"خروج\""))
-            assertTrue(arPo.contains("msgid \"Collect %s\"\nmsgstr \"اجمع %s\""))
-            assertTrue(arPo.contains("msgid_plural \"Hit %# vehicles\"\nmsgstr[0] \"اضرب %# مركبات\""))
+            assertTrue(arPo.contains("msgid \"Quit\"\nmsgstr \"${ArabicShaper.toVisual("خروج")}\""))
+            assertTrue(arPo.contains("msgid \"Collect %s\"\nmsgstr \"${ArabicShaper.toVisual("اجمع %s")}\""))
+            assertTrue(arPo.contains("msgid_plural \"Hit %# vehicles\"\nmsgstr[0] \"${ArabicShaper.toVisual("اضرب %# مركبات")}\""))
             assertFalse(arPo.contains("__ARABIFY_TOKEN_"))
             assertTrue("existing Arabic fonts still require pre-shaped output", arPo.any { it.code in 0xFE70..0xFEFF })
             assertTrue("no font merge is needed for the Amiri fixture", report.fontsMerged.isEmpty())
