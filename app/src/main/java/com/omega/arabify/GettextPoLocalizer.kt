@@ -126,63 +126,64 @@ internal object GettextPoLocalizer {
             var outputComplete = false
             try {
                 outputApk.parentFile?.mkdirs()
+                val rawOutput = outputApk.outputStream()
                 outputStarted = true
-                val countingOutput = CountingOutputStream(outputApk.outputStream().buffered())
+                val countingOutput = CountingOutputStream(rawOutput.buffered())
                 ZipOutputStream(countingOutput).use { out ->
-                val all = zip.entries()
-                var written = 0
-                var copiedArchiveBytes = 0L
-                while (all.hasMoreElements()) {
-                    coroutineContext.ensureActive()
-                    val entry = all.nextElement()
-                    written++
-                    require(written <= MAX_ARCHIVE_ENTRIES) { "عدد عناصر APK يتجاوز حد إعادة البناء الآمن." }
-                    if (AndroidAssetLocalizer.isOldSignature(entry.name)) continue
-                    if (entry.name == languagesPath) {
-                        val bytes = newLanguagesXml.toByteArray(Charsets.UTF_8)
-                        out.putNextEntry(ApkZipEntryPolicy.create(entry, bytes, countingOutput.bytesWritten))
+                    val all = zip.entries()
+                    var written = 0
+                    var copiedArchiveBytes = 0L
+                    while (all.hasMoreElements()) {
+                        coroutineContext.ensureActive()
+                        val entry = all.nextElement()
+                        written++
+                        require(written <= MAX_ARCHIVE_ENTRIES) { "عدد عناصر APK يتجاوز حد إعادة البناء الآمن." }
+                        if (AndroidAssetLocalizer.isOldSignature(entry.name)) continue
+                        if (entry.name == languagesPath) {
+                            val bytes = newLanguagesXml.toByteArray(Charsets.UTF_8)
+                            out.putNextEntry(ApkZipEntryPolicy.create(entry, bytes, countingOutput.bytesWritten))
+                            out.write(bytes)
+                            out.closeEntry()
+                            continue
+                        }
+                        val target = ApkZipEntryPolicy.create(entry, null, countingOutput.bytesWritten)
+                        out.putNextEntry(target)
+                        if (!entry.isDirectory) {
+                            val remaining = MAX_TOTAL_REBUILT_BYTES - copiedArchiveBytes
+                            require(remaining >= 0L) { "الحجم المفكوك للأرشيف تجاوز حد إعادة البناء الآمن." }
+                            val entryBudget = minOf(MAX_SINGLE_REBUILT_ENTRY_BYTES, remaining)
+                            val copied = zip.getInputStream(entry).use { input ->
+                                val cancellableInput = object : FilterInputStream(input) {
+                                    override fun read(): Int {
+                                        coroutineContext.ensureActive()
+                                        return super.read()
+                                    }
+                                    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                                        coroutineContext.ensureActive()
+                                        return super.read(buffer, offset, length)
+                                    }
+                                }
+                                BoundedArchiveInput.copy(cancellableInput, out, entryBudget)
+                            }
+                            require(entry.size < 0L || copied == entry.size) {
+                                "حجم عنصر ZIP الفعلي لا يطابق بياناته: ${entry.name}"
+                            }
+                            copiedArchiveBytes += copied
+                        }
+                        out.closeEntry()
+                    }
+                    for ((name, bytes) in fontPlan.newFontEntries) {
+                        coroutineContext.ensureActive()
+                        require(bytes.size.toLong() <= MAX_SINGLE_REBUILT_ENTRY_BYTES) { "الخط المدمج تجاوز حد الحجم الآمن." }
+                        out.putNextEntry(ZipEntry(name))
                         out.write(bytes)
                         out.closeEntry()
-                        continue
                     }
-                    val target = ApkZipEntryPolicy.create(entry, null, countingOutput.bytesWritten)
-                    out.putNextEntry(target)
-                    if (!entry.isDirectory) {
-                        val remaining = MAX_TOTAL_REBUILT_BYTES - copiedArchiveBytes
-                        require(remaining >= 0L) { "الحجم المفكوك للأرشيف تجاوز حد إعادة البناء الآمن." }
-                        val entryBudget = minOf(MAX_SINGLE_REBUILT_ENTRY_BYTES, remaining)
-                        val copied = zip.getInputStream(entry).use { input ->
-                            val cancellableInput = object : FilterInputStream(input) {
-                                override fun read(): Int {
-                                    coroutineContext.ensureActive()
-                                    return super.read()
-                                }
-                                override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
-                                    coroutineContext.ensureActive()
-                                    return super.read(buffer, offset, length)
-                                }
-                            }
-                            BoundedArchiveInput.copy(cancellableInput, out, entryBudget)
-                        }
-                        require(entry.size < 0L || copied == entry.size) {
-                            "حجم عنصر ZIP الفعلي لا يطابق بياناته: ${entry.name}"
-                        }
-                        copiedArchiveBytes += copied
-                    }
+                    val arBytes = arPo.toByteArray(Charsets.UTF_8)
+                    require(arBytes.size.toLong() <= MAX_SINGLE_REBUILT_ENTRY_BYTES) { "ملف ar.po تجاوز حد الحجم الآمن." }
+                    out.putNextEntry(ZipEntry(arPoPath))
+                    out.write(arBytes)
                     out.closeEntry()
-                }
-                for ((name, bytes) in fontPlan.newFontEntries) {
-                    coroutineContext.ensureActive()
-                    require(bytes.size.toLong() <= MAX_SINGLE_REBUILT_ENTRY_BYTES) { "الخط المدمج تجاوز حد الحجم الآمن." }
-                    out.putNextEntry(ZipEntry(name))
-                    out.write(bytes)
-                    out.closeEntry()
-                }
-                val arBytes = arPo.toByteArray(Charsets.UTF_8)
-                require(arBytes.size.toLong() <= MAX_SINGLE_REBUILT_ENTRY_BYTES) { "ملف ar.po تجاوز حد الحجم الآمن." }
-                out.putNextEntry(ZipEntry(arPoPath))
-                out.write(arBytes)
-                out.closeEntry()
                 }
                 coroutineContext.ensureActive()
                 outputComplete = true
