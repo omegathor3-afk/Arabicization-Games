@@ -380,8 +380,13 @@ internal class AndroidAssetsInPlaceAdapter(private val deps: AdapterRuntimeDeps?
                 "output APK is unsigned; the dispatch host finalizes signing",
                 "package flags unavailable without a host Context; extractNativeLibs assumed false",
             ) + report.fitWarningSamples.take(2),
-            // Honest until the wrapper dispatch path itself runs in emulator CI.
-            evidenceLevel = "UNIT_FIXTURE",
+            // DispatchPathInstrumentedTest runs this exact wrapper through
+            // PlannerDispatch on a synthetic JSON-only fixture on the emulator
+            // (green 2026-11-26, Unciv slot CI run 45883867254 on 0be04e6).
+            // Scope: asset-text rewrite only; AndroidResourcesAdapter is the
+            // remaining UNIT_FIXTURE extract and is not in the dispatch chain
+            // yet (chain membership parked, see handoff).
+            evidenceLevel = "EMULATOR_CI",
         )
         lastLocalizationOutput = AdapterLocalizationOutput.AssetsInPlace(report, summary)
         return summary

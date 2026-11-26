@@ -256,6 +256,9 @@ msgstr ""
             val output = adapter.lastLocalizationOutput
             assertNotNull(output)
             assertTrue(summary.succeeded >= 1)
+            // In-place extract is emulator-verified via DispatchPathInstrumentedTest
+            // (synthetic JSON-only fixture; resources wrapper stays UNIT_FIXTURE).
+            assertEquals("EMULATOR_CI", summary.evidenceLevel)
             val rewritten = readEntry(output!!.outputApk, "assets/data/strings.json")
             assertNotNull(rewritten)
             assertTrue(String(rewritten!!).contains("\u0627\u0644\u0639\u0631\u0628\u064A\u0629"))
