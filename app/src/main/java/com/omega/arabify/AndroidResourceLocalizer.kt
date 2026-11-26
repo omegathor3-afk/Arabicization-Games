@@ -60,6 +60,24 @@ internal object AndroidResourceLocalizer {
   context: android.content.Context,
   onProgress: (Int, Int) -> Unit = { _, _ -> }
  ): AndroidLocalizationReport {
+  val report = transformEnglishStringsToUnsigned(inputApk, unsignedApk, translate, onProgress)
+  ApkSigningService.signAndVerify(context, unsignedApk, outputApk)
+  return report.copy(signedApk = outputApk)
+ }
+
+ /**
+  * JVM-pure core: rewrites the default string table into an -ar config and
+  * writes the UNSIGNED APK. The host (MainActivity) owns the Context needed
+  * for signing, so adapter wrappers can run this core without one. The
+  * returned report's signedApk carries the unsigned artifact until the host
+  * finalizes it.
+  */
+ internal suspend fun transformEnglishStringsToUnsigned(
+  inputApk: File,
+  unsignedApk: File,
+  translate: suspend (String) -> String,
+  onProgress: (Int, Int) -> Unit = { _, _ -> }
+ ): AndroidLocalizationReport {
   require(inputApk.isFile) { "ملف اللعبة الأصلي غير موجود." }
   val module = ApkModule.loadApkFile(inputApk)
   try {
@@ -130,9 +148,8 @@ internal object AndroidResourceLocalizer {
    oldSignatureFiles.forEach { module.removeInputSource(it) }
    unsignedApk.parentFile?.mkdirs()
    module.writeApk(unsignedApk)
-   ApkSigningService.signAndVerify(context, unsignedApk, outputApk)
 
-   return AndroidLocalizationReport(packageName, sources.size, translated, existingArabic, skipped, outputApk)
+   return AndroidLocalizationReport(packageName, sources.size, translated, existingArabic, skipped, unsignedApk)
   } finally {
    module.close()
   }
