@@ -200,4 +200,84 @@ class DispatchPathInstrumentedTest {
             stage.deleteRecursively()
         }
     }
+    /**
+     * The dispatch chain's LAST resort on-device: a synthetic game carrying
+     * only a translatable JSON asset matches neither the slot nor the
+     * gettext probe, so the planner selects ONLY the in-place wrapper and
+     * dispatch must localize through it. Asserts the selection is honest
+     * (in-place attempted alone, no phantom slot/gettext attempts) and the
+     * unsigned output verifies after host signing.
+     */
+    @Test
+    fun plannerDispatchFallsThroughToInPlaceWrapperForJsonOnlyGame() {
+        runBlocking {
+            val context = InstrumentationRegistry.getInstrumentation().targetContext
+            val stage = File(context.cacheDir, "dispatch-inplace-stage")
+            stage.deleteRecursively()
+            stage.mkdirs()
+            val signed = File(context.cacheDir, "inplace-dispatch-ar.apk")
+            signed.delete()
+
+            val manifestBytes = ZipFile(context.applicationInfo.sourceDir).use { apk ->
+                val manifest = apk.getEntry("AndroidManifest.xml")
+                    ?: error("Installed ARABIFY APK is missing AndroidManifest.xml")
+                apk.getInputStream(manifest).use { it.readBytes() }
+            }
+            val fixture = File(stage, "json-game.apk")
+            ZipOutputStream(fixture.outputStream().buffered()).use { zip ->
+                linkedMapOf(
+                    "AndroidManifest.xml" to manifestBytes,
+                    "classes.dex" to byteArrayOf(100, 101, 120, 10),
+                    "assets/data/strings.json" to "{\"title\": \"Sprocket Valley\", \"hint\": \"Zingle hop\"}".toByteArray(),
+                ).forEach { (name, bytes) ->
+                    zip.putNextEntry(ZipEntry(name))
+                    zip.write(bytes)
+                    zip.closeEntry()
+                }
+            }
+
+            val progress = mutableListOf<Pair<Int, Int>>()
+            val deps = AdapterRuntimeDeps(
+                stagingDir = stage,
+                fontBytes = { f -> context.assets.open(f.assetPath).use { it.readBytes() } },
+                translate = { text ->
+                    val trimmed = text.trim()
+                    if (trimmed.length >= 3) "\u0639\u0631${trimmed.length}" else text
+                },
+                onProgress = { done, total -> progress += done to total },
+            )
+            val registry = ArabifyAdapters.runtimeChainRegistry(deps)
+            val artifact = ArtifactRef(
+                id = fixture.name,
+                displayName = fixture.name,
+                uri = fixture.absolutePath,
+                kind = ArtifactKind.APK,
+                sizeBytes = fixture.length(),
+            )
+            val dispatch = PlannerDispatch(registry).dispatch(artifact, ResourceBudget())
+
+            assertEquals("adapter.android.assets.inplace", dispatch.adapterId)
+            assertEquals(listOf("adapter.android.assets.inplace"), dispatch.attempted)
+
+            val inPlaceAdapter = registry.find(dispatch.adapterId) as AndroidAssetsInPlaceAdapter
+            val output = inPlaceAdapter.lastLocalizationOutput
+            assertNotNull("in-place wrapper must expose its native report", output)
+            assertTrue("no strings translated on-device", output!!.report.stringsTranslated >= 1)
+            assertTrue("in-place extraction must report progress on-device", progress.isNotEmpty())
+
+            val unsigned = output.outputApk
+            assertTrue("unsigned dispatch output missing", unsigned.isFile && unsigned.length() > 0L)
+            ZipFile(unsigned).use { zip ->
+                val entry = zip.getEntry("assets/data/strings.json") ?: error("rewritten JSON missing")
+                val text = zip.getInputStream(entry).use { it.readBytes() }.toString(Charsets.UTF_8)
+                assertTrue("JSON asset carries no Arabic on-device", text.any { it.code in 0x0600..0x06FF })
+            }
+
+            ApkSigningService.signAndVerify(context, unsigned, signed)
+            val verification = ApkVerifier.Builder(signed).build().verify()
+            assertTrue("in-place dispatch output failed verification after host signing: ${verification.errors}", verification.isVerified)
+
+            stage.deleteRecursively()
+        }
+    }
 }
