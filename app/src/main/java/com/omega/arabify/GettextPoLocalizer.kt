@@ -11,7 +11,8 @@ import java.util.zip.ZipOutputStream
  * an Arabic <Language> and FontSet in languages.xml, and merges Arabic glyphs
  * into COPIES of the referenced fonts (originals stay byte-identical) because
  * libGDX has no Arabic shaper or glyph fallback. msgstr values are pre-shaped
- * to visual-order Presentation Forms-B by ArabicShaper for the same reason.
+ * to visual-order Presentation Forms-B by ArabicShaper. The adapter refuses
+ * to emit an ar.po unless a usable Arabic FontSet can be registered.
  *
  * Honest limits: plural entries emit all 6 Arabic plural forms, but the
  * plural translations reuse the singular/plural machine translations (no real
@@ -76,7 +77,17 @@ internal object GettextPoLocalizer {
             val entries = parsePot(pot)
             require(entries.isNotEmpty()) { "قالب gettext فارغ من النصوص." }
 
-            // Translate everything first (plural singular + plural forms).
+            // Resolve the Arabic language slot and its font before spending time translating.
+            // A generated ar.po is useless if the game cannot register an Arabic FontSet.
+            val languagesXml = readEntry(zip, languagesPath, MAX_POT_BYTES).toString(Charsets.UTF_8)
+            val fontPlan = planFonts(zip, languagesXml, fonts)
+            if (fontPlan.fontSetId == null) {
+                throw UnsupportedOperationException(
+                    "تعذر إنشاء خانة عربية قابلة للاستخدام: ${fontPlan.reason ?: "تعذر توفير FontSet بخط عربي."}"
+                )
+            }
+
+            // Translate everything only after the game can actually expose an Arabic locale.
             var translated = 0
             var skipped = 0
             var repaired = 0
@@ -98,11 +109,9 @@ internal object GettextPoLocalizer {
                 entry to (singular to plural)
             }
 
-            // Fonts: clone the default FontSet, merge Arabic into copies of its TTF fonts.
-            val languagesXml = readEntry(zip, languagesPath, MAX_POT_BYTES).toString(Charsets.UTF_8)
-            val fontPlan = planFonts(zip, languagesXml, fonts)
-            val shaped = fontPlan.fontsMerged.isNotEmpty()
-            val arPo = buildArPo(arEntries, shaped)
+            // A registered Arabic FontSet is the gate: even an already-Arabic TTF
+            // needs visual-order shaping because this gettext/libGDX path has no bidi engine.
+            val arPo = buildArPo(arEntries, shaped = true)
             val newLanguagesXml = patchLanguagesXml(languagesXml, fontPlan)
 
             outputApk.parentFile?.mkdirs()
@@ -192,7 +201,9 @@ internal object GettextPoLocalizer {
                 reasons.add("تعذر فحص $assetName (${error.message ?: "صيغة غير مدعومة"})")
                 return null
             }
-            if (profile.hasArabicCore) return fontDir + assetName // already Arabic-capable
+            if (profile.hasArabicCore && ArabicShaper.emittedCodepoints.all(profile::supports)) {
+                return fontDir + assetName // already covers every glyph the pre-shaper can emit
+            }
             val pick = choice ?: try {
                 FontSelector.selectForMerge(profile) { f -> FontAnalyzer.analyze(fonts.fontBytes(f)) }.also { choice = it }
             } catch (error: Exception) {

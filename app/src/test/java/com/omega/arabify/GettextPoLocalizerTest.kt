@@ -7,6 +7,7 @@ import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -38,6 +39,21 @@ class GettextPoLocalizerTest {
         titleFontSize="36"
 
         hudFontName="Xolonium-Regular.ttf"
+    />
+</Languages>
+"""
+
+    // This existing font already covers the shaper's output. The test proves
+    // gettext still pre-shapes Arabic even when no glyph merge is necessary.
+    private val arabicCapableLanguagesXml = """<Languages>
+    <Language id="en" name="English" fontSet="base"/>
+    <FontSet id="base"
+        defaultFontName="Amiri-Regular.ttf"
+        defaultBoldFontName="Amiri-Regular.ttf"
+        defaultFontSize="24"
+        titleFontName="Amiri-Regular.ttf"
+        titleFontSize="36"
+        hudFontName="Amiri-Regular.ttf"
     />
 </Languages>
 """
@@ -75,6 +91,7 @@ msgstr ""
             "assets/ui/languages.xml" to languageXmlText.toByteArray(),
             "assets/fonts/Xolonium-Regular.ttf" to TinyFont.build("Xolonium"),
             "assets/fonts/Xolonium-Bold.ttf" to TinyFont.build("Xolonium Bold"),
+            "assets/fonts/Amiri-Regular.ttf" to File("src/main/assets/fonts/Amiri-Regular.ttf").readBytes(),
         ))
         return apk
     }
@@ -170,6 +187,31 @@ msgstr ""
     }
 
     @Test
+    fun refusesMissingFontSetBeforeTranslatingOrCreatingOutput() {
+        val dir = createTempDir()
+        val input = buildGameApk(dir, languageXmlText = "<Languages/>")
+        val output = File(dir, "unsupported-out.apk")
+        var translationCalls = 0
+        val fonts = GettextPoLocalizer.FontInjection {
+            throw AssertionError("No font should be loaded when the language registry is missing.")
+        }
+
+        val error = assertThrows(UnsupportedOperationException::class.java) {
+            runBlocking {
+                GettextPoLocalizer.addArabicGettextSlot(input, output, fonts) {
+                    translationCalls++
+                    fakeArabic(it)
+                }
+            }
+        }
+
+        assertTrue(error.message!!.contains("خانة عربية"))
+        assertEquals("translation must not run for an unusable gettext target", 0, translationCalls)
+        assertFalse("no unusable ar.po APK should be emitted", output.exists())
+        dir.deleteRecursively()
+    }
+
+    @Test
     fun gettextUsesReviewedGlossaryAndProtectsFormatTokens() {
         runBlocking {
             val customPot = """msgid ""
@@ -188,10 +230,10 @@ msgstr[0] ""
 msgstr[1] ""
 """
             val dir = createTempDir()
-            val input = buildGameApk(dir, customPot, "<Languages/>")
+            val input = buildGameApk(dir, customPot, arabicCapableLanguagesXml)
             val output = File(dir, "reviewed-out.apk")
             val fonts = GettextPoLocalizer.FontInjection {
-                throw AssertionError("A missing FontSet must not request a replacement font.")
+                throw AssertionError("An Arabic-capable FontSet must not request a replacement font.")
             }
 
             val report = GettextPoLocalizer.addArabicGettextSlot(input, output, fonts) { value ->
@@ -211,6 +253,8 @@ msgstr[1] ""
             assertTrue(arPo.contains("msgid \"Collect %s\"\nmsgstr \"اجمع %s\""))
             assertTrue(arPo.contains("msgid_plural \"Hit %# vehicles\"\nmsgstr[0] \"اضرب %# مركبات\""))
             assertFalse(arPo.contains("__ARABIFY_TOKEN_"))
+            assertTrue("existing Arabic fonts still require pre-shaped output", arPo.any { it.code in 0xFE70..0xFEFF })
+            assertTrue("no font merge is needed for the Amiri fixture", report.fontsMerged.isEmpty())
             assertEquals(3, report.stringsTranslated)
             assertEquals(0, report.stringsSkipped)
             // The dropped-placeholder repair is visible in the report, not
@@ -239,10 +283,10 @@ msgid "Collect all five stars now"
 msgstr ""
 """
             val dir = createTempDir()
-            val input = buildGameApk(dir, customPot, "<Languages/>")
+            val input = buildGameApk(dir, customPot, arabicCapableLanguagesXml)
             val output = File(dir, "skip-out.apk")
             val fonts = GettextPoLocalizer.FontInjection {
-                throw AssertionError("No font merge expected for this fixture.")
+                throw AssertionError("An Arabic-capable FontSet must not request a replacement font.")
             }
 
             val report = GettextPoLocalizer.addArabicGettextSlot(input, output, fonts) { value ->
