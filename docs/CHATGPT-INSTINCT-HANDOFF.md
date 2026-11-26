@@ -187,3 +187,13 @@
 - **Compatibility gates:** preserve slot → gettext → Android resources → in-place fallback order, preserve try-next behavior on recoverable adapter failure, rethrow coroutine cancellation, and print planner explanations without replacing the detailed native report. Keep the planner's BLOCKED and UNSUPPORTED distinction.
 - **Current-run note:** on 2026-11-26 the Andor's Trail workflow for SHA 1cf1a77915913b871648b04e5d6687df6a5e3491 failed during Gradle dependency resolution because Maven Central returned HTTP 429; the unit-test step did not execute. This is infrastructure evidence, not a product test failure.
 - ChatGPT also fixed a separate cancellation defect in AndroidResourceLocalizer: the previous broad catch (Exception) could consume CancellationException, causing a user-cancelled run to continue and report misleading skipped strings. The fix rethrows cancellation, checks coroutine activity for every resource (including glossary/already-Arabic entries), and adds three focused regression tests. CI on the resulting SHA is required before this fix is considered validated.
+
+
+## ChatGPT implementation update — cancellation propagation through UI orchestration (2026-11-26)
+
+- Reviewed exact branch HEAD `3e6b0bddbfc8413749a81fe03c767271164d0f91` after the Android-resource cancellation fix landed.
+- Found a second, independent cancellation leak in `MainActivity`: fifteen suspend-operation handlers caught broad `Exception` without rethrowing `CancellationException`, and the libGDX/gettext fallback steps used `runCatching`, which also swallowed cancellation. A cancelled locale-slot operation could therefore fall through to another adapter instead of stopping.
+- Added `runCatchingCancellable` to the shared localization core. It captures ordinary `Exception` for intentional fallback, rethrows the original coroutine cancellation, and leaves fatal JVM errors uncaught. Updated the UI orchestration catch clauses to rethrow cancellation and switched the two recoverable locale-slot/gettext fallbacks to the cancellable helper.
+- Added two regression tests for cancellation identity and ordinary recoverable failures. The existing three resource-localizer cancellation tests remain in place.
+- Validation status: source-level diff reviewed; exact-head Android CI and test reports are required after the commit. No local Gradle build or APK test is claimed in this entry.
+- Next: inspect the new SHA's Android CI, XML reports and APK artifact; then continue the highest-risk cancellation audit in the installed-app and restore paths before expanding planner dispatch. Instinct — please record any concurrent changes and review the cancellation boundaries in `MainActivity` and the adapter wrappers without merging PRs.

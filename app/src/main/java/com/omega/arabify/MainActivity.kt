@@ -60,6 +60,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
@@ -117,7 +118,7 @@ private fun ArabifyApp(context: Context) {
  LaunchedEffect(offlineTranslator) {
   try {
    modelReady = withContext(Dispatchers.IO) { offlineTranslator.isArabicModelDownloaded() }
-  } catch(e:Exception) {
+  } catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) {
    modelReady = false
    translationError = e.message ?: "تعذر التحقق من حالة نموذج الترجمة."
   }
@@ -127,7 +128,7 @@ private fun ArabifyApp(context: Context) {
    selectedUri=uri;selectedInstalledApp=null;busy=true;error=null;result=null;localizationReport=null;generatedApk=null;unityDeepReport=null;unityDeepError=null
    scope.launch {
     try { result=withContext(Dispatchers.IO){ApkInspector.inspect(context,uri)} }
-    catch(e:Exception){error=e.message ?: "حدث خطأ أثناء فحص الملف."}
+    catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception){error=e.message ?: "حدث خطأ أثناء فحص الملف."}
     finally{busy=false;showLocalizationChoice=true}
    }
   }
@@ -143,7 +144,7 @@ private fun ArabifyApp(context: Context) {
       } ?: kotlin.error("تعذر إنشاء ملف ZIP في المكان المحدد.")
      }
      exportError=null
-    } catch(e:Exception) { exportError=e.message ?: "تعذر حفظ ملف ZIP." }
+    } catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) { exportError=e.message ?: "تعذر حفظ ملف ZIP." }
    }
   }
  }
@@ -158,7 +159,7 @@ private fun ArabifyApp(context: Context) {
       } ?: kotlin.error("تعذر إنشاء ملف APK في المكان المحدد.")
      }
      exportError=null
-    } catch(e:Exception) { exportError=e.message ?: "تعذر حفظ APK." }
+    } catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) { exportError=e.message ?: "تعذر حفظ APK." }
    }
   }
  }
@@ -181,7 +182,7 @@ private fun ArabifyApp(context: Context) {
       }
      }
      backupMessage="تم إنشاء النسخة الاحتياطية والتحقق من SHA-256 لكل ملفات APK."
-    } catch(e:Exception) { backupError=e.message ?: "تعذر إنشاء النسخة الاحتياطية." }
+    } catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) { backupError=e.message ?: "تعذر إنشاء النسخة الاحتياطية." }
     finally { backupBusy=false }
    }
   }
@@ -199,7 +200,7 @@ private fun ArabifyApp(context: Context) {
      }
      withContext(Dispatchers.Main) { ApkRestoreInstaller.install(context,backup) }
      restoreMessage="تم التحقق من الملفات وإرسال مجموعة APK إلى مُثبّت Android. أكّد التثبيت في نافذة النظام."
-    } catch(e:Exception) { restoreError=e.message ?: "تعذرت استعادة النسخة الاحتياطية." }
+    } catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) { restoreError=e.message ?: "تعذرت استعادة النسخة الاحتياطية." }
     finally {
      withContext(NonCancellable + Dispatchers.IO) {
       runCatching { restoreDirectory.deleteRecursively() }
@@ -225,7 +226,7 @@ private fun ArabifyApp(context: Context) {
       AndroidResourceLocalizer.localizeEnglishStrings(input,File(context.cacheDir,"arabify-$stamp-unsigned.apk"),File(context.cacheDir,"arabify-$stamp-signed.apk"),offlineTranslator,context) { done,total -> scope.launch { localizationProgress=done to total } }
      }
      localizationReport=report;generatedApk=report.signedApk
-    } catch(e:Exception) { localizationError=e.message ?: "تعذر تعريب موارد اللعبة." }
+    } catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) { localizationError=e.message ?: "تعذر تعريب موارد اللعبة." }
     finally { localizeBusy=false }
    }
   } else {
@@ -251,7 +252,7 @@ private fun ArabifyApp(context: Context) {
        )
       }
       assetReport=report;generatedApk=report.outputApk
-     } catch(e:Exception) { assetError=e.message ?: "تعذر تعريب مجموعة Split." }
+     } catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) { assetError=e.message ?: "تعذر تعريب مجموعة Split." }
      finally { assetBusy=false }
     }
     return
@@ -270,7 +271,7 @@ private fun ArabifyApp(context: Context) {
        val slotUnsigned=File(context.cacheDir,"arabify-slot-$stamp-unsigned.apk")
        val slotSigned=File(context.cacheDir,"arabify-slot-$stamp-signed.apk")
        val fonts=LocaleSlotLocalizer.FontInjection { f -> context.assets.open(f.assetPath).use { it.readBytes() } }
-       val slotReport=runCatching {
+       val slotReport=runCatchingCancellable {
         LocaleSlotLocalizer.addArabicLocaleSlotWithFont(input,slotUnsigned,fonts) { text ->
          if(text.isBlank()) text else offlineTranslator.translateEnglishToArabic(text)
         }
@@ -291,7 +292,7 @@ private fun ArabifyApp(context: Context) {
         val poUnsigned=File(context.cacheDir,"arabify-po-$stamp-unsigned.apk")
         val poSigned=File(context.cacheDir,"arabify-po-$stamp-signed.apk")
         val poFonts=GettextPoLocalizer.FontInjection { f -> context.assets.open(f.assetPath).use { it.readBytes() } }
-        val poReport=runCatching {
+        val poReport=runCatchingCancellable {
          GettextPoLocalizer.addArabicGettextSlot(input,poUnsigned,poFonts) { text ->
           if(text.isBlank()) text else offlineTranslator.translateEnglishToArabic(text)
          }
@@ -309,7 +310,7 @@ private fun ArabifyApp(context: Context) {
       }
      }
      assetReport=report;generatedApk=report.outputApk
-    } catch(e:Exception) { assetError=e.message ?: "تعذر تعريب ملفات النصوص." }
+    } catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) { assetError=e.message ?: "تعذر تعريب ملفات النصوص." }
     finally { assetBusy=false }
    }
   }
@@ -440,7 +441,7 @@ private fun ArabifyApp(context: Context) {
           busy=true;inspectionProgress=0 to (1+app.splitCount);error=null;result=null;localizationReport=null;generatedApk=null
           scope.launch {
            try { result=withContext(Dispatchers.IO){inspectInstalledPackage(context,app){done,total -> scope.launch { inspectionProgress=done to total }}} }
-           catch(e:Exception){error=e.message ?: "تعذر فحص التطبيق المثبت."}
+           catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception){error=e.message ?: "تعذر فحص التطبيق المثبت."}
            finally{busy=false;showLocalizationChoice=true}
           }
          },enabled=!busy,shape=CutCornerShape(10.dp),
@@ -495,7 +496,7 @@ private fun ArabifyApp(context: Context) {
         translationBusy=true;translationError=null
         scope.launch {
          try { withContext(Dispatchers.IO){offlineTranslator.prepareForOfflineUse()};modelReady=true }
-         catch(e:Exception){translationError=e.message ?: "تعذر تجهيز نموذج الترجمة."}
+         catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception){translationError=e.message ?: "تعذر تجهيز نموذج الترجمة."}
          finally{translationBusy=false}
         }
        },enabled=!translationBusy)
@@ -504,7 +505,7 @@ private fun ArabifyApp(context: Context) {
         translationBusy=true;translationError=null;translatedText=null
         scope.launch {
          try { translatedText=withContext(Dispatchers.IO){offlineTranslator.translateEnglishToArabic(translationInput)} }
-         catch(e:Exception){translationError=e.message ?: "فشلت الترجمة."}
+         catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception){translationError=e.message ?: "فشلت الترجمة."}
          finally{translationBusy=false}
         }
        },enabled=modelReady&&!translationBusy&&translationInput.isNotBlank())
@@ -586,7 +587,7 @@ private fun ArabifyApp(context: Context) {
              }
              localizationReport=report
              generatedApk=report.signedApk
-            } catch(e:Exception) { localizationError=e.message ?: "تعذر تعريب موارد اللعبة." }
+            } catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) { localizationError=e.message ?: "تعذر تعريب موارد اللعبة." }
             finally { localizeBusy=false }
            }
           }
@@ -649,7 +650,7 @@ private fun ArabifyApp(context: Context) {
              }
              assetReport=report
              generatedApk=report.outputApk
-            } catch(e:Exception) { assetError=e.message ?: "تعذر تعريب ملفات النصوص." }
+            } catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) { assetError=e.message ?: "تعذر تعريب ملفات النصوص." }
             finally { assetBusy=false }
            }
           }
@@ -702,7 +703,7 @@ private fun ArabifyApp(context: Context) {
                 } finally { input.delete() }
                }
                unityDeepReport=report
-              } catch(e:Exception) {
+              } catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) {
                unityDeepError=e.message ?: "تعذر فحص UnityFS بأمان."
               } finally {
                unityDeepBusy=false

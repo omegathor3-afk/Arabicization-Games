@@ -1,5 +1,7 @@
 package com.omega.arabify
 
+import kotlinx.coroutines.CancellationException
+
 /** Engine-neutral contracts shared by game/container localization adapters. */
 internal enum class ArtifactKind { APK, SPLIT_APK_SET, GAME_DIRECTORY, ARCHIVE, RAW_FILE, UNKNOWN }
 
@@ -126,3 +128,17 @@ internal data class LocalizationPlan(
     val missingOperations: Set<AdapterOperation>,
     val explanations: List<String>
 )
+
+
+/**
+ * Like runCatching, but preserves structured coroutine cancellation and fatal JVM errors.
+ * Use only for recoverable fallback steps where ordinary Exceptions may be ignored.
+ */
+internal suspend fun <T> runCatchingCancellable(block: suspend () -> T): Result<T> =
+    try {
+        Result.success(block())
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Exception) {
+        Result.failure(error)
+    }

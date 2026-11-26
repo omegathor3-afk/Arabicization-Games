@@ -54,4 +54,24 @@ class AndroidResourceLocalizerCancellationTest {
   assertTrue(translated)
   assertEquals(0, skipped)
  }
+
+
+ @Test
+ fun cancellableRunCatchingRethrowsTheOriginalCancellation() = runBlocking {
+  val requested = CancellationException("cancel locale-slot fallback")
+  try {
+   runCatchingCancellable { throw requested }
+   fail("Cancellation must escape a recoverable fallback.")
+  } catch (actual: CancellationException) {
+   assertSame(requested, actual)
+  }
+ }
+
+ @Test
+ fun cancellableRunCatchingCapturesOrdinaryFailuresForFallback() = runBlocking {
+  val failure = IllegalStateException("optional locale adapter unavailable")
+  val result = runCatchingCancellable { throw failure }
+
+  assertSame(failure, result.exceptionOrNull())
+ }
 }
