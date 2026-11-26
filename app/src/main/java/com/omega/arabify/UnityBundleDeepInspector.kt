@@ -6,6 +6,7 @@ import java.io.FileOutputStream
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.util.zip.ZipFile
+import java.util.concurrent.CancellationException
 
 internal data class UnityBundleDeepInspectionLimits(
     val maxBundles: Int = 4,
@@ -152,8 +153,10 @@ internal object UnityBundleDeepInspector {
         inventory: UnityAssetInventory,
         scratchDirectory: File,
         limits: UnityBundleDeepInspectionLimits = UnityBundleDeepInspectionLimits(),
-        onProgress: (Int, Int) -> Unit = { _, _ -> }
+        onProgress: (Int, Int) -> Unit = { _, _ -> },
+        cancellationCheck: () -> Unit = {}
     ): UnityBundleDeepInspectionReport {
+        cancellationCheck()
         require(apk.isFile && apk.length() > 0L) { "ملف APK غير موجود أو فارغ." }
         require(validLimits(limits)) { "حدود فحص UnityFS غير صالحة." }
         val scratchPath = scratchDirectory.toPath().toAbsolutePath().normalize()
@@ -228,6 +231,7 @@ internal object UnityBundleDeepInspector {
             var entriesVerified = 0
             var verificationTruncated = false
             while (allEntries.hasMoreElements()) {
+                cancellationCheck()
                 if (entriesVerified >= limits.maxZipEntriesToVerify) {
                     verificationTruncated = true
                     break
@@ -290,6 +294,7 @@ internal object UnityBundleDeepInspector {
             val workDirectory = Files.createTempDirectory(scratchPath, "arabify-unity-deep-").toFile()
             try {
                 candidates.forEachIndexed { index, candidate ->
+                    cancellationCheck()
                     val entry = zip.getEntry(candidate.path)
                     if (pathCounts[candidate.path] != 1 || entry == null) {
                         results += UnityBundleDeepInspectionItem(
@@ -589,6 +594,8 @@ internal object UnityBundleDeepInspector {
                             objectsInBundle,
                             details.take(12)
                         )
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
                     } catch (error: Exception) {
                         results += UnityBundleDeepInspectionItem(
                             candidate.path,

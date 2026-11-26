@@ -9,6 +9,8 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 internal data class AssetLocalizationReport(
  val packageName: String?,
@@ -154,6 +156,7 @@ internal object AssetTextTransformer {
   translate:suspend (String)->String
  ):Result {
   require(maxTranslationCandidates>=0) { "حد الترجمات غير صالح." }
+  currentCoroutineContext().ensureActive()
   var translated=0
   var skipped=0
   var translationCandidates=0
@@ -169,6 +172,7 @@ internal object AssetTextTransformer {
    if(warning!=null){fitWarnings++;if(fitWarningSamples.size<10)fitWarningSamples+=warning}
   }
   suspend fun tx(value:String):String {
+   currentCoroutineContext().ensureActive()
    if(!looksTranslatable(value)){skipped++;countSkip("not_translatable");return value}
    if(SourceLanguageGuard.classify(value)==SourceLanguageGuard.Verdict.NOT_ENGLISH){skipped++;countSkip("source_language:not_english");return value}
    val glossaryHit=ArabicUiGlossary.translateExact(value)
@@ -354,8 +358,10 @@ internal object AssetTextTransformer {
   val out=StringBuilder(source.length)
   var cursor=0
   rows.forEachIndexed{rowIndex,cells->
+   currentCoroutineContext().ensureActive()
    val isHeaderRow=rowIndex==0&&header!=null
    cells.forEachIndexed{colIndex,cell->
+    currentCoroutineContext().ensureActive()
     out.append(source,cursor,cell.start)
     val skip=isHeaderRow||colIndex in keyColumns||csvSnakeIdentifier.matches(cell.value.trim())
     if(skip){
@@ -378,6 +384,7 @@ internal object AssetTextTransformer {
   val all=mutableListOf<String>()
   while(keys.hasNext())all+=keys.next()
   for(key in all){
+   currentCoroutineContext().ensureActive()
    when(val value=obj.opt(key)){
     is String -> obj.put(key,tx(value))
     is JSONObject -> obj.put(key,transformObject(value,tx))
@@ -389,6 +396,7 @@ internal object AssetTextTransformer {
 
  private suspend fun transformArray(array:JSONArray,tx:suspend(String)->String):JSONArray {
   for(i in 0 until array.length()){
+   currentCoroutineContext().ensureActive()
    when(val value=array.opt(i)){
     is String -> array.put(i,tx(value))
     is JSONObject -> array.put(i,transformObject(value,tx))
@@ -472,6 +480,7 @@ internal object AndroidAssetLocalizer {
   translator:OfflineArabicTranslator,onProgress:(Int,Int)->Unit={_,_->},
   allowedPathPrefixes:List<String> = allowedRoots
  ):AssetLocalizationReport {
+  currentCoroutineContext().ensureActive()
   val archiveInfo=try{
    @Suppress("DEPRECATION")
    context.packageManager.getPackageArchiveInfo(inputApk.absolutePath,0)
@@ -492,6 +501,8 @@ internal object AndroidAssetLocalizer {
   tx:suspend (String)->String
  ):AssetLocalizationReport {
   require(inputApk.isFile){"ملف APK الأصلي غير موجود."}
+  val operationContext=currentCoroutineContext()
+  operationContext.ensureActive()
   var discovered=0
   var translatedFiles=0
   var translatedStrings=0
@@ -506,6 +517,7 @@ internal object AndroidAssetLocalizer {
    var hasNativeLibraries=false
    var archiveEntryCount=0
    while(entries.hasMoreElements()){
+    operationContext.ensureActive()
     val entry=entries.nextElement()
     archiveEntryCount++
     require(archiveEntryCount<=MAX_ARCHIVE_ENTRIES){"عدد عناصر APK يتجاوز حد إعادة البناء الآمن (100,000)."}
@@ -525,6 +537,7 @@ internal object AndroidAssetLocalizer {
    }
    discovered=candidates.size
    candidates.forEachIndexed { index,entry ->
+    operationContext.ensureActive()
     val remaining=MAX_TOTAL_TRANSLATION_BYTES-totalBytes
     if(remaining<=0L || entry.size>minOf(MAX_FILE_BYTES,remaining)){
      skippedStrings++
@@ -557,6 +570,7 @@ internal object AndroidAssetLocalizer {
     var copiedArchiveBytes=0L
     var writtenEntries=0
     while(all.hasMoreElements()){
+     operationContext.ensureActive()
      val entry=all.nextElement()
      writtenEntries++
      require(writtenEntries<=MAX_ARCHIVE_ENTRIES){"عدد عناصر APK تغير أثناء إعادة البناء."}

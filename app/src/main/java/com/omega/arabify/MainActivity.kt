@@ -61,8 +61,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -111,6 +116,16 @@ private fun ArabifyApp(context: Context) {
  var restoreBusy by remember { mutableStateOf(false) }
  var restoreMessage by remember { mutableStateOf<String?>(null) }
  var restoreError by remember { mutableStateOf<String?>(null) }
+ var localizationJob by remember { mutableStateOf<Job?>(null) }
+ var assetJob by remember { mutableStateOf<Job?>(null) }
+ var unityDeepJob by remember { mutableStateOf<Job?>(null) }
+
+ fun launchTracked(onCreated: (Job) -> Unit, block: suspend CoroutineScope.() -> Unit) {
+  val job = scope.launch(start = CoroutineStart.LAZY, block = block)
+  onCreated(job)
+  job.start()
+ }
+
  LaunchedEffect(context) { installedApps = withContext(Dispatchers.IO) { loadInstalledApps(context) } }
  val clipboardManager=LocalClipboardManager.current
  val offlineTranslator = remember(context) { OfflineArabicTranslator(context) }
@@ -211,107 +226,160 @@ private fun ArabifyApp(context: Context) {
   }
  }
 
- fun startSelectedLocalization() {
+ fun startSelectedLocalization(forceAsset: Boolean = false) {
   val scan=result ?: return
   val uri=selectedUri ?: return
-  if(!modelReady) { localizationError="نزّل نموذج الترجمة أولًا، ثم اضغط ابدأ التعريب."; showLocalizationChoice=false; return }
+  if(!modelReady) {
+   localizationError="نزّل نموذج الترجمة أولًا، ثم اضغط ابدأ التعريب."
+   assetError="نزّل نموذج الترجمة أولًا، ثم اضغط ابدأ التعريب."
+   showLocalizationChoice=false
+   return
+  }
   showLocalizationChoice=false
-  if(scan.engine==GameEngine.ANDROID) {
-   if((selectedInstalledApp?.splitCount ?: 0)>0) { localizationError="تعريب مجموعات Split وتصديرها غير مدعومين بعد؛ أوقفنا العملية بأمان."; return }
-   localizeBusy=true;localizationError=null;localizationProgress=0 to 0;localizationReport=null
-   scope.launch {
-    try {
-     val report=withContext(Dispatchers.IO) {
-      val input=copyUriToCache(context,uri);val stamp=System.currentTimeMillis()
-      AndroidResourceLocalizer.localizeEnglishStrings(input,File(context.cacheDir,"arabify-$stamp-unsigned.apk"),File(context.cacheDir,"arabify-$stamp-signed.apk"),offlineTranslator,context) { done,total -> scope.launch { localizationProgress=done to total } }
-     }
-     localizationReport=report;generatedApk=report.signedApk
-    } catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) { localizationError=e.message ?: "تعذر تعريب موارد اللعبة." }
-    finally { localizeBusy=false }
-   }
-  } else {
-   val splitApp=selectedInstalledApp?.takeIf { it.splitCount>0 }
-   if(splitApp!=null) {
-    assetBusy=true;assetError=null;assetReport=null;assetProgress=0 to 0
-    scope.launch {
-     try {
-      val report=withContext(Dispatchers.IO) {
-       val stamp=System.currentTimeMillis()
-       val workDir=File(context.cacheDir,"arabify-splitset-$stamp")
-       val inputs=listOf(File(splitApp.apkPath))+splitApp.splitApkPaths.map { File(it) }
-       val (setReport,signed)=SplitApkSetLocalizer.localizeAndSignSet(context,inputs,workDir,offlineTranslator) { done,total -> scope.launch { assetProgress=done to total } }
-       val zipOut=File(context.cacheDir,"arabify-splitset-$stamp.zip")
-       ApkBackupManager.createBackup(splitApp.packageName,splitApp.label,null,signed,zipOut)
-       AssetLocalizationReport(
-        splitApp.packageName,
-        setReport.members.sumOf { it.report.filesDiscovered },
-        setReport.members.sumOf { it.report.filesTranslated },
-        setReport.stringsTranslated,
-        setReport.stringsSkipped,
-        zipOut
-       )
-      }
-      assetReport=report;generatedApk=report.outputApk
-     } catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) { assetError=e.message ?: "تعذر تعريب مجموعة Split." }
-     finally { assetBusy=false }
-    }
+  if(scan.engine==GameEngine.ANDROID && !forceAsset) {
+   if((selectedInstalledApp?.splitCount ?: 0)>0) {
+    localizationError="تعريب مجموعات Split من موارد Android غير مدعوم بعد؛ أوقفنا العملية بأمان."
     return
    }
-   assetBusy=true;assetError=null;assetReport=null;assetProgress=0 to 0
-   scope.launch {
+   localizeBusy=true;localizationError=null;localizationProgress=0 to 0;localizationReport=null
+   val stamp=System.currentTimeMillis()
+   val unsigned=File(context.cacheDir,"arabify-$stamp-unsigned.apk")
+   val signed=File(context.cacheDir,"arabify-$stamp-signed.apk")
+   launchTracked({ localizationJob=it }) {
+    var input:File?=null
+    var completed=false
     try {
      val report=withContext(Dispatchers.IO) {
-      val input=copyUriToCache(context,uri);val stamp=System.currentTimeMillis()
-      if(scan.engine==GameEngine.UNITY) UnityMonoLocalizer.localize(context,input,File(context.cacheDir,"arabify-assets-$stamp-unsigned.apk"),File(context.cacheDir,"arabify-assets-$stamp-signed.apk"),offlineTranslator) { done,total -> scope.launch { assetProgress=done to total } }
-      else {
-       // Slot strategy first (libGDX bundle_ar / gettext Arabic.properties):
-       // keeps the game's English files intact and runs the font tier, so
-       // Arabic actually renders instead of tofu. Falls back to in-place
-       // translation for games with no known language-file convention.
-       val slotUnsigned=File(context.cacheDir,"arabify-slot-$stamp-unsigned.apk")
-       val slotSigned=File(context.cacheDir,"arabify-slot-$stamp-signed.apk")
-       val fonts=LocaleSlotLocalizer.FontInjection { f -> context.assets.open(f.assetPath).use { it.readBytes() } }
-       val slotReport=runCatchingCancellable {
-        LocaleSlotLocalizer.addArabicLocaleSlotWithFont(input,slotUnsigned,fonts) { text ->
-         if(text.isBlank()) text else offlineTranslator.translateEnglishToArabic(text)
-        }
-       }.getOrNull()
-       if(slotReport!=null) {
-        ApkSigningService.signAndVerify(context,slotUnsigned,slotSigned)
-        AssetLocalizationReport(
-         scan.packageName,
-         1,1,slotReport.stringsTranslated,slotReport.stringsSkipped,slotSigned,
-         fitWarnings=slotReport.fitWarnings,fitWarningSamples=slotReport.fitWarningSamples,
-         stringsRepaired=slotReport.stringsRepaired,skipReasons=slotReport.skipReasons,
-         repairReasons=slotReport.repairReasons
-        )
-       } else {
-        // Gettext slot (games shipping po/messages.pot + ui/languages.xml):
-        // adds an Arabic ar.po alongside the game's own languages instead
-        // of rewriting English strings in place, with the font tier.
-        val poUnsigned=File(context.cacheDir,"arabify-po-$stamp-unsigned.apk")
-        val poSigned=File(context.cacheDir,"arabify-po-$stamp-signed.apk")
-        val poFonts=GettextPoLocalizer.FontInjection { f -> context.assets.open(f.assetPath).use { it.readBytes() } }
-        val poReport=runCatchingCancellable {
-         GettextPoLocalizer.addArabicGettextSlot(input,poUnsigned,poFonts) { text ->
-          if(text.isBlank()) text else offlineTranslator.translateEnglishToArabic(text)
-         }
-        }.getOrNull()
-        if(poReport!=null) {
-         ApkSigningService.signAndVerify(context,poUnsigned,poSigned)
-         AssetLocalizationReport(
-          scan.packageName,
-          1,1,poReport.stringsTranslated,poReport.stringsSkipped,poSigned,
-          stringsRepaired=poReport.stringsRepaired,skipReasons=poReport.skipReasons,
-          repairReasons=poReport.repairReasons
-         )
-        } else AndroidAssetLocalizer.localize(context,input,File(context.cacheDir,"arabify-assets-$stamp-unsigned.apk"),File(context.cacheDir,"arabify-assets-$stamp-signed.apk"),offlineTranslator,onProgress = { done: Int, total: Int -> scope.launch { assetProgress=done to total } })
+      input=copyUriToCache(context,uri)
+      AndroidResourceLocalizer.localizeEnglishStrings(input!!,unsigned,signed,offlineTranslator,context) { done,total ->
+       if(localizationJob?.isActive==true) scope.launch {
+        if(localizationJob?.isActive==true) localizationProgress=done to total
        }
       }
      }
-     assetReport=report;generatedApk=report.outputApk
-    } catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) { assetError=e.message ?: "تعذر تعريب ملفات النصوص." }
-    finally { assetBusy=false }
+     localizationReport=report;generatedApk=report.signedApk;completed=true
+    } catch (cancelled: CancellationException) {
+     localizationError="تم إلغاء التعريب. بقي APK الأصلي دون تعديل؛ ابدأ العملية من جديد عند الحاجة."
+     throw cancelled
+    } catch (e: Exception) { localizationError=e.message ?: "تعذر تعريب موارد اللعبة." }
+    finally {
+     input?.delete()
+     if(!completed) { unsigned.delete();signed.delete() }
+     localizeBusy=false;localizationJob=null
+    }
+   }
+   return
+  }
+
+  val splitApp=selectedInstalledApp?.takeIf { it.splitCount>0 }
+  if(splitApp!=null) {
+   assetBusy=true;assetError=null;assetReport=null;assetProgress=0 to 0
+   val stamp=System.currentTimeMillis()
+   val workDir=File(context.cacheDir,"arabify-splitset-$stamp")
+   val zipOut=File(context.cacheDir,"arabify-splitset-$stamp.zip")
+   launchTracked({ assetJob=it }) {
+    var completed=false
+    try {
+     val report=withContext(Dispatchers.IO) {
+      val inputs=listOf(File(splitApp.apkPath))+splitApp.splitApkPaths.map { File(it) }
+      val (setReport,signed)=SplitApkSetLocalizer.localizeAndSignSet(context,inputs,workDir,offlineTranslator) { done,total ->
+       if(assetJob?.isActive==true) scope.launch {
+        if(assetJob?.isActive==true) assetProgress=done to total
+       }
+      }
+      ApkBackupManager.createBackup(splitApp.packageName,splitApp.label,null,signed,zipOut)
+      AssetLocalizationReport(
+       splitApp.packageName,
+       setReport.members.sumOf { it.report.filesDiscovered },
+       setReport.members.sumOf { it.report.filesTranslated },
+       setReport.stringsTranslated,
+       setReport.stringsSkipped,
+       zipOut
+      )
+     }
+     assetReport=report;generatedApk=report.outputApk;completed=true
+    } catch (cancelled: CancellationException) {
+     assetError="تم إلغاء تعريب مجموعة Split. حُذفت الملفات المؤقتة ولم يتغير التطبيق المثبت."
+     throw cancelled
+    } catch (e: Exception) { assetError=e.message ?: "تعذر تعريب مجموعة Split." }
+    finally {
+     if(!completed) { workDir.deleteRecursively();zipOut.delete() }
+     assetBusy=false;assetJob=null
+    }
+   }
+   return
+  }
+
+  assetBusy=true;assetError=null;assetReport=null;assetProgress=0 to 0
+  val stamp=System.currentTimeMillis()
+  val unsigned=File(context.cacheDir,"arabify-assets-$stamp-unsigned.apk")
+  val signed=File(context.cacheDir,"arabify-assets-$stamp-signed.apk")
+  val slotUnsigned=File(context.cacheDir,"arabify-slot-$stamp-unsigned.apk")
+  val slotSigned=File(context.cacheDir,"arabify-slot-$stamp-signed.apk")
+  val poUnsigned=File(context.cacheDir,"arabify-po-$stamp-unsigned.apk")
+  val poSigned=File(context.cacheDir,"arabify-po-$stamp-signed.apk")
+  val bundleStage=File(context.cacheDir,"arabify-assets-$stamp-unsigned-bundles.apk")
+  val bundleWork=File(context.cacheDir,"arabify-assets-$stamp-unsigned-bundlework")
+  launchTracked({ assetJob=it }) {
+   var input:File?=null
+   var completed=false
+   try {
+    val report=withContext(Dispatchers.IO) {
+     input=copyUriToCache(context,uri)
+     val onProgress:(Int,Int)->Unit = { done,total ->
+      if(assetJob?.isActive==true) scope.launch {
+       if(assetJob?.isActive==true) assetProgress=done to total
+      }
+     }
+     if(scan.engine==GameEngine.UNITY) {
+      UnityMonoLocalizer.localize(context,input!!,unsigned,signed,offlineTranslator,onProgress)
+     } else {
+      val fonts=LocaleSlotLocalizer.FontInjection { f -> context.assets.open(f.assetPath).use { it.readBytes() } }
+      val slotReport=runCatchingCancellable {
+       LocaleSlotLocalizer.addArabicLocaleSlotWithFont(input!!,slotUnsigned,fonts) { text ->
+        if(text.isBlank()) text else offlineTranslator.translateEnglishToArabic(text)
+       }
+      }.getOrNull()
+      if(slotReport!=null) {
+       ApkSigningService.signAndVerify(context,slotUnsigned,slotSigned)
+       AssetLocalizationReport(
+        scan.packageName,1,1,slotReport.stringsTranslated,slotReport.stringsSkipped,slotSigned,
+        fitWarnings=slotReport.fitWarnings,fitWarningSamples=slotReport.fitWarningSamples,
+        stringsRepaired=slotReport.stringsRepaired,skipReasons=slotReport.skipReasons,
+        repairReasons=slotReport.repairReasons
+       )
+      } else {
+       val poFonts=GettextPoLocalizer.FontInjection { f -> context.assets.open(f.assetPath).use { it.readBytes() } }
+       val poReport=runCatchingCancellable {
+        GettextPoLocalizer.addArabicGettextSlot(input!!,poUnsigned,poFonts) { text ->
+         if(text.isBlank()) text else offlineTranslator.translateEnglishToArabic(text)
+        }
+       }.getOrNull()
+       if(poReport!=null) {
+        ApkSigningService.signAndVerify(context,poUnsigned,poSigned)
+        AssetLocalizationReport(
+         scan.packageName,1,1,poReport.stringsTranslated,poReport.stringsSkipped,poSigned,
+         stringsRepaired=poReport.stringsRepaired,skipReasons=poReport.skipReasons,
+         repairReasons=poReport.repairReasons
+        )
+       } else {
+        AndroidAssetLocalizer.localize(context,input!!,unsigned,signed,offlineTranslator,onProgress=onProgress)
+       }
+      }
+     }
+    }
+    assetReport=report;generatedApk=report.outputApk;completed=true
+   } catch (cancelled: CancellationException) {
+    assetError="تم إلغاء التعريب. حُذفت الملفات المؤقتة ولم يتم استبدال اللعبة الأصلية."
+    throw cancelled
+   } catch (e: Exception) { assetError=e.message ?: "تعذر تعريب ملفات النصوص." }
+   finally {
+    input?.delete()
+    if(!completed) {
+     listOf(unsigned,signed,slotUnsigned,slotSigned,poUnsigned,poSigned,bundleStage).forEach { it.delete() }
+     bundleWork.deleteRecursively()
+    }
+    assetBusy=false;assetJob=null
    }
   }
  }
@@ -379,7 +447,7 @@ private fun ArabifyApp(context: Context) {
    onDismissRequest={showLocalizationChoice=false},
    title={Text("هل تريد بدء تعريب التطبيق؟")},
    text={Text("تم اختيار ${selectedInstalledApp?.label ?: result?.fileName}. يمكنك بدء التعريب الآن أو المتابعة دون تعديل. لن يتم تغيير التطبيق الأصلي.")},
-   confirmButton={TextButton(onClick={::startSelectedLocalization},enabled=!busy&&!localizeBusy&&!assetBusy){Text("ابدأ التعريب")}},
+   confirmButton={TextButton(onClick={startSelectedLocalization()},enabled=!busy&&!localizeBusy&&!assetBusy){Text("ابدأ التعريب")}},
    dismissButton={TextButton(onClick={showLocalizationChoice=false}){Text("ليس الآن")}}
   )
   Surface(Modifier.fillMaxSize(),color=ArabifyPalette.canvas) {
@@ -571,31 +639,12 @@ private fun ArabifyApp(context: Context) {
          Text("تعريب موارد Android",color=ArabifyPalette.accent,fontWeight=FontWeight.Bold,fontSize=17.sp)
          Text("هذا المسار التجريبي يضيف موارد string عربية إلى resources.arsc. لا يشمل النصوص المخبأة داخل DEX أو محركات الألعاب.",color=ArabifyPalette.textSecondary,fontSize=12.sp)
          Text("يجب تنزيل نموذج الترجمة أولًا. التوقيع الجديد يعني أن تثبيت النسخة المعربة بدل الأصلية قد يتطلب إزالة النسخة الأصلية، وقد يؤدي ذلك لفقد بياناتها.",color=ArabifyPalette.warningText,fontSize=12.sp)
-         ArabifyCtaButton(if(localizeBusy) "جارٍ التعريب..." else "ابدأ تعريب موارد اللعبة",onClick={
-          val uri=selectedUri
-          if(uri!=null) {
-           localizeBusy=true;localizationError=null;localizationProgress=0 to 0;localizationReport=null
-           scope.launch {
-            try {
-             val report=withContext(Dispatchers.IO) {
-              val input=copyUriToCache(context,uri)
-              val unsigned=File(context.cacheDir,"arabify-unsigned-${System.currentTimeMillis()}.apk")
-              val signed=File(context.cacheDir,"arabify-arabic-${System.currentTimeMillis()}.apk")
-              AndroidResourceLocalizer.localizeEnglishStrings(input,unsigned,signed,offlineTranslator,context) { done,total ->
-               scope.launch { localizationProgress=done to total }
-              }
-             }
-             localizationReport=report
-             generatedApk=report.signedApk
-            } catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) { localizationError=e.message ?: "تعذر تعريب موارد اللعبة." }
-            finally { localizeBusy=false }
-           }
-          }
-         },enabled=modelReady&&!localizeBusy&&selectedUri!=null&&(selectedInstalledApp?.splitCount ?: 0)==0)
+         ArabifyCtaButton(if(localizeBusy) "جارٍ التعريب..." else "ابدأ تعريب موارد اللعبة",onClick={startSelectedLocalization()},enabled=modelReady&&!localizeBusy&&selectedUri!=null&&(selectedInstalledApp?.splitCount ?: 0)==0)
          if(localizeBusy) {
           val fraction=if(localizationProgress.second>0) localizationProgress.first.toFloat()/localizationProgress.second.toFloat() else 0f
           LinearProgressIndicator(progress={fraction.coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth())
           Text(if(localizationProgress.second>0) "تعريب الموارد: ${localizationProgress.first} من ${localizationProgress.second} (${(fraction*100).toInt()}%)" else "تهيئة وفحص موارد التطبيق…",color=Color.White,fontSize=12.sp)
+          TextButton(onClick={ localizationJob?.cancel(CancellationException("ألغى المستخدم تعريب موارد Android.")) }) { Text("إلغاء التعريب") }
          }
          localizationReport?.let { report ->
           Text("اكتمل إنشاء الموارد العربية: ${report.translatedStrings} نصًا من ${report.discoveredStrings}.",color=ArabifyPalette.success,fontSize=13.sp)
@@ -615,50 +664,12 @@ private fun ArabifyApp(context: Context) {
          Text("يعالج هذا المسار ملفات JSON وTXT وProperties وStrings الموجودة داخل assets أو res/raw أو مجلدات localization/strings. يحافظ على مفاتيح JSON وخصائص الإعدادات والمتغيرات المعروفة.",color=ArabifyPalette.textSecondary,fontSize=12.sp)
          Text("لا يترجم ملفات Unreal أو ملفات Unity الثنائية خارج النطاق الموضح. لا تعتبر النتيجة تعريبًا كاملًا للعبة.",color=ArabifyPalette.warningText,fontSize=12.sp)
          if(scan.engine==GameEngine.UNITY) Text(UnityMonoLocalizer.supportedScope,color=ArabifyPalette.warningText,fontSize=12.sp)
-         ArabifyCtaButton(if(assetBusy) "جارِ تعريب ملفات النصوص..." else if((selectedInstalledApp?.splitCount ?: 0)>0) "تعريب مجموعة Split وإنشاء ZIP" else "تعريب ملفات النصوص وإنشاء APK",onClick={
-          val uri=selectedUri
-          if(uri!=null) {
-           assetBusy=true;assetError=null;assetReport=null;assetProgress=0 to 0
-           scope.launch {
-            try {
-             val report=withContext(Dispatchers.IO) {
-              val input=copyUriToCache(context,uri)
-              val stamp=System.currentTimeMillis()
-              if (result?.engine == GameEngine.UNITY) {
-               UnityMonoLocalizer.localize(
-                context = context,
-                inputApk = input,
-                unsignedApk = File(context.cacheDir,"arabify-assets-$stamp-unsigned.apk"),
-                signedApk = File(context.cacheDir,"arabify-assets-$stamp-signed.apk"),
-                translator = offlineTranslator,
-                onProgress = { done: Int, total: Int ->
-                 scope.launch { assetProgress=done to total }
-                }
-               )
-              } else {
-               AndroidAssetLocalizer.localize(
-                context = context,
-                inputApk = input,
-                unsignedApk = File(context.cacheDir,"arabify-assets-$stamp-unsigned.apk"),
-                signedApk = File(context.cacheDir,"arabify-assets-$stamp-signed.apk"),
-                translator = offlineTranslator,
-                onProgress = { done: Int, total: Int ->
-                 scope.launch { assetProgress=done to total }
-                }
-               )
-              }
-             }
-             assetReport=report
-             generatedApk=report.outputApk
-            } catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) { assetError=e.message ?: "تعذر تعريب ملفات النصوص." }
-            finally { assetBusy=false }
-           }
-          }
-         },enabled=modelReady&&!assetBusy&&selectedUri!=null)
+         ArabifyCtaButton(if(assetBusy) "جارِ تعريب ملفات النصوص..." else if((selectedInstalledApp?.splitCount ?: 0)>0) "تعريب مجموعة Split وإنشاء ZIP" else "تعريب ملفات النصوص وإنشاء APK",onClick={startSelectedLocalization(forceAsset = true)},enabled=modelReady&&!assetBusy&&selectedUri!=null)
          if(assetBusy) {
           val fraction=if(assetProgress.second>0) assetProgress.first.toFloat()/assetProgress.second.toFloat() else 0f
           LinearProgressIndicator(progress={fraction.coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth())
           Text(if(assetProgress.second>0) "تعريب الملفات: ${assetProgress.first} من ${assetProgress.second} (${(fraction*100).toInt()}%)" else "استخراج الملفات وتحليل النصوص…",color=Color.White,fontSize=12.sp)
+          TextButton(onClick={ assetJob?.cancel(CancellationException("ألغى المستخدم تعريب ملفات اللعبة.")) }) { Text("إلغاء التعريب") }
          }
          assetReport?.let { report ->
           Text("الملفات: ${report.filesTranslated} / ${report.filesDiscovered} • النصوص المترجمة: ${report.stringsTranslated} • المتروكة: ${report.stringsSkipped}",color=ArabifyPalette.success,fontSize=13.sp)
@@ -692,23 +703,31 @@ private fun ArabifyApp(context: Context) {
             val uri=selectedUri
             if(uri!=null) {
              unityDeepBusy=true;unityDeepError=null;unityDeepReport=null;unityDeepProgress=0 to inventory.bundleFiles
-             scope.launch {
+             launchTracked({ unityDeepJob=it }) {
+              val operationJob=coroutineContext[Job] ?: error("تعذر تتبع فحص UnityFS.")
               try {
                val report=withContext(Dispatchers.IO) {
                 val input=copyUriToCache(context,uri)
                 try {
-                 UnityBundleDeepInspector.inspect(input,inventory,context.cacheDir) { done,total ->
-                  scope.launch { unityDeepProgress=done to total }
-                 }
+                 UnityBundleDeepInspector.inspect(
+                  input,inventory,context.cacheDir,
+                  onProgress={done,total -> if(unityDeepJob?.isActive==true) scope.launch {
+                   if(unityDeepJob?.isActive==true) unityDeepProgress=done to total
+                  }},
+                  cancellationCheck={operationJob.ensureActive()}
+                 )
                 } finally { input.delete() }
                }
                unityDeepReport=report
-              } catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) {
+              } catch (cancelled: CancellationException) {
+               unityDeepError="تم إلغاء فحص UnityFS. لم يتم تعديل أي أصل."
+               throw cancelled
+              } catch (e: Exception) {
                unityDeepError=e.message ?: "تعذر فحص UnityFS بأمان."
               } finally {
                unityDeepBusy=false
+               unityDeepJob=null
               }
-             }
             }
            },
            enabled=!unityDeepBusy&&!busy&&selectedUri!=null&&(selectedInstalledApp?.splitCount ?: 0)==0,
@@ -718,6 +737,7 @@ private fun ArabifyApp(context: Context) {
            val fraction=if(unityDeepProgress.second>0) unityDeepProgress.first.toFloat()/unityDeepProgress.second else 0f
            LinearProgressIndicator(progress={fraction.coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth())
            Text("فحص الحزم: " + unityDeepProgress.first + " من " + unityDeepProgress.second,color=ArabifyPalette.info,fontSize=11.sp)
+           TextButton(onClick={ unityDeepJob?.cancel(CancellationException("ألغى المستخدم فحص UnityFS.")) }) { Text("إلغاء الفحص") }
           }
           unityDeepReport?.let { deep ->
            Text(deep.summary,color=ArabifyPalette.success,fontSize=12.sp)
@@ -808,11 +828,12 @@ private fun SectionTitle(value:String){HextechSectionHeader(value)}
 private const val MAX_APK_IMPORT_BYTES = 1_500L * 1024L * 1024L
 private const val CACHE_RESERVE_BYTES = 16L * 1024L * 1024L
 
-private fun copyUriToCache(
+private suspend fun copyUriToCache(
  context:Context,
  uri:Uri,
  maxBytes:Long = MAX_APK_IMPORT_BYTES
 ):File {
+ val operationJob=currentCoroutineContext()[Job]
  require(maxBytes > 0L) { "حد حجم الملف غير صالح." }
  val declaredSize = try {
   context.contentResolver.query(uri,arrayOf(OpenableColumns.SIZE),null,null,null)?.use { cursor ->
@@ -834,7 +855,17 @@ private fun copyUriToCache(
  try {
   val copied = context.contentResolver.openInputStream(uri)?.use { input ->
    file.outputStream().buffered().use { output ->
-    BoundedArchiveInput.copy(input,output,copyLimit)
+    val buffer=ByteArray(64*1024)
+   var total=0L
+   while(true) {
+    operationJob?.ensureActive()
+    val count=input.read(buffer)
+    if(count<0) break
+    total=Math.addExact(total,count.toLong())
+    require(total<=copyLimit) { "Archive entry exceeded its configured copy limit." }
+    output.write(buffer,0,count)
+   }
+   total
    }
   } ?: error("تعذر قراءة الملف المحدد.")
   require(declaredSize == null || copied == declaredSize) {
