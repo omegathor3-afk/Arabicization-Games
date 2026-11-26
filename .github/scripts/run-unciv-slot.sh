@@ -109,7 +109,7 @@ fi
 # translation; mechanics only, so no ML Kit download).
 run_connected_test com.omega.arabify.DispatchPathInstrumentedTest || test_status=$?
 if [[ "$test_status" -eq 0 ]]; then
-  echo "::notice::DispatchPathInstrumentedTest PASSED (planner dispatch localized the real game through the slot wrapper; host-signed output verified)"
+  echo "::notice::DispatchPathInstrumentedTest PASSED (real game via slot wrapper + synthetic fixture via gettext wrapper, both through planner dispatch; host-signed outputs verified)"
 fi
 
 # The long connected-test run (ML Kit translating 6.5k strings on
