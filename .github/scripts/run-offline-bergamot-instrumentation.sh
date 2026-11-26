@@ -107,4 +107,15 @@ result = {
 (root / "metrics.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
 print(json.dumps(result, ensure_ascii=False, indent=2))
 PY
+# Public verdict: Actions logs need auth, check-run annotations do not.
+if [[ "$test_status" -eq 0 ]]; then
+  verified=$(python3 -c "import json; print(json.load(open('build/bergamot-instrumented/metrics.json'))['offlineVerified'])" 2>/dev/null || echo unknown)
+  if [[ "$verified" == "True" ]]; then
+    echo "::notice::BergamotOfflineInstrumentedTest PASSED (both Arabic directions translated on-device with airplane mode ON and zero internet-capable networks; offline evidence verified in metrics.json)"
+  else
+    echo "::notice::BergamotOfflineInstrumentedTest exited 0 but offline evidence is INCOMPLETE (offlineVerified=$verified; see metrics.json artifact)"
+  fi
+else
+  echo "::error::BergamotOfflineInstrumentedTest FAILED (exit $test_status); the failing assertion is in the connected test result XML and instrumentation.log artifacts (Actions logs need auth)"
+fi
 exit "$test_status"
