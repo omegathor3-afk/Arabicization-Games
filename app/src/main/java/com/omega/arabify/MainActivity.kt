@@ -320,10 +320,8 @@ private fun ArabifyApp(context: Context) {
   val stamp=System.currentTimeMillis()
   val unsigned=File(context.cacheDir,"arabify-assets-$stamp-unsigned.apk")
   val signed=File(context.cacheDir,"arabify-assets-$stamp-signed.apk")
-  val slotUnsigned=File(context.cacheDir,"arabify-slot-$stamp-unsigned.apk")
-  val slotSigned=File(context.cacheDir,"arabify-slot-$stamp-signed.apk")
-  val poUnsigned=File(context.cacheDir,"arabify-po-$stamp-unsigned.apk")
-  val poSigned=File(context.cacheDir,"arabify-po-$stamp-signed.apk")
+  val dispatchStage=File(context.cacheDir,"arabify-dispatch-$stamp")
+  val dispatchSigned=File(context.cacheDir,"arabify-dispatch-$stamp-signed.apk")
   val bundleStage=File(context.cacheDir,"arabify-assets-$stamp-unsigned-bundles.apk")
   val bundleWork=File(context.cacheDir,"arabify-assets-$stamp-unsigned-bundlework")
   launchTracked({ assetJob=it }) {
@@ -341,37 +339,39 @@ private fun ArabifyApp(context: Context) {
      if(scan.engine==GameEngine.UNITY) {
       UnityMonoLocalizer.localize(context,input!!,unsigned,signed,offlineTranslator,onProgress)
      } else {
-      val fonts=LocaleSlotLocalizer.FontInjection { f -> context.assets.open(f.assetPath).use { it.readBytes() } }
-      val slotReport=runCatchingCancellable {
-       LocaleSlotLocalizer.addArabicLocaleSlotWithFont(input!!,slotUnsigned,fonts) { text ->
-        if(text.isBlank()) text else offlineTranslator.translateEnglishToArabic(text)
-       }
-      }.getOrNull()
-      if(slotReport!=null) {
-       ApkSigningService.signAndVerify(context,slotUnsigned,slotSigned)
-       AssetLocalizationReport(
-        scan.packageName,1,1,slotReport.stringsTranslated,slotReport.stringsSkipped,slotSigned,
-        fitWarnings=slotReport.fitWarnings,fitWarningSamples=slotReport.fitWarningSamples,
-        stringsRepaired=slotReport.stringsRepaired,skipReasons=slotReport.skipReasons,
-        repairReasons=slotReport.repairReasons
+      // Planner dispatch runs the same chain (slot -> gettext -> in-place)
+      // inside this tracked job, so إلغاء التعريب keeps working. Android
+      // resources rewriting stays out of this chain on purpose (it lives in
+      // the installed-app and second file-pick paths).
+      val dispatchDeps=AdapterRuntimeDeps(
+       stagingDir=dispatchStage,
+       fontBytes={ f -> context.assets.open(f.assetPath).use { it.readBytes() } },
+       translate={ text -> if(text.isBlank()) text else offlineTranslator.translateEnglishToArabic(text) },
+       onProgress=onProgress
+      )
+      val registry=ArabifyAdapters.runtimeChainRegistry(dispatchDeps)
+      val artifact=ArtifactRef(id=input!!.name,displayName=scan.fileName,uri=input!!.absolutePath,kind=ArtifactKind.APK,sizeBytes=input!!.length())
+      val dispatch=PlannerDispatch(registry).dispatch(artifact,ResourceBudget())
+      val adapter=registry.find(dispatch.adapterId) ?: error("المهيئ غير موجود: ${dispatch.adapterId}")
+      val locOutput=(adapter as? LibGdxLocaleSlotAdapter)?.lastLocalizationOutput
+       ?: (adapter as? GettextPoAdapter)?.lastLocalizationOutput
+       ?: (adapter as? AndroidAssetsInPlaceAdapter)?.lastLocalizationOutput
+       ?: error("المسار ${dispatch.adapterId} لم ينتج ملف APK.")
+      ApkSigningService.signAndVerify(context,locOutput.outputApk,dispatchSigned)
+      when(locOutput) {
+       is AdapterLocalizationOutput.LocaleSlot -> AssetLocalizationReport(
+        scan.packageName,1,1,locOutput.report.stringsTranslated,locOutput.report.stringsSkipped,dispatchSigned,
+        fitWarnings=locOutput.report.fitWarnings,fitWarningSamples=locOutput.report.fitWarningSamples,
+        stringsRepaired=locOutput.report.stringsRepaired,skipReasons=locOutput.report.skipReasons,
+        repairReasons=locOutput.report.repairReasons
        )
-      } else {
-       val poFonts=GettextPoLocalizer.FontInjection { f -> context.assets.open(f.assetPath).use { it.readBytes() } }
-       val poReport=runCatchingCancellable {
-        GettextPoLocalizer.addArabicGettextSlot(input!!,poUnsigned,poFonts) { text ->
-         if(text.isBlank()) text else offlineTranslator.translateEnglishToArabic(text)
-        }
-       }.getOrNull()
-       if(poReport!=null) {
-        ApkSigningService.signAndVerify(context,poUnsigned,poSigned)
-        AssetLocalizationReport(
-         scan.packageName,1,1,poReport.stringsTranslated,poReport.stringsSkipped,poSigned,
-         stringsRepaired=poReport.stringsRepaired,skipReasons=poReport.skipReasons,
-         repairReasons=poReport.repairReasons
-        )
-       } else {
-        AndroidAssetLocalizer.localize(context,input!!,unsigned,signed,offlineTranslator,onProgress=onProgress)
-       }
+       is AdapterLocalizationOutput.Gettext -> AssetLocalizationReport(
+        scan.packageName,1,1,locOutput.report.stringsTranslated,locOutput.report.stringsSkipped,dispatchSigned,
+        stringsRepaired=locOutput.report.stringsRepaired,skipReasons=locOutput.report.skipReasons,
+        repairReasons=locOutput.report.repairReasons
+       )
+       is AdapterLocalizationOutput.AssetsInPlace -> locOutput.report.copy(packageName=scan.packageName,outputApk=dispatchSigned)
+       is AdapterLocalizationOutput.AndroidResources -> error("موارد Android ليست جزءًا من سلسلة الملفات.")
       }
      }
     }
@@ -379,11 +379,14 @@ private fun ArabifyApp(context: Context) {
    } catch (cancelled: CancellationException) {
     assetError="تم إلغاء التعريب. حُذفت الملفات المؤقتة ولم يتم استبدال اللعبة الأصلية."
     throw cancelled
+   } catch (noAdapter: LocalizationDispatchException) {
+    assetError="تعذر تعريب ملفات النصوص بأي مسار مدعوم."
    } catch (e: Exception) { assetError=e.message ?: "تعذر تعريب ملفات النصوص." }
    finally {
     input?.delete()
-    listOf(unsigned,slotUnsigned,poUnsigned,bundleStage).forEach { it.delete() }
-    listOf(signed,slotSigned,poSigned).filter { it != outputApk }.forEach { it.delete() }
+    listOf(unsigned,bundleStage).forEach { it.delete() }
+    dispatchStage.deleteRecursively()
+    listOf(signed,dispatchSigned).filter { it != outputApk }.forEach { it.delete() }
     bundleWork.deleteRecursively()
     assetBusy=false;assetJob=null
    }
