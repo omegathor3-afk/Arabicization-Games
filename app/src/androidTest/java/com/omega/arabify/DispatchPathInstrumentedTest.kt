@@ -122,15 +122,6 @@ class DispatchPathInstrumentedTest {
                 apk.getInputStream(manifest).use { it.readBytes() }
             }
             val amiri = context.assets.open("fonts/Amiri-Regular.ttf").use { it.readBytes() }
-            // Signing needs a binary manifest to derive minSdk from (apksig
-            // throws MinSdkVersionException without one); borrow the host
-            // app's real binary manifest - signing/verification never check
-            // the package name, and the fixture is never installed.
-            val hostApk = File(context.packageManager.getApplicationInfo(context.packageName, 0).sourceDir)
-            val manifestBytes = ZipFile(hostApk).use { z ->
-                z.getEntry("AndroidManifest.xml")?.let { z.getInputStream(it).readBytes() }
-                    ?: error("host APK has no AndroidManifest.xml")
-            }
             val pot = "msgid \"\"\nmsgstr \"\"\n\"Content-Type: text/plain; charset=UTF-8\\n\"\n\n" +
                 "#: core/src/Menu.java:1\nmsgid \"New Game\"\nmsgstr \"\"\n\n" +
                 "#: core/src/Reward.java:2\nmsgid \"Hit one vehicle\"\nmsgid_plural \"Hit %# vehicles\"\nmsgstr[0] \"\"\nmsgstr[1] \"\"\n\n" +
