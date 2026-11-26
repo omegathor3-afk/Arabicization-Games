@@ -90,7 +90,16 @@ PYX
 }
 
 mkdir -p build/test-game/localized
-adb install build/test-game/minesweeper.apk || exit $?
+# Emulator boot can leave adb flapping; reconnect before installing, and
+# make an install failure loud (observed 2026-11-26 on eb21f61: bare exit 1
+# with no annotation, impossible to diagnose without log access).
+for attempt in $(seq 1 24); do
+  adb_state=$(adb get-state 2>/dev/null | tr -d '\r')
+  [[ "$adb_state" == "device" ]] && break
+  adb reconnect 2>/dev/null || adb reconnect offline 2>/dev/null || true
+  sleep 5
+done
+adb install build/test-game/minesweeper.apk || { install_rc=$?; note_failure "adb install of pinned Minesweeper APK failed (exit $install_rc)"; exit $install_rc; }
 
 test_status=0
 run_connected_test com.omega.arabify.RealGameLocalizationInstrumentedTest || test_status=$?
