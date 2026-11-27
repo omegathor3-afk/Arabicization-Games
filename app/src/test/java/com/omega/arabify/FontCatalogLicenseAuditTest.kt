@@ -21,7 +21,7 @@ class FontCatalogLicenseAuditTest {
             assertTrue("${font.id}: exact upstream license notice is missing: ${font.licenseAssetPath}", noticeFile.isFile)
             val notice = noticeFile.readText()
             assertTrue("${font.id}: notice must identify the copyright holder", notice.lineSequence().any { it.startsWith("Copyright ") })
-            assertTrue("${font.id}: notice must include SIL OFL 1.1", notice.contains("SIL Open Font License Version 1.1"))
+            assertTrue("${font.id}: notice must include SIL OFL 1.1", notice.contains("SIL Open Font License, Version 1.1"))
             assertTrue("${font.id}: catalog license id and bundled notice disagree", font.licenseId == ArabicFontCatalog.LICENSE_OFL_1_1)
             assertTrue("${font.id}: source provenance is missing", font.sourceUrl.startsWith("https://"))
         }
