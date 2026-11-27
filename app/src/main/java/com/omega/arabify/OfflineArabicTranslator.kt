@@ -7,6 +7,7 @@ import com.google.mlkit.nl.translate.TranslateLanguage
 import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.TranslateRemoteModel
 import com.google.mlkit.nl.translate.TranslatorOptions
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.tasks.await
 
 internal fun hasArabicTranslationModel(downloadedLanguages: Set<String>): Boolean =
@@ -15,6 +16,42 @@ internal fun hasArabicTranslationModel(downloadedLanguages: Set<String>): Boolea
 /** True when at least one supported offline English-to-Arabic engine is available. */
 internal fun hasUsableArabicTranslationEngine(mlKitModelDownloaded: Boolean, bundledEngineUsable: Boolean): Boolean =
  mlKitModelDownloaded || bundledEngineUsable
+
+/** Prefer the bundled engine when the optional ML Kit model is not confirmed available. */
+internal fun shouldUseBundledTranslationEngine(mlKitModelDownloaded: Boolean, bundledEngineUsable: Boolean): Boolean =
+ bundledEngineUsable && !mlKitModelDownloaded
+
+/**
+ * Process-local ML Kit model state.
+ *
+ * A failed model-status query is treated as "not confirmed downloaded" so the
+ * bundled offline engine can still be used. A successful explicit download
+ * refreshes a previous negative result instead of leaving the cache stale.
+ */
+internal class MlKitModelAvailability {
+ @Volatile private var downloaded: Boolean? = null
+
+ fun markDownloaded() {
+  downloaded = true
+ }
+
+ fun markUnavailable() {
+  downloaded = false
+ }
+
+ suspend fun resolve(query: suspend () -> Boolean): Boolean {
+  downloaded?.let { return it }
+  val result = try {
+   query()
+  } catch (cancelled: CancellationException) {
+   throw cancelled
+  } catch (_: Exception) {
+   false
+  }
+  downloaded = result
+  return result
+ }
+}
 
 internal class OfflineArabicTranslator(context: Context) {
  private val translationMemory = TranslationMemory()
@@ -27,7 +64,7 @@ internal class OfflineArabicTranslator(context: Context) {
   private set
 
  // Checked once per process: RemoteModelManager is too slow to consult per string.
- private var mlKitArabicAvailable: Boolean? = null
+ private val mlKitAvailability = MlKitModelAvailability()
 
  /** Translation-memory counters for the activity report. */
  val translationMemoryStats: String
@@ -44,6 +81,8 @@ internal class OfflineArabicTranslator(context: Context) {
   val conditionsBuilder = DownloadConditions.Builder()
   if (requireWifi) conditionsBuilder.requireWifi()
   translator.downloadModelIfNeeded(conditionsBuilder.build()).await()
+  // A user-triggered successful download must replace any earlier cached "missing" state.
+  mlKitAvailability.markDownloaded()
  }
 
  // Reverse direction exists for round-trip verification audits (CI evidence
@@ -99,15 +138,17 @@ internal class OfflineArabicTranslator(context: Context) {
   * the same way when the bundled package exists.
   */
  private suspend fun translateWithBestAvailableEngine(text: String): String {
-  val mlKitReady = mlKitArabicAvailable ?: isArabicModelDownloaded().also { mlKitArabicAvailable = it }
-  if (!mlKitReady && bundled.isUsable()) {
+  // The status query can fail independently of both translation engines.
+  // Treat that as "not confirmed" and try the bundled model before ML Kit.
+  val mlKitReady = mlKitAvailability.resolve { isArabicModelDownloaded() }
+  if (shouldUseBundledTranslationEngine(mlKitReady, bundled.isUsable())) {
    lastEngine = "bundled-bergamot"
    return bundled.translateEnglishToArabic(text)
   }
   return try {
    translator.translate(text).await().also { lastEngine = "mlkit" }
   } catch (error: Exception) {
-   mlKitArabicAvailable = false
+   mlKitAvailability.markUnavailable()
    if (!bundled.isUsable()) throw error
    try {
     lastEngine = "bundled-bergamot"
