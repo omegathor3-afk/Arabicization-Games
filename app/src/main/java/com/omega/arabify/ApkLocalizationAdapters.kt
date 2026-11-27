@@ -244,9 +244,10 @@ internal class GettextPoAdapter(private val deps: AdapterRuntimeDeps? = null) : 
             // DispatchPathInstrumentedTest runs this exact wrapper through
             // PlannerDispatch on a synthetic gettext fixture on the emulator
             // (green 2026-11-26, Unciv slot CI run 45877164859 on 35297fd).
-            // Caveat: the cross-font merge path inside GettextPoLocalizer is
-            // NOT exercised there (fixture uses Amiri for every font slot),
-            // so merge stays unit-fixture evidence.
+            // The cross-font merge path is additionally proven on the REAL
+            // Pixel Wheels game (Pixel Wheels gettext CI run 45932475407 on
+            // 3c50bef: the game ships no Arabic font, so 395 Amiri glyphs
+            // were merged into copies of its Xolonium Regular/Bold fonts).
             evidenceLevel = "EMULATOR_CI",
         )
         lastLocalizationOutput = AdapterLocalizationOutput.Gettext(report, summary)
