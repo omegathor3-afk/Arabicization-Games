@@ -31,12 +31,11 @@ for relative_script, (relative_workflow, artifact_path) in SCRIPT_WORKFLOWS.item
     if artifact_path not in workflow or "actions/upload-artifact@" not in workflow:
         raise SystemExit(f"{relative_workflow} does not archive {artifact_path}")
     if relative_script == ".github/scripts/run-unciv-slot.sh":
-        expected_failure = (
-            'note_failure "no Arabic text and no Arabic language entry visible on the Unciv screen; '
-            'see unciv-visible-screen-text.txt in the workflow artifact"\\n'
-            '            launch_status=1'
-        )
-        if expected_failure not in script:
+        if not re.search(
+            r'note_failure "no Arabic text and no Arabic language entry visible on the Unciv screen; '
+            r'see unciv-visible-screen-text\\.txt in the workflow artifact"\\n\\s+launch_status=1',
+            script,
+        ):
             raise SystemExit("Unciv no-Arabic UI branch must set launch_status=1 after recording the failure.")
     subprocess.run(["bash", "-n", str(script_path)], check=True)
 
