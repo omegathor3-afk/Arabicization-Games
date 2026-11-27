@@ -588,7 +588,8 @@ private fun ArabifyApp(context: Context) {
         }
        }
        
-       }if(busy && selectedInstalledApp!=null) {
+       }
+       if(busy && selectedInstalledApp!=null) {
         val fraction=if(inspectionProgress.second>0) inspectionProgress.first.toFloat()/inspectionProgress.second else 0f
         LinearProgressIndicator(progress={fraction.coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth())
         Text("فحص ملفات التثبيت: ${inspectionProgress.first} من ${inspectionProgress.second}",color=ArabifyPalette.info,fontSize=11.sp)
