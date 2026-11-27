@@ -12,6 +12,7 @@ import java.nio.ByteOrder
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
+import java.util.concurrent.CancellationException
 
 class UnityAssetInventoryTest {
     @Test fun parsesLegacySerializedFileHeaderWithoutEditingPayload() {
@@ -308,6 +309,36 @@ class UnityAssetInventoryTest {
             assertTrue(item.detail.contains("objects=2"))
             assertTrue(item.detail.contains("stage=OBJECT_TABLE_PARSED"))
             assertTrue(item.detail.contains("لم تُقرأ أو تُعدّل"))
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test fun inventoryPropagatesCancellationDuringZipEntryWalk() {
+        val directory = createTempDir(prefix = "arabify-unity-inventory-cancel-")
+        try {
+            val apk = File(directory, "cancel-inventory.apk")
+            ZipOutputStream(apk.outputStream()).use { zip ->
+                repeat(8) { index ->
+                    zip.putNextEntry(ZipEntry("assets/bin/Data/StreamingAssets/text-$index.txt"))
+                    zip.write("sample".toByteArray(Charsets.UTF_8))
+                    zip.closeEntry()
+                }
+            }
+
+            var checks = 0
+            var cancelled = false
+            try {
+                UnityAssetInventoryScanner.inspect(apk, cancellationCheck = {
+                    checks++
+                    if (checks == 3) throw CancellationException("cancel inventory")
+                })
+            } catch (_: CancellationException) {
+                cancelled = true
+            }
+
+            assertTrue(cancelled)
+            assertEquals(3, checks)
         } finally {
             directory.deleteRecursively()
         }

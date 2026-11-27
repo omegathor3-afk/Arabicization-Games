@@ -5,6 +5,7 @@ import java.security.MessageDigest
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.zip.ZipFile
+import kotlinx.coroutines.CancellationException
 
 internal enum class UnityAssetKind {
     STREAMING_TEXT,
@@ -217,7 +218,8 @@ internal object UnityAssetInventoryScanner {
 
     fun inspect(
         apk: File,
-        maxEntriesToScan: Int = MAX_ZIP_ENTRIES_SCANNED
+        maxEntriesToScan: Int = MAX_ZIP_ENTRIES_SCANNED,
+        cancellationCheck: () -> Unit = {}
     ): UnityAssetInventory {
         require(maxEntriesToScan in 1..MAX_ZIP_ENTRIES_SCANNED) {
             "Unity inventory ZIP entry limit is invalid"
@@ -236,6 +238,7 @@ internal object UnityAssetInventoryScanner {
         ZipFile(apk).use { zip ->
             val entries = zip.entries()
             while (entries.hasMoreElements()) {
+                cancellationCheck()
                 if (entriesScanned >= maxEntriesToScan) {
                     scanTruncated = true
                     break
@@ -261,12 +264,15 @@ internal object UnityAssetInventoryScanner {
                         val buffer = ByteArray(MAX_PREFIX_BYTES)
                         var offset = 0
                         while (offset < buffer.size) {
+                            cancellationCheck()
                             val count = input.read(buffer, offset, buffer.size - offset)
                             if (count < 0) break
                             offset += count
                         }
                         buffer.copyOf(offset)
                     }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (_: Exception) {
                     notes += "تعذر قراءة ترويسة أحد ملفات Unity؛ تم تصنيفه للحفظ دون تعديل."
                     byteArrayOf()
@@ -292,9 +298,14 @@ internal object UnityAssetInventoryScanner {
                         )
                     isSerializedName -> {
                         val inspection = try {
-                            zip.getInputStream(entry).use { stream ->
+                            cancellationCheck()
+                            val parsed = zip.getInputStream(entry).use { stream ->
                                 UnitySerializedFileInspector.inspect(stream, size)
                             }
+                            cancellationCheck()
+                            parsed
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
                         } catch (_: Exception) {
                             null
                         }

@@ -6,6 +6,8 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.CancellationException
+import org.junit.Assert.assertTrue
 
 class BoundedArchiveInputTest {
     @Test
@@ -48,6 +50,46 @@ class BoundedArchiveInputTest {
 
         assertEquals(64 * 1024, output.size())
         assertArrayEquals(bytes.copyOf(64 * 1024), output.toByteArray())
+    }
+
+    @Test
+    fun readAllPropagatesCancellationBetweenChunks() {
+        var checks = 0
+        var cancelled = false
+        try {
+            BoundedArchiveInput.readAll(ByteArrayInputStream(ByteArray(32 * 1024)), 32L * 1024L) {
+                checks++
+                if (checks == 2) throw CancellationException("cancel read")
+            }
+        } catch (_: CancellationException) {
+            cancelled = true
+        }
+
+        assertTrue(cancelled)
+        assertEquals(2, checks)
+    }
+
+    @Test
+    fun copyPropagatesCancellationBeforeReadingTheNextChunk() {
+        val output = ByteArrayOutputStream()
+        var checks = 0
+        var cancelled = false
+        try {
+            BoundedArchiveInput.copy(
+                ByteArrayInputStream(ByteArray(128 * 1024)),
+                output,
+                128L * 1024L
+            ) {
+                checks++
+                if (checks == 2) throw CancellationException("cancel copy")
+            }
+        } catch (_: CancellationException) {
+            cancelled = true
+        }
+
+        assertTrue(cancelled)
+        assertEquals(2, checks)
+        assertEquals(64 * 1024, output.size())
     }
 
     @Test

@@ -789,3 +789,11 @@ repackage + run-as).
 - The three tracked jobs are launched through `launchTracked`; UnityFS inspection passes an explicit `ensureActive` cancellation check, and the localization paths report cancellation and clean their temporary APK/work directories in `finally`.
 - Corrected PR #2's stale statement that no user-visible cancellation control existed. **Resume/checkpoint recovery is still absent**; a cancelled localization must be restarted. Import, backup, restore, export, and model-download operations do not all have their own cancel controls, and the current tests do not prove every long file/ZIP loop responds promptly to cancellation.
 - This was an audit/documentation correction, not a new runtime-code change. The exact current-head Android/emulator validation remains pending. Next cancellation work should target untested long-running loops and resumable checkpoints only where the source/output hashes can be revalidated safely.
+
+
+## Entry 78 — Cancellable APK inspection from the Android UI (2026-11-27)
+
+- Found that localization and UnityFS deep inspection already had Cancel buttons, but the initial APK picker and installed-app/Split inspection still launched untracked coroutines. A 1.5 GiB import or a 100,000-entry archive scan could not be cancelled from the UI.
+- Added a tracked `inspectionJob` and Arabic Cancel controls for both manual APK selection and installed-app/Split inspection. Cancellation now reaches bounded input copying, APK ZIP-entry enumeration, font/text reads, and the Unity inventory entry/prefix loops; temporary inspection APKs are still deleted in `finally`.
+- Added JVM regressions proving bounded read/copy cancellation propagates between chunks and Unity inventory cancellation propagates during ZIP entry enumeration. Existing default parameters preserve all current call sites.
+- Exact-head CI is the acceptance gate; no local Gradle build is claimed. Resume/checkpoint recovery remains unimplemented, and cancellation inside a single long SerializedFile parse or PackageManager call is not yet interruptible.

@@ -119,6 +119,7 @@ private fun ArabifyApp(context: Context) {
  var restoreBusy by remember { mutableStateOf(false) }
  var restoreMessage by remember { mutableStateOf<String?>(null) }
  var restoreError by remember { mutableStateOf<String?>(null) }
+ var inspectionJob by remember { mutableStateOf<Job?>(null) }
  var localizationJob by remember { mutableStateOf<Job?>(null) }
  var assetJob by remember { mutableStateOf<Job?>(null) }
  var unityDeepJob by remember { mutableStateOf<Job?>(null) }
@@ -159,10 +160,22 @@ private fun ArabifyApp(context: Context) {
  val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri:Uri? ->
   if(uri!=null) {
    selectedUri=uri;selectedInstalledApp=null;busy=true;error=null;result=null;localizationReport=null;generatedApk=null;unityDeepReport=null;unityDeepError=null
-   scope.launch {
-    try { result=withContext(Dispatchers.IO){ApkInspector.inspect(context,uri)} }
-    catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception){error=e.message ?: "حدث خطأ أثناء فحص الملف."}
-    finally{busy=false;showLocalizationChoice=true}
+   launchTracked({ inspectionJob=it }) {
+    val operationJob=coroutineContext[Job] ?: error("تعذر تتبع فحص APK.")
+    try {
+     result=withContext(Dispatchers.IO) {
+      ApkInspector.inspect(context,uri) { operationJob.ensureActive() }
+     }
+    } catch (cancelled: CancellationException) {
+     error="تم إلغاء فحص APK. لم يتم تعديل الملف الأصلي."
+     throw cancelled
+    } catch (e: Exception) {
+     error=e.message ?: "حدث خطأ أثناء فحص الملف."
+    } finally {
+     busy=false
+     inspectionJob=null
+     showLocalizationChoice=result!=null
+    }
    }
   }
  }
@@ -534,10 +547,29 @@ private fun ArabifyApp(context: Context) {
           unityDeepReport=null;unityDeepError=null
           selectedUri=Uri.fromFile(File(app.apkPath))
           busy=true;inspectionProgress=0 to (1+app.splitCount);error=null;result=null;localizationReport=null;generatedApk=null
-          scope.launch {
-           try { result=withContext(Dispatchers.IO){inspectInstalledPackage(context,app){done,total -> scope.launch { inspectionProgress=done to total }}} }
-           catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception){error=e.message ?: "تعذر فحص التطبيق المثبت."}
-           finally{busy=false;showLocalizationChoice=true}
+          launchTracked({ inspectionJob=it }) {
+           val operationJob=coroutineContext[Job] ?: error("تعذر تتبع فحص التطبيق المثبت.")
+           try {
+            result=withContext(Dispatchers.IO) {
+             inspectInstalledPackage(
+              context,
+              app,
+              onProgress={done,total -> scope.launch {
+               if(inspectionJob?.isActive==true) inspectionProgress=done to total
+              }},
+              cancellationCheck={operationJob.ensureActive()}
+             )
+            }
+           } catch (cancelled: CancellationException) {
+            error="تم إلغاء فحص التطبيق المثبت. لم يتم تعديل أي ملف."
+            throw cancelled
+           } catch (e: Exception) {
+            error=e.message ?: "تعذر فحص التطبيق المثبت."
+           } finally {
+            busy=false
+            inspectionJob=null
+            showLocalizationChoice=result!=null
+           }
           }
          },enabled=!busy,shape=CutCornerShape(10.dp),
          colors=ButtonDefaults.outlinedButtonColors(
@@ -551,6 +583,7 @@ private fun ArabifyApp(context: Context) {
         val fraction=if(inspectionProgress.second>0) inspectionProgress.first.toFloat()/inspectionProgress.second else 0f
         LinearProgressIndicator(progress={fraction.coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth())
         Text("فحص ملفات التثبيت: ${inspectionProgress.first} من ${inspectionProgress.second}",color=ArabifyPalette.info,fontSize=11.sp)
+        TextButton(onClick={ inspectionJob?.cancel(CancellationException("ألغى المستخدم فحص التطبيق المثبت.")) }) { Text("إلغاء الفحص") }
        }
        Text("يتم فحص ملفات APK الأساسية وملفات Split الإضافية كلٌ على حدة. تعريب نصوص مجموعات Split متاح من مسار ملفات النصوص: تُعاد كتابة كل الملفات وتُوقَّع بمفتاح واحد وتُصدَّر كملف ZIP واحد يُثبَّت من قسم الاستعادة.",color=ArabifyPalette.warning,fontSize=11.sp)
       }
@@ -621,7 +654,11 @@ private fun ArabifyApp(context: Context) {
        Text("أو اختر ملف APK يدويًا",color=Color.White,fontSize=18.sp,fontWeight=FontWeight.Bold)
        Text("هذا الخيار احتياطي للتطبيقات التي لا تظهر في القائمة أو لملف APK خارجي.",color=ArabifyPalette.textSecondary,fontSize=13.sp)
        ArabifyCtaButton("اختيار ملف APK",onClick={picker.launch(arrayOf("application/vnd.android.package-archive","application/octet-stream"))},enabled=!busy)
-       if(busy) Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)){CircularProgressIndicator();Text("جارٍ فحص بنية الملف...")}
+       if(busy && selectedInstalledApp==null) Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)){
+        CircularProgressIndicator()
+        Text("جارٍ فحص بنية الملف...")
+        TextButton(onClick={ inspectionJob?.cancel(CancellationException("ألغى المستخدم فحص ملف APK.")) }) { Text("إلغاء الفحص") }
+       }
        error?.let{Text(it,color=ArabifyPalette.danger)}
       }
      }
@@ -960,10 +997,18 @@ private fun loadInstalledApps(context:Context):List<InstalledApp> {
 }
 
 
-private fun inspectInstalledPackage(context:Context, app:InstalledApp,onProgress:(Int,Int)->Unit={_,_->}):ApkScanResult {
+private fun inspectInstalledPackage(
+ context:Context,
+ app:InstalledApp,
+ onProgress:(Int,Int)->Unit={_,_->},
+ cancellationCheck:()->Unit={}
+):ApkScanResult {
+ cancellationCheck()
  val files=listOf(app.apkPath)+app.splitApkPaths
  val scans=files.mapIndexed { index,path ->
-  val scan=ApkInspector.inspect(context,Uri.fromFile(File(path)))
+  cancellationCheck()
+  val scan=ApkInspector.inspect(context,Uri.fromFile(File(path)),cancellationCheck)
+  cancellationCheck()
   onProgress(index+1,files.size)
   if(index==0) scan else scan.copy(fileName="split-$index-${File(path).name}")
  }
