@@ -781,3 +781,11 @@ repackage + run-as).
 - Extended the new manifest-integrity regression coverage: a missing staged `manifest.json` must trigger a fresh bounded copy from APK assets rather than reusing the payload-only verification result.
 - Added a nested-directory symlink fixture to prove the verifier checks every path component, not just the final file. The outside target is asserted byte-identical after refusal.
 - These are test-only follow-ups to `9322f74`; exact-head CI remains the acceptance gate. No local Gradle result is claimed.
+
+
+## Entry 77 — Audit of existing cancellation controls (2026-11-27)
+
+- Re-read the current `MainActivity.kt` rather than relying on the earlier backlog wording. The UI already shows a `Cancel` action while Android-resource localization (`localizationJob`), asset localization including Split sets (`assetJob`), and read-only UnityFS deep inspection (`unityDeepJob`) are active.
+- The three tracked jobs are launched through `launchTracked`; UnityFS inspection passes an explicit `ensureActive` cancellation check, and the localization paths report cancellation and clean their temporary APK/work directories in `finally`.
+- Corrected PR #2's stale statement that no user-visible cancellation control existed. **Resume/checkpoint recovery is still absent**; a cancelled localization must be restarted. Import, backup, restore, export, and model-download operations do not all have their own cancel controls, and the current tests do not prove every long file/ZIP loop responds promptly to cancellation.
+- This was an audit/documentation correction, not a new runtime-code change. The exact current-head Android/emulator validation remains pending. Next cancellation work should target untested long-running loops and resumable checkpoints only where the source/output hashes can be revalidated safely.
