@@ -721,3 +721,9 @@ repackage + run-as).
 - A fixture defect (missing binary AndroidManifest.xml broke host signing with MinSdkVersionException on `cc90372`) was fixed independently by ChatGPT (`3fe6b84`) and kept verbatim after dedup (`35297fd`).
 - Validation: standalone JVM suite OK (404 tests) at `2bb7aa3`; all workflows green on `c3c1cae` (Unciv, Mindustry, Android CI, Andor's Trail, CodeQL/Gitleaks, real-translation guard).
 - Next: resources-in-chain decision (ChatGPT); then backlog items (4) verified model manager + offline after-restart test and (5) RTL/font visual verification per runtime. Unciv phone-activation route still awaits Omega's decision.
+
+## Entry 70 — Instinct: bundled first-install offline translation (Omega decision) (2026-11-27)
+
+- Omega decided (03:07 EET): ship the offline model weights inside the APK; first-install offline must work; Instinct owns it. Implemented: build-time staging of the hash-verified Mozilla en-ar package into app assets (never committed), BundledBergamotTranslator (stage → TranslationModelPackageVerifier → native session), OfflineArabicTranslator fallback (ML Kit default; bundled engine when its model is absent or fails; lastEngine observability), and BundledFirstInstallOfflineInstrumentedTest (fresh install + airplane mode + production path). android.yml gains an APK-SIZE public annotation.
+- Validation: local compiles green, standalone suite 404/404; CI device verdict and measured APK size pending on the push SHA.
+- Backlog status: (4) model manager — the first-install offline half is now implemented pending CI proof; the packaging decision is MADE (bundle). Remaining: physical-device memory/thermal validation of the bergamot engine (~250-260 MiB PSS on emulator) and the ML Kit model-manager persistence question. (5) RTL/font visuals and the parked chain questions unchanged.

@@ -15,6 +15,16 @@ internal fun hasArabicTranslationModel(downloadedLanguages: Set<String>): Boolea
 internal class OfflineArabicTranslator(context: Context) {
  private val translationMemory = TranslationMemory()
 
+ /** Bundled first-install offline engine (ships in the APK; Omega's 2026-11-27 decision). */
+ private val bundled = BundledBergamotTranslator(context)
+
+ /** Which engine produced the most recent translation: "mlkit" or "bundled-bergamot". */
+ var lastEngine: String? = null
+  private set
+
+ // Checked once per process: RemoteModelManager is too slow to consult per string.
+ private var mlKitArabicAvailable: Boolean? = null
+
  /** Translation-memory counters for the activity report. */
  val translationMemoryStats: String
   get() = with(translationMemory) { "TM exact=$exactHits fuzzy=$fuzzyHits miss=$misses size=$size" }
@@ -69,10 +79,33 @@ internal class OfflineArabicTranslator(context: Context) {
       translationMemory.placeholderSignature(text) == translationMemory.placeholderSignature(hit.source)) {
    return hit.translation
   }
-  val result = translator.translate(text).await()
+  val result = translateWithBestAvailableEngine(text)
   translationMemory.add(text, result)
   return result
  }
 
- fun close() { translator.close(); backTranslator.close() }
+ /**
+  * ML Kit stays the default once its Arabic model is on the device. When it
+  * is not (fresh install, never online), the Bergamot package bundled in the
+  * APK takes over — that is what makes first-install offline translation
+  * work. An ML Kit failure mid-run (model removed, service error) falls back
+  * the same way when the bundled package exists.
+  */
+ private suspend fun translateWithBestAvailableEngine(text: String): String {
+  val mlKitReady = mlKitArabicAvailable ?: isArabicModelDownloaded().also { mlKitArabicAvailable = it }
+  if (!mlKitReady && bundled.isPackaged()) {
+   lastEngine = "bundled-bergamot"
+   return bundled.translateEnglishToArabic(text)
+  }
+  return try {
+   translator.translate(text).await().also { lastEngine = "mlkit" }
+  } catch (error: Exception) {
+   mlKitArabicAvailable = false
+   if (!bundled.isPackaged()) throw error
+   lastEngine = "bundled-bergamot"
+   bundled.translateEnglishToArabic(text)
+  }
+ }
+
+ fun close() { translator.close(); backTranslator.close(); bundled.close() }
 }
