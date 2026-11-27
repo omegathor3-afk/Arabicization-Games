@@ -19,7 +19,7 @@ class BundledModelPackageStagerTest {
 
     private fun fixture(modelBytes: ByteArray): Fixture {
         val assets = linkedMapOf(
-            "config.yml" to "models:\n  - weights/model.bin\n".toByteArray(),
+            "config.yml" to "models: []\n".toByteArray(),
             "weights/model.bin" to modelBytes,
         )
         val entries = assets.map { (path, bytes) ->
@@ -253,7 +253,7 @@ class BundledModelPackageStagerTest {
                     fixture,
                     limits = TranslationModelVerificationLimits(
                         maxFileCount = 8,
-                        maxFileBytes = 64,
+                        maxFileBytes = 16,
                         maxTotalBytes = 16,
                     ),
                 )
