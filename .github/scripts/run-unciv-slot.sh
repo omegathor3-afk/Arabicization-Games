@@ -112,6 +112,16 @@ if [[ "$test_status" -eq 0 ]]; then
   echo "::notice::DispatchPathInstrumentedTest PASSED (real game via slot wrapper + synthetic fixture via gettext wrapper, both through planner dispatch; host-signed outputs verified)"
 fi
 
+# Repackaging route evidence (Omega's decision 2026-11-27): runs while the
+# ORIGINAL F-Droid-signed Unciv is still installed. Proves signature-conflict
+# detection, the uninstall intent, and a full PackageInstaller session
+# (create/write/fsync, abandoned without commit). The commit's
+# system-confirmation tap is the user's own approval and stays untested.
+run_connected_test com.omega.arabify.RepackageRouteInstrumentedTest || test_status=$?
+if [[ "$test_status" -eq 0 ]]; then
+  echo "::notice::RepackageRouteInstrumentedTest PASSED (signature-conflict detection + uninstall intent + PackageInstaller session on-device; user confirmation tap is the only untested step)"
+fi
+
 # The long connected-test run (ML Kit translating 6.5k strings on
 # swiftshader) can drop the adb connection; observed 2026-11-25: green
 # test, then every pull failed with "device offline". Reconnect first.
