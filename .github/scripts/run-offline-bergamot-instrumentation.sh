@@ -40,6 +40,14 @@ if gradle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments
 else
   test_status=$?
 fi
+# First-install proof: the app APK (which now carries the bundled en-ar
+# package in its assets) must translate through the PRODUCTION path with
+# the network fully off. Same emulator, same enforced offline state.
+if gradle connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.omega.arabify.BundledFirstInstallOfflineInstrumentedTest --stacktrace; then
+  fresh_status=0
+else
+  fresh_status=$?
+fi
 # Keep both focused phase markers and the complete device/crash buffers.
 adb logcat -d -v threadtime -s BergamotOfflineTest:I > "$GITHUB_WORKSPACE/build/bergamot-instrumented/instrumentation.log" || true
 adb logcat -b all -d -v threadtime > "$GITHUB_WORKSPACE/build/bergamot-instrumented/device-logcat-all.txt" || true
@@ -118,4 +126,12 @@ if [[ "$test_status" -eq 0 ]]; then
 else
   echo "::error::BergamotOfflineInstrumentedTest FAILED (exit $test_status); the failing assertion is in the connected test result XML and instrumentation.log artifacts (Actions logs need auth)"
 fi
-exit "$test_status"
+if [[ "$fresh_status" -eq 0 ]]; then
+  echo "::notice::BundledFirstInstallOfflineInstrumentedTest PASSED (fresh install of the weight-carrying APK translated English to Arabic through the production path with airplane mode ON and zero internet-capable networks; bundled engine selected)"
+else
+  echo "::error::BundledFirstInstallOfflineInstrumentedTest FAILED (exit $fresh_status); first-install offline translation through the production path is broken (see connected test result XML artifact)"
+fi
+if [[ "$test_status" -ne 0 ]]; then
+  exit "$test_status"
+fi
+exit "$fresh_status"
