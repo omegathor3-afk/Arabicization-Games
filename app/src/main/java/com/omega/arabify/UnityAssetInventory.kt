@@ -167,7 +167,10 @@ internal object UnityArchiveHeaderParser {
             if (declaredSize < headerSize || declaredSize > actualLength) return null
             if (compressedInfo == 0L || uncompressedInfo == 0L) return null
             if (compressedInfo > MAX_BLOCK_INFO_BYTES || uncompressedInfo > MAX_BLOCK_INFO_BYTES) return null
-            if (compressedInfo > declaredSize || uncompressedInfo > declaredSize) return null
+            // Only the compressed block-info bytes must fit inside the archive. The
+            // decoded metadata may legitimately be larger than the whole compressed
+            // bundle, so it is bounded by MAX_BLOCK_INFO_BYTES above instead.
+            if (compressedInfo > declaredSize) return null
 
             UnityArchiveHeader(
                 signature, version, playerVersion, engineVersion, declaredSize,

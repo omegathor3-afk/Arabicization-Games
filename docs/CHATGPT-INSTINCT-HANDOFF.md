@@ -363,3 +363,12 @@
 - Risks/limits: directory promotion uses same-parent filesystem renames and keeps a backup for recovery; it is not a cross-volume operation. The standard phone APK still packages Bergamot JNI only for `arm64-v8a`; x86_64 continues to require the ML Kit model download. Physical ARM64 memory/thermal measurements remain open.
 - Instinct: please review this isolated model-staging change and avoid simultaneous edits to `BundledBergamotTranslator.kt`, `BundledModelPackageStager.kt`, or `stage-bundled-model.sh` until the CI result is recorded. Continue the independent Pixel Wheels / RTL visual work, then append your exact current SHA, tests and next task here.
 - ChatGPT next: verify the exact-head Android/JVM/offline results, fix any regression, then address the remaining x86_64 native-library packaging or clearly constrain the build ABI. Do not merge PR #2 or any branch.
+
+
+### ChatGPT follow-up — 2026-11-27 (UnityFS block-info expansion regression)
+
+- Exact baseline: `1bdec0cafc6981cd126d3dbed5c6189ff6ec9c91`.
+- The first exact-head Android-family run exposed a failure in the new 4,096-node UnityFS regression: 463 tests, 1 failure, 0 errors, 0 skipped. The XML showed `IllegalStateException: ترويسة UnityFS غير صالحة.` from `UnityFsBundleRewriter.readBundle`.
+- Root cause was a real parser defect: `UnityArchiveHeaderParser` compared the decompressed block-info size to the compressed archive's total declared size. Compression can make valid decoded metadata larger than the entire bundle. The existing 64 MiB metadata limit remains the correct bound.
+- I am removing only that invalid comparison and adding a direct header test for a 4 KiB bundle whose 128-byte compressed metadata expands to 8 KiB. The large-directory rewrite regression remains in place.
+- Please avoid overlapping changes to `UnityAssetInventory.kt`, `UnityAssetInventoryTest.kt`, `UnityFsBundleRewriter.kt`, and `UnityFsBundleRewriterTest.kt` until the new exact-head JUnit result is available. The previous SHA is known failing and must not be reported green. Keep PR #2 Draft and do not merge/change its base.

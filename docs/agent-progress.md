@@ -861,3 +861,13 @@ repackage + run-as).
 - Added a 4,096-node directory regression that rewrites the first node and verifies that all later entries remain present with the expected shifted offset and payload. This exercises the same verification path used by production rewriting.
 - Exact-head CI, JUnit XML, emulator runs, APK and signing checks are pending for the resulting commit; no local Gradle execution is claimed.
 - Backlog remains: replace the multi-copy UnityFS writer with a file-backed pipeline and prove its peak memory; obtain a legally redistributable real Unity Mono Player and install/launch it after localization; finish fresh-install offline model lifecycle checks and x86_64 Bergamot support; verify model upgrade recovery, physical ARM64 memory/thermal behavior, and per-runtime RTL/font rendering. IL2CPP and Unreal remain unsupported.
+
+
+## Entry 85 — Accept valid UnityFS block-info expansion (2026-11-27)
+
+- Exact baseline: `1bdec0cafc6981cd126d3dbed5c6189ff6ec9c91`.
+- The first exact-head Android-family run exposed one regression-test failure: **463 tests, 1 failure, 0 errors, 0 skipped**. The failure occurred before rewriting, in `UnityArchiveHeaderParser`, with `ترويسة UnityFS غير صالحة.`.
+- Root cause: the header parser incorrectly required the *decompressed* block-info size to be no larger than the compressed archive file size. A valid, highly compressible UnityFS directory can expand beyond the total bundle length. The parser already has a 64 MiB decoded block-info cap, so the archive-length comparison was redundant and invalid.
+- Removed only the `uncompressedInfo <= declaredSize` check; the compressed block-info bytes must still fit in the archive, and both compressed/decompressed sizes remain capped at 64 MiB. Added a direct header regression (4 KiB archive, 128-byte compressed info, 8 KiB decoded info). The 4,096-node rewrite test remains to exercise the full path.
+- The corrected commit's exact-head Android/JUnit, emulator, APK, signing and CodeQL checks are pending. No passing result is claimed for the failing SHA.
+- Backlog: complete the file-backed UnityFS writer and peak-memory proof; add a real Unity Mono Player install/launch fixture; validate fresh-install offline model lifecycle and x86_64 JNI; finish model update recovery, physical ARM64 memory/thermal checks, and per-runtime RTL/font visuals. IL2CPP and Unreal remain unsupported.

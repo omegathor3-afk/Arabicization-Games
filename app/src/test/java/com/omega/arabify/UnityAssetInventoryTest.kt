@@ -133,6 +133,29 @@ class UnityAssetInventoryTest {
         assertEquals(prefix.size, header.headerSize)
     }
 
+    @Test fun acceptsUnityFsBlockInfoThatExpandsBeyondTheCompressedArchiveSize() {
+        val output = java.io.ByteArrayOutputStream()
+        java.io.DataOutputStream(output).use { data ->
+            data.write("UnityFS".toByteArray(Charsets.US_ASCII))
+            data.writeByte(0)
+            data.writeInt(7)
+            data.write("5.x".toByteArray(Charsets.US_ASCII))
+            data.writeByte(0)
+            data.write("2019.4.40f1".toByteArray(Charsets.US_ASCII))
+            data.writeByte(0)
+            data.writeLong(4_096L)
+            data.writeInt(128)
+            data.writeInt(8_192)
+            data.writeInt(0x2)
+        }
+
+        val prefix = output.toByteArray()
+        val header = UnityArchiveHeaderParser.parse(prefix, 4_096L)
+
+        assertNotNull("Compressed UnityFS metadata may expand beyond the archive size", header)
+        assertEquals(8_192L, header!!.uncompressedBlocksInfoSize)
+    }
+
     @Test fun rejectsTruncatedAndOutOfBoundsUnityFsHeaders() {
         val output = java.io.ByteArrayOutputStream()
         java.io.DataOutputStream(output).use { data ->
