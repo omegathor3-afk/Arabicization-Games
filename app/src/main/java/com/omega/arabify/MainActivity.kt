@@ -85,6 +85,9 @@ private fun ArabifyApp(context: Context) {
  val scope=rememberCoroutineScope()
  var result by remember { mutableStateOf<ApkScanResult?>(null) }
  var installedApps by remember { mutableStateOf<List<InstalledApp>>(emptyList()) }
+ var installedAppsLoading by remember { mutableStateOf(true) }
+ var installedAppsError by remember { mutableStateOf<String?>(null) }
+ var installedAppsRefreshKey by remember { mutableIntStateOf(0) }
  var appSearch by remember { mutableStateOf("") }
  var selectedInstalledApp by remember { mutableStateOf<InstalledApp?>(null) }
  var error by remember { mutableStateOf<String?>(null) }
@@ -131,7 +134,20 @@ private fun ArabifyApp(context: Context) {
   job.start()
  }
 
- LaunchedEffect(context) { installedApps = withContext(Dispatchers.IO) { loadInstalledApps(context) } }
+ LaunchedEffect(context, installedAppsRefreshKey) {
+  installedAppsLoading = true
+  installedAppsError = null
+  try {
+   installedApps = withContext(Dispatchers.IO) { loadInstalledApps(context) }
+  } catch (cancelled: CancellationException) {
+   throw cancelled
+  } catch (e: Exception) {
+   installedApps = emptyList()
+   installedAppsError = "تعذر تحميل قائمة التطبيقات المثبتة (${e.javaClass.simpleName}). أعد المحاولة أو اختر ملف APK يدويًا."
+  } finally {
+   installedAppsLoading = false
+  }
+ }
  val clipboardManager=LocalClipboardManager.current
  val offlineTranslator = remember(context) { OfflineArabicTranslator(context) }
  DisposableEffect(offlineTranslator) { onDispose { offlineTranslator.close() } }
@@ -524,70 +540,111 @@ private fun ArabifyApp(context: Context) {
        Text("تظهر هنا التطبيقات المثبتة التي لها أيقونة تشغيل. اختر تطبيقًا لقراءة ملف التثبيت الأساسي محليًا.",color=ArabifyPalette.textSecondary,fontSize=12.sp)
        OutlinedTextField(value=appSearch,onValueChange={appSearch=it},label={Text("ابحث عن لعبة أو تطبيق")},modifier=Modifier.fillMaxWidth(),singleLine=true)
        val visibleApps=installedApps.filter { it.label.contains(appSearch,true) || it.packageName.contains(appSearch,true) }
-       Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
-        Text("التطبيقات المتاحة",color=ArabifyPalette.textSecondary,fontSize=11.sp,fontWeight=FontWeight.SemiBold)
-        Text("${visibleApps.size} نتيجة",color=ArabifyPalette.primary,fontSize=11.sp,fontWeight=FontWeight.Bold)
-       }
-       if(visibleApps.isEmpty()) Text("لا توجد نتائج. تأكد من تثبيت التطبيق أو استخدم اختيار APK اليدوي.",color=ArabifyPalette.textMuted,fontSize=12.sp)
-       LazyColumn(Modifier.fillMaxWidth().heightIn(max=520.dp), verticalArrangement=Arrangement.spacedBy(8.dp)) {
-        items(visibleApps, key={it.packageName}) { app ->
-        val rowSelected=selectedInstalledApp?.packageName==app.packageName
-        Row(Modifier.fillMaxWidth().clip(CutCornerShape(10.dp)).background(if(rowSelected) ArabifyPalette.surfaceAccent else ArabifyPalette.surfaceRaised).border(1.dp,if(rowSelected) ArabifyPalette.outlineNeon else ArabifyPalette.outline,CutCornerShape(10.dp)).padding(horizontal=10.dp,vertical=7.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(11.dp)) {
-         val appIcon=rememberInstalledAppIcon(context,app.packageName)
-         Box(Modifier.size(44.dp).clip(CutCornerShape(10.dp)).background(ArabifyPalette.canvas).border(1.dp,ArabifyPalette.outlineNeon.copy(alpha=0.7f),CutCornerShape(10.dp)).padding(4.dp)) {
-          if (appIcon != null) {
-           Image(bitmap=appIcon,contentDescription="أيقونة التطبيق",modifier=Modifier.fillMaxSize().clip(CutCornerShape(6.dp)))
-          } else {
-           Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) {
-            Text(app.label.take(1).uppercase(),color=ArabifyPalette.primary,fontWeight=FontWeight.Bold,fontSize=18.sp)
-           }
-          }
-         }
-         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)) {
-          Text(app.label,color=ArabifyPalette.textPrimary,fontWeight=FontWeight.SemiBold,fontSize=14.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
-          Text(app.packageName,color=ArabifyPalette.textMuted,fontSize=10.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
-          if(app.splitCount>0) Text("حزمة أساسية + ${app.splitCount} ملفات Split إضافية",color=ArabifyPalette.warning,fontSize=10.sp)
-         }
-         // Row actions stay quiet - the gold belongs to primary CTAs. Selected
-         // rows get a subtle fill so state is still readable at a glance.
-         OutlinedButton(onClick={
-          selectedInstalledApp=app
-          unityDeepReport=null;unityDeepError=null
-          selectedUri=Uri.fromFile(File(app.apkPath))
-          busy=true;inspectionProgress=0 to (1+app.splitCount);error=null;result=null;localizationReport=null;generatedApk=null
-          launchTracked({ inspectionJob=it }) {
-           val operationJob=coroutineContext[Job] ?: error("تعذر تتبع فحص التطبيق المثبت.")
-           try {
-            result=withContext(Dispatchers.IO) {
-             inspectInstalledPackage(
-              context,
-              app,
-              onProgress={done,total -> scope.launch {
-               if(inspectionJob?.isActive==true) inspectionProgress=done to total
-              }},
-              cancellationCheck={operationJob.ensureActive()}
-             )
-            }
-           } catch (cancelled: CancellationException) {
-            error="تم إلغاء فحص التطبيق المثبت. لم يتم تعديل أي ملف."
-            throw cancelled
-           } catch (e: Exception) {
-            error=e.message ?: "تعذر فحص التطبيق المثبت."
-           } finally {
-            busy=false
-            inspectionJob=null
-            showLocalizationChoice=result!=null
-           }
-          }
-         },enabled=!busy,shape=CutCornerShape(10.dp),
-         colors=ButtonDefaults.outlinedButtonColors(
-          containerColor=if(rowSelected) ArabifyPalette.surfaceAccent else Color.Transparent,
-          contentColor=ArabifyPalette.primary),
-         border=BorderStroke(1.dp,if(rowSelected) ArabifyPalette.primary else ArabifyPalette.outline),
-         modifier=Modifier.semantics { contentDescription = "اختيار ${app.label} ${app.packageName}" }) { Text(if(rowSelected) "محدد" else "اختيار") }
+       when (val contentState = installedAppsContentState(
+        isLoading = installedAppsLoading,
+        error = installedAppsError,
+        totalCount = installedApps.size,
+        visibleCount = visibleApps.size
+       )) {
+        InstalledAppsContentState.Loading -> Row(
+         Modifier.fillMaxWidth().padding(vertical=8.dp),
+         verticalAlignment=Alignment.CenterVertically,
+         horizontalArrangement=Arrangement.spacedBy(10.dp)
+        ) {
+         CircularProgressIndicator(
+          modifier=Modifier.size(20.dp).semantics { contentDescription = "جارٍ تحميل التطبيقات المثبتة" },
+          strokeWidth=2.dp
+         )
+         Text("جارٍ البحث عن التطبيقات والألعاب المثبتة…",color=ArabifyPalette.info,fontSize=12.sp)
         }
-       }
-       
+        is InstalledAppsContentState.Error -> Column(
+         Modifier.fillMaxWidth().padding(vertical=6.dp),
+         verticalArrangement=Arrangement.spacedBy(8.dp)
+        ) {
+         Text(contentState.message,color=ArabifyPalette.danger,fontSize=12.sp)
+         OutlinedButton(onClick={ installedAppsRefreshKey++ },enabled=!busy) {
+          Text("إعادة المحاولة")
+         }
+        }
+        is InstalledAppsContentState.Empty -> Column(
+         Modifier.fillMaxWidth().padding(vertical=6.dp),
+         verticalArrangement=Arrangement.spacedBy(8.dp)
+        ) {
+         val message = when(contentState.reason) {
+          InstalledAppsEmptyReason.NO_LAUNCHER_APPS -> "لم يتم العثور على تطبيقات لها أيقونة تشغيل. يمكنك اختيار ملف APK يدويًا."
+          InstalledAppsEmptyReason.NO_SEARCH_MATCHES -> "لا توجد نتائج تطابق البحث. جرّب اسمًا أو رقم حزمة مختلفًا."
+         }
+         Text(message,color=ArabifyPalette.textMuted,fontSize=12.sp)
+         if(contentState.reason==InstalledAppsEmptyReason.NO_LAUNCHER_APPS) {
+          OutlinedButton(onClick={ installedAppsRefreshKey++ },enabled=!busy) { Text("إعادة فحص التطبيقات") }
+         }
+        }
+        is InstalledAppsContentState.Results -> {
+         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween) {
+          Column(verticalArrangement=Arrangement.spacedBy(2.dp)) {
+           Text("التطبيقات المتاحة",color=ArabifyPalette.textSecondary,fontSize=11.sp,fontWeight=FontWeight.SemiBold)
+           Text("${contentState.count} نتيجة",color=ArabifyPalette.primary,fontSize=11.sp,fontWeight=FontWeight.Bold)
+          }
+          TextButton(onClick={ installedAppsRefreshKey++ },enabled=!busy) { Text("تحديث القائمة") }
+         }
+         LazyColumn(Modifier.fillMaxWidth().heightIn(max=520.dp), verticalArrangement=Arrangement.spacedBy(8.dp)) {
+          items(visibleApps, key={it.packageName}) { app ->
+          val rowSelected=selectedInstalledApp?.packageName==app.packageName
+          Row(Modifier.fillMaxWidth().clip(CutCornerShape(10.dp)).background(if(rowSelected) ArabifyPalette.surfaceAccent else ArabifyPalette.surfaceRaised).border(1.dp,if(rowSelected) ArabifyPalette.outlineNeon else ArabifyPalette.outline,CutCornerShape(10.dp)).padding(horizontal=10.dp,vertical=7.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(11.dp)) {
+           val appIcon=rememberInstalledAppIcon(context,app.packageName)
+           Box(Modifier.size(44.dp).clip(CutCornerShape(10.dp)).background(ArabifyPalette.canvas).border(1.dp,ArabifyPalette.outlineNeon.copy(alpha=0.7f),CutCornerShape(10.dp)).padding(4.dp)) {
+            if (appIcon != null) {
+             Image(bitmap=appIcon,contentDescription="أيقونة التطبيق",modifier=Modifier.fillMaxSize().clip(CutCornerShape(6.dp)))
+            } else {
+             Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) {
+              Text(app.label.take(1).uppercase(),color=ArabifyPalette.primary,fontWeight=FontWeight.Bold,fontSize=18.sp)
+             }
+            }
+           }
+           Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)) {
+            Text(app.label,color=ArabifyPalette.textPrimary,fontWeight=FontWeight.SemiBold,fontSize=14.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
+            Text(app.packageName,color=ArabifyPalette.textMuted,fontSize=10.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
+            if(app.splitCount>0) Text("حزمة أساسية + ${app.splitCount} ملفات Split إضافية",color=ArabifyPalette.warning,fontSize=10.sp)
+           }
+           OutlinedButton(onClick={
+            selectedInstalledApp=app
+            unityDeepReport=null;unityDeepError=null
+            selectedUri=Uri.fromFile(File(app.apkPath))
+            busy=true;inspectionProgress=0 to (1+app.splitCount);error=null;result=null;localizationReport=null;generatedApk=null
+            launchTracked({ inspectionJob=it }) {
+             val operationJob=coroutineContext[Job] ?: error("تعذر تتبع فحص التطبيق المثبت.")
+             try {
+              result=withContext(Dispatchers.IO) {
+               inspectInstalledPackage(
+                context,
+                app,
+                onProgress={done,total -> scope.launch {
+                 if(inspectionJob?.isActive==true) inspectionProgress=done to total
+                }},
+                cancellationCheck={operationJob.ensureActive()}
+               )
+              }
+             } catch (cancelled: CancellationException) {
+              error="تم إلغاء فحص التطبيق المثبت. لم يتم تعديل أي ملف."
+              throw cancelled
+             } catch (e: Exception) {
+              error=e.message ?: "تعذر فحص التطبيق المثبت."
+             } finally {
+              busy=false
+              inspectionJob=null
+              showLocalizationChoice=result!=null
+             }
+            }
+           },enabled=!busy,shape=CutCornerShape(10.dp),
+           colors=ButtonDefaults.outlinedButtonColors(
+            containerColor=if(rowSelected) ArabifyPalette.surfaceAccent else Color.Transparent,
+            contentColor=ArabifyPalette.primary),
+           border=BorderStroke(1.dp,if(rowSelected) ArabifyPalette.primary else ArabifyPalette.outline),
+           modifier=Modifier.semantics { contentDescription = "اختيار ${app.label} ${app.packageName}" }) { Text(if(rowSelected) "محدد" else "اختيار") }
+          }
+         }
+         }
+        }
        }
        if(busy && selectedInstalledApp!=null) {
         val fraction=if(inspectionProgress.second>0) inspectionProgress.first.toFloat()/inspectionProgress.second else 0f
