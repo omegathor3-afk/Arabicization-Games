@@ -277,30 +277,63 @@ internal object UnityFsBundleRewriter {
         require(decoded.blockInfo.nodes.size == originalInfo.nodes.size) {
             "فشل التحقق: عدد العقد تغيّر."
         }
-        val target = decoded.blockInfo.nodes.singleOrNull { it.path == nodePath }
+        require(UnityBundleNodeSafety.validateNodeLayout(decoded.blockInfo.nodes, actualStream.size.toLong())) {
+            "فشل التحقق: تخطيط العقد الناتج غير آمن."
+        }
+        // Index once: repeatedly calling single { path == ... } for every original
+        // node made verification quadratic on bundles with large directory tables.
+        val newNodesByPath = HashMap<String, UnityBundleNode>(decoded.blockInfo.nodes.size)
+        decoded.blockInfo.nodes.forEach { node ->
+            require(newNodesByPath.put(node.path, node) == null) {
+                "فشل التحقق: مسار عقدة مكرر في الحزمة الناتجة."
+            }
+        }
+        require(newNodesByPath.size == originalInfo.nodes.size) {
+            "فشل التحقق: عدد مسارات العقد الناتجة لا يطابق الأصل."
+        }
+
+        val target = newNodesByPath[nodePath]
             ?: error("فشل التحقق: العقدة الهدف غابت من الحزمة الناتجة.")
         require(target.size == replacement.size.toLong()) {
             "فشل التحقق: حجم العقدة الهدف غير صحيح."
         }
-        val nodeBytes = actualStream.copyOfRange(
-            target.offset.toInt(), (target.offset + target.size).toInt()
-        )
-        require(nodeBytes.contentEquals(replacement)) {
+        require(byteRangesEqual(actualStream, target.offset, replacement, 0L, replacement.size.toLong())) {
             "فشل التحقق: محتوى العقدة الهدف لا يطابق البيانات البديلة."
         }
         originalInfo.nodes.forEach { oldNode ->
             if (oldNode.path == nodePath) return@forEach
-            val newNode = decoded.blockInfo.nodes.single { it.path == oldNode.path }
+            val newNode = newNodesByPath[oldNode.path]
+                ?: error("فشل التحقق: عقدة أصلية غابت من الحزمة الناتجة (" + oldNode.path + ").")
             require(newNode.size == oldNode.size) { "فشل التحقق: حجم عقدة غير مستهدفة تغيّر." }
-            val oldBytes = originalStream.copyOfRange(
-                oldNode.offset.toInt(), (oldNode.offset + oldNode.size).toInt()
-            )
-            val newBytes = actualStream.copyOfRange(
-                newNode.offset.toInt(), (newNode.offset + newNode.size).toInt()
-            )
-            require(newBytes.contentEquals(oldBytes)) {
+            require(byteRangesEqual(originalStream, oldNode.offset, actualStream, newNode.offset, oldNode.size)) {
                 "فشل التحقق: محتوى عقدة غير مستهدفة تغيّر (" + oldNode.path + ")."
             }
         }
+    }
+
+    /**
+     * Compares two validated byte ranges without allocating per-node slices.
+     * Offsets and lengths remain Long until bounds checks prove Int indexing safe.
+     */
+    private fun byteRangesEqual(
+        left: ByteArray,
+        leftOffset: Long,
+        right: ByteArray,
+        rightOffset: Long,
+        length: Long
+    ): Boolean {
+        if (leftOffset < 0L || rightOffset < 0L || length < 0L) return false
+        if (length > left.size.toLong() || length > right.size.toLong()) return false
+        if (leftOffset > left.size.toLong() - length ||
+            rightOffset > right.size.toLong() - length
+        ) return false
+
+        val leftStart = leftOffset.toInt()
+        val rightStart = rightOffset.toInt()
+        val count = length.toInt()
+        for (index in 0 until count) {
+            if (left[leftStart + index] != right[rightStart + index]) return false
+        }
+        return true
     }
 }

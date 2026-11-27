@@ -179,6 +179,37 @@ class UnityFsBundleRewriterTest {
   file.delete()
  }
 
+ @Test fun rewriteLargeDirectoryPreservesAllNodesAndShiftedPayloads() {
+  val untouchedCount = 4096
+  val nodes = ArrayList<FixtureNode>(untouchedCount + 1)
+  nodes += FixtureNode("CAB-target", 4, byteArrayOf(1))
+  repeat(untouchedCount) { index ->
+   val name = "node-" + index.toString().padStart(4, '0') + ".bin"
+   nodes += FixtureNode(name, 0, byteArrayOf((index % 251).toByte()))
+  }
+  val bundle = buildBundle(nodes)
+  val output = File.createTempFile("arabify-large-directory-out", ".unity3d")
+  val replacement = byteArrayOf(7, 8)
+
+  val report = UnityFsBundleRewriter.rewriteNode(bundle, output, "CAB-target", replacement)
+
+  assertEquals(untouchedCount, report.shiftedNodeCount)
+  val streamOut = ByteArrayOutputStream()
+  val decoded = UnityFsBundleDecoder.decode(output, streamOut)
+  assertTrue(decoded != null)
+  assertEquals(untouchedCount + 1, decoded!!.blockInfo.nodes.size)
+  val lastNode = decoded.blockInfo.nodes.single { it.path == nodes.last().path }
+  assertEquals((untouchedCount + 1).toLong(), lastNode.offset)
+  val stream = streamOut.toByteArray()
+  assertTrue(
+   stream.copyOfRange(lastNode.offset.toInt(), lastNode.offset.toInt() + lastNode.size.toInt())
+    .contentEquals(nodes.last().data)
+  )
+
+  bundle.delete()
+  output.delete()
+ }
+
  @Test fun originalBundleIsNeverModified() {
   val nodeA = FixtureNode("CAB-aaaa", 4, ByteArray(2000) { 5 })
   val bundle = buildBundle(listOf(nodeA))
