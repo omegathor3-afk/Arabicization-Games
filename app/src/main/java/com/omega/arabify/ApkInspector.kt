@@ -34,6 +34,23 @@ internal object BoundedArchiveInput {
  fun declaredSizeOrNull(columnIsNull: Boolean, value: Long): Long? =
   if (columnIsNull || value < 0L) null else value
 
+ fun hasSufficientSpace(
+  usableSpace: Long,
+  declaredSize: Long?,
+  maxBytes: Long,
+  reserveBytes: Long
+ ): Boolean {
+  if (usableSpace < 0L || maxBytes < 0L || reserveBytes < 0L) return false
+  val bytesToCopy = declaredSize ?: 0L
+  if (bytesToCopy < 0L || bytesToCopy > maxBytes) return false
+  val required = try {
+   Math.addExact(bytesToCopy, reserveBytes)
+  } catch (_: ArithmeticException) {
+   return false
+  }
+  return usableSpace >= required
+ }
+
  fun copy(
   input: InputStream,
   output: java.io.OutputStream,
@@ -76,7 +93,28 @@ internal object ApkInspector {
  ):ApkScanResult {
   cancellationCheck()
   val resolver=context.contentResolver
-  val name=resolver.query(uri,arrayOf(OpenableColumns.DISPLAY_NAME),null,null,null)?.use { c -> if(c.moveToFirst()) c.getString(0) else null } ?: "selected.apk"
+  val metadata=resolver.query(uri,arrayOf(OpenableColumns.DISPLAY_NAME,OpenableColumns.SIZE),null,null,null)?.use { c ->
+   if(!c.moveToFirst()) null else {
+    val nameIndex=c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+    val sizeIndex=c.getColumnIndex(OpenableColumns.SIZE)
+    val displayName=if(nameIndex>=0) c.getString(nameIndex) else null
+    val declaredSize=if(sizeIndex>=0) BoundedArchiveInput.declaredSizeOrNull(c.isNull(sizeIndex),c.getLong(sizeIndex)) else null
+    displayName to declaredSize
+   }
+  }
+  val name=metadata?.first?.takeIf { !it.isNullOrBlank() } ?: "selected.apk"
+  val declaredSize=metadata?.second
+  require(declaredSize == null || declaredSize <= MAX_APK_BYTES) {
+   "حجم ملف APK يتجاوز حد الفحص الآمن (1.5 GiB)."
+  }
+  require(BoundedArchiveInput.hasSufficientSpace(
+   context.cacheDir.usableSpace,
+   declaredSize,
+   MAX_APK_BYTES,
+   MIN_FREE_SPACE_RESERVE_BYTES
+  )) {
+   "المساحة المتاحة في التخزين المؤقت غير كافية لفحص APK بأمان. وفّر مساحة إضافية ثم أعد المحاولة."
+  }
   cancellationCheck()
   val temp=File.createTempFile("arabify-input-",".apk",context.cacheDir)
   try {
@@ -85,6 +123,9 @@ internal object ApkInspector {
      BoundedArchiveInput.copy(input,output,MAX_APK_BYTES,cancellationCheck)
     }
    } ?: error("تعذر فتح الملف المحدد.")
+   require(declaredSize == null || copied == declaredSize) {
+    "حجم ملف APK لا يطابق الحجم الذي أعلنه مزوّد الملفات."
+   }
    @Suppress("DEPRECATION")
    cancellationCheck()
    val info=try{context.packageManager.getPackageArchiveInfo(temp.absolutePath,0)}catch(_:Exception){null}
