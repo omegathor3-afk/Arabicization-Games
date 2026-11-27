@@ -820,3 +820,10 @@ repackage + run-as).
 - Commits: `8920cf9` (implementation) and `bf285a6` (four tests). Exact current-head Android CI, unit XML, lint, emulator and Debug APK checks are pending; no local Gradle result is claimed.
 - Review note: the 32 MiB reserve is intentionally conservative and can reject a small APK on a nearly-full cache volume rather than risk an interrupted copy. It is not a guarantee against the filesystem filling for unrelated reasons after preflight.
 - Backlog: validate this preflight on exact SHA `bf285a6`; verify the UI list virtualization on the still-running UI screenshot job for `28b93c9`; inspect exact-head APK/model/ABI and offline-after-restart evidence; complete file-backed UnityFS rewriting, real Unity Mono Player launch, model lifecycle and physical-device memory/thermal checks. IL2CPP and Unreal remain unsupported.
+
+
+## Entry 81 — APK preflight self-review correction (2026-11-27)
+
+- A manual review immediately after `bf285a6` found that the new preflight call referenced its 32 MiB reserve constant before that constant had actually been inserted. This would have caused a Kotlin compile error; it was caught before treating any CI result as validation.
+- `c84965c` adds the missing `MIN_FREE_SPACE_RESERVE_BYTES` declaration. The Android CI run for the earlier `bf285a6` was cancelled before unit/build completion, so no passing result is attributed to that incomplete revision.
+- Current code head: `c84965c56b62d348a83580b7cd03c3fb2af85e94`; exact-head Android CI is the next acceptance gate. The four new budget tests remain unverified by Gradle until that run completes.
