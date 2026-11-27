@@ -4,6 +4,7 @@ import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
+import java.nio.file.Files
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -109,6 +110,58 @@ class BundledModelPackageStagerTest {
                 File(root, "weights/model.bin").readBytes(),
             )
             assertFalse(File(parent, ".en-ar.staging").exists())
+        } finally {
+            parent.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun tamperedStoredManifestIsRebuiltFromTheApkManifest() {
+        val parent = createTempDir()
+        try {
+            val root = File(parent, "en-ar")
+            val fixture = fixture("model bytes".toByteArray())
+            var opened = 0
+
+            assertTrue(stage(root, fixture) { path ->
+                opened++
+                fixture.assets.getValue(path)
+            }.accepted)
+            File(root, "manifest.json").writeText("""{"packageId":"tampered"}""")
+
+            val repaired = stage(root, fixture) { path ->
+                opened++
+                fixture.assets.getValue(path)
+            }
+
+            assertTrue(repaired.accepted)
+            assertEquals(4, opened)
+            assertArrayEquals(fixture.manifestJson, File(root, "manifest.json").readBytes())
+        } finally {
+            parent.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun refusesSymlinkedPackageRootWithoutModifyingItsTarget() {
+        val parent = createTempDir()
+        try {
+            val target = File(parent, "real-package")
+            val fixture = fixture("verified model".toByteArray())
+            assertTrue(stage(target, fixture).accepted)
+
+            val alias = File(parent, "alias")
+            Files.createSymbolicLink(alias.toPath(), target.toPath())
+
+            expectFailure<IOException> {
+                stage(alias, fixture) { throw AssertionError("symlink roots must be rejected before asset access") }
+            }
+
+            assertTrue(TranslationModelPackageVerifier.verify(target, fixture.manifest).accepted)
+            assertArrayEquals(
+                fixture.assets.getValue("weights/model.bin"),
+                File(target, "weights/model.bin").readBytes(),
+            )
         } finally {
             parent.deleteRecursively()
         }

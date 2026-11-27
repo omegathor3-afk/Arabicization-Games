@@ -1,6 +1,8 @@
 package com.omega.arabify
 
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.Path
 import java.security.MessageDigest
 
 /** Metadata for one independently licensed local translation package. */
@@ -52,6 +54,7 @@ internal object TranslationModelPackageVerifier {
         limits: TranslationModelVerificationLimits = TranslationModelVerificationLimits()
     ): ModelPackageVerification {
         if (!validLimits(limits)) return rejected("verification_limits_invalid")
+        if (Files.isSymbolicLink(root.toPath())) return rejected("package_directory_symlink")
         if (!root.exists() || !root.isDirectory) return rejected("package_directory_missing")
         if (manifest.packageId.isBlank() || manifest.engine.isBlank() || manifest.engineVersion.isBlank()) {
             return rejected("engine_metadata_missing")
@@ -65,6 +68,7 @@ internal object TranslationModelPackageVerifier {
         if (manifest.files.isEmpty()) return rejected("package_file_list_empty")
         if (manifest.files.size > limits.maxFileCount) return rejected("file_count_limit_exceeded")
 
+        val absoluteRoot = root.absoluteFile.toPath().normalize()
         val canonicalRoot = root.canonicalFile
         val seenFiles = HashSet<String>(manifest.files.size)
         var bytes = 0L
@@ -73,7 +77,11 @@ internal object TranslationModelPackageVerifier {
             if (!sha256Pattern.matches(entry.sha256)) return rejected("sha256_invalid")
             val normalized = normalizeRelativePath(entry.relativePath)
                 ?: return rejected("unsafe_relative_path")
-            val file = File(canonicalRoot, normalized).canonicalFile
+            val lexicalFile = absoluteRoot.resolve(normalized)
+            if (hasSymbolicLinkComponent(absoluteRoot, lexicalFile)) {
+                return rejected("symbolic_link_not_allowed")
+            }
+            val file = lexicalFile.toFile().canonicalFile
             if (!file.toPath().startsWith(canonicalRoot.toPath())) return rejected("path_escape")
             if (!seenFiles.add(file.path)) return rejected("duplicate_file_path")
             if (!file.isFile) return rejected("required_file_missing")
@@ -128,6 +136,16 @@ internal object TranslationModelPackageVerifier {
             }
         ) return null
         return segments.joinToString("/")
+    }
+
+    private fun hasSymbolicLinkComponent(root: Path, target: Path): Boolean {
+        if (!target.startsWith(root)) return true
+        var current = target
+        while (current != root) {
+            if (Files.isSymbolicLink(current)) return true
+            current = current.parent ?: return true
+        }
+        return Files.isSymbolicLink(root)
     }
 
     private fun validLimits(limits: TranslationModelVerificationLimits): Boolean =

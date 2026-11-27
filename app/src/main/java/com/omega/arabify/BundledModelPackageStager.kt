@@ -5,6 +5,8 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
+import java.io.ByteArrayOutputStream
+import java.nio.file.Files
 
 /**
  * Installs a bundled model without ever exposing a partially copied package.
@@ -62,13 +64,31 @@ internal object BundledModelPackageStager {
         val destination = File(canonicalParent, rootName)
         val staging = File(canonicalParent, ".$rootName.staging")
         val backup = File(canonicalParent, ".$rootName.backup")
+        if (listOf(destination, staging, backup).any { Files.isSymbolicLink(it.toPath()) }) {
+            throw IOException("bundled_model_symlink_path")
+        }
 
-        fun verify(directory: File): ModelPackageVerification? =
-            if (directory.isDirectory) {
-                TranslationModelPackageVerifier.verify(directory, manifest, limits)
-            } else {
-                null
+        fun verify(directory: File): ModelPackageVerification? {
+            if (Files.isSymbolicLink(directory.toPath())) {
+                return ModelPackageVerification(false, "bundled_model_directory_symlink")
             }
+            if (!directory.exists()) return null
+            if (!directory.isDirectory) {
+                return ModelPackageVerification(false, "bundled_model_directory_invalid")
+            }
+
+            val storedManifestFile = File(directory, MANIFEST_FILE)
+            if (Files.isSymbolicLink(storedManifestFile.toPath())) {
+                return ModelPackageVerification(false, "bundled_model_manifest_symlink")
+            }
+            val storedManifest = readBounded(storedManifestFile, MAX_MANIFEST_BYTES)
+                ?: return ModelPackageVerification(false, "bundled_model_manifest_missing_or_invalid")
+            if (!storedManifest.contentEquals(manifestJson)) {
+                return ModelPackageVerification(false, "bundled_model_manifest_mismatch")
+            }
+
+            return TranslationModelPackageVerifier.verify(directory, manifest, limits)
+        }
 
         val current = verify(destination)
         if (current?.accepted == true) {
@@ -170,6 +190,24 @@ internal object BundledModelPackageStager {
         } finally {
             if (staging.exists()) staging.deleteRecursively()
         }
+    }
+
+    private fun readBounded(file: File, maxBytes: Int): ByteArray? {
+        if (!file.isFile || file.length() > maxBytes) return null
+        val output = ByteArrayOutputStream()
+        file.inputStream().buffered().use { input ->
+            val buffer = ByteArray(COPY_BUFFER_BYTES)
+            var total = 0
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                if (count == 0) continue
+                if (count > maxBytes - total) return null
+                output.write(buffer, 0, count)
+                total += count
+            }
+        }
+        return output.toByteArray()
     }
 
     private fun copyBounded(

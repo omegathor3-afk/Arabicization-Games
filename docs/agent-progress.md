@@ -764,3 +764,13 @@ repackage + run-as).
 - Commits: `e817eb7`, `2f46df5`, `64b4eba`, `10fd466`, `61b6306`, `aaac6d8`, `eb5c4ef`, `672e1fe`.
 - Validation: pending exact-final-SHA Android CI. No local Gradle test/build is claimed. The eight new tests have not yet been reported as executed.
 - Backlog: (1) verify this batch on the exact head and inspect unit XML; (2) validate fresh-install airplane-mode test; (3) build Bergamot JNI for x86_64 or explicitly constrain standard APK claims; (4) physical ARM64 memory/thermal checks; (5) UnityFS file-backed rewrite and real Unity Player launch; (6) per-runtime RTL/font visuals; (7) IL2CPP and Unreal remain unsupported.
+
+
+## Entry 75 — Bundled model manifest and filesystem-link integrity (2026-11-27)
+
+- Exact baseline: `55d6e0f366d0bcb5d6065312a6a49c850aa0f175`. The branch was ahead of the previous conversational report; the latest actual commit was the model-stager aggregate-budget test fix, not `b3fd515`.
+- Parsed the exact-head Android unit-test artifact: 67 JUnit XML suites, 444 tests, 0 failures, 0 errors, 0 skipped. This is unit-test evidence only; Android CI was still building the pinned Bergamot JNI library and had not yet produced the APK or completed emulator checks.
+- Audit found that `BundledModelPackageStager` copied `manifest.json` but the reuse verifier never compared the staged manifest with the APK's current manifest. A missing or modified manifest could therefore be reused while the code claimed the complete package had been verified. The model payload hashes were checked, but the manifest bytes themselves were not.
+- Hardened staging to require the staged manifest to match the bounded APK manifest byte-for-byte, and to refuse symlinked destination/staging/backup roots. Hardened `TranslationModelPackageVerifier` to reject symlinked package roots and symlink components in every manifest-listed path rather than following them.
+- Added regressions for a tampered staged manifest, a symlinked package root that must not alter its target, and a symlinked manifest-listed payload path. Validation for this change is pending the exact new SHA; no local Gradle run is claimed in this GitHub-only edit session.
+- Backlog remains: complete the exact-head Android build/emulator verdict and inspect APK/artifacts; add a real Unity Mono Player install/launch fixture; implement file-backed UnityFS rewriting; finish the model lifecycle/update/recovery and physical ARM64 memory/thermal gates; verify RTL/font behavior per runtime. IL2CPP and Unreal remain unsupported.

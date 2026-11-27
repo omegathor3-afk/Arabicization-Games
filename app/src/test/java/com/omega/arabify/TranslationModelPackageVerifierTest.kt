@@ -2,6 +2,7 @@ package com.omega.arabify
 
 import java.io.File
 import java.security.MessageDigest
+import java.nio.file.Files
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -52,6 +53,23 @@ class TranslationModelPackageVerifierTest {
             assertFalse(result.accepted)
             assertEquals("unsafe_relative_path", result.reason)
         } finally { root.deleteRecursively() }
+    }
+
+    @Test fun rejectsSymbolicLinksInsteadOfFollowingTheirTargets() {
+        val parent = createTempDir()
+        try {
+            val root = File(parent, "package").apply { mkdirs() }
+            val bytes = "model".toByteArray()
+            val outside = File(parent, "outside.bin").apply { writeBytes(bytes) }
+            Files.createSymbolicLink(File(root, "model.bin").toPath(), outside.toPath())
+
+            val result = TranslationModelPackageVerifier.verify(root, manifest("model.bin", hash(bytes)))
+            assertFalse(result.accepted)
+            assertEquals("symbolic_link_not_allowed", result.reason)
+            assertArrayEquals(bytes, outside.readBytes())
+        } finally {
+            parent.deleteRecursively()
+        }
     }
 
     @Test fun rejectsMissingLicenseMetadata() {
