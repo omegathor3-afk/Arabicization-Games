@@ -88,6 +88,20 @@ jobs:
        build/unitypy/textasset-oracle.properties
       if-no-files-found: ignore
       retention-days: 7
+   - name: Install pinned Android NDK and CMake
+     run: |
+      ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+      SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
+      test -n "$SDKMANAGER" && test -x "$SDKMANAGER"
+      yes | "$SDKMANAGER" --licenses >/dev/null
+      "$SDKMANAGER" --install "ndk;27.2.12479018" "cmake;3.31.6"
+      echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+      echo "$ANDROID_HOME/cmake/3.31.6/bin" >> "$GITHUB_PATH"
+   - name: Build pinned Bergamot JNI library (arm64-v8a, phone builds)
+     run: |
+      NINJA="$ANDROID_HOME/cmake/3.31.6/bin/ninja"
+      if [[ ! -x "$NINJA" ]]; then sudo apt-get update && sudo apt-get install -y ninja-build; fi
+      bash native/bergamot/build-android.sh
    - name: Fetch and stage the verified bundled offline model (en-ar)
      run: |
       python3 native/bergamot/audit-mozilla-arabic-models.py
