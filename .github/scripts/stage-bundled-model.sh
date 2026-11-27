@@ -43,7 +43,18 @@ for line in config.read_text(encoding="utf-8").splitlines():
             referenced.append(value)
 
 files = []
-for name in sorted(set(referenced)):
+# The native engine reads config.yml directly, so it is part of the verified
+# package too (not merely a trusted sidecar next to hash-checked weights).
+for name in sorted(set(referenced) | {"config.yml"}):
+    if (
+        not name
+        or name.startswith("/")
+        or "\\" in name
+        or "\x00" in name
+        or any(part in ("", ".", "..") for part in name.split("/"))
+        or (len(name) >= 2 and name[1] == ":")
+    ):
+        raise SystemExit(f"Unsafe model package path: {name!r}")
     payload = root / name
     if not payload.is_file() or payload.stat().st_size == 0:
         raise SystemExit(f"Missing/empty bundled model file: {payload}")
