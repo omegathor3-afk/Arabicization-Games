@@ -11,8 +11,8 @@ internal data class SelectableFont(
     val weight: Int,
     val licenseId: String,
     val sourceUrl: String,
-    /** Exact bundled notice that must accompany this redistributable font. */
-    val licenseAssetPath: String = "fonts/licenses/OFL-google-fonts.txt",
+    /** Exact upstream copyright + license notice bundled for this font family. */
+    val licenseAssetPath: String,
 )
 
 internal data class FontChoice(
@@ -33,13 +33,13 @@ internal data class FontChoice(
 internal object FontSelector {
     private const val G = "https://raw.githubusercontent.com/google/fonts/main/ofl/"
     val catalog: List<SelectableFont> = listOf(
-        SelectableFont("amiri-regular", "fonts/catalog/amiri-regular.ttf", "Amiri", FontStyleTag.NASKH, 400, "OFL-1.1", G + "amiri/Amiri-Regular.ttf"),
-        SelectableFont("noto-naskh", "fonts/catalog/notonaskharabic-var.ttf", "Noto Naskh Arabic", FontStyleTag.NASKH, 400, "OFL-1.1", G + "notonaskharabic/"),
-        SelectableFont("cairo", "fonts/catalog/cairo-var.ttf", "Cairo", FontStyleTag.KUFI_GEOMETRIC, 400, "OFL-1.1", G + "cairo/"),
-        SelectableFont("tajawal-regular", "fonts/catalog/tajawal-regular.ttf", "Tajawal", FontStyleTag.SANS_MODERN, 400, "OFL-1.1", G + "tajawal/Tajawal-Regular.ttf"),
-        SelectableFont("tajawal-bold", "fonts/catalog/tajawal-bold.ttf", "Tajawal Bold", FontStyleTag.SANS_MODERN, 700, "OFL-1.1", G + "tajawal/Tajawal-Bold.ttf"),
-        SelectableFont("almarai-regular", "fonts/catalog/almarai-regular.ttf", "Almarai", FontStyleTag.SANS_MODERN, 400, "OFL-1.1", G + "almarai/Almarai-Regular.ttf"),
-        SelectableFont("almarai-bold", "fonts/catalog/almarai-bold.ttf", "Almarai Bold", FontStyleTag.SANS_MODERN, 700, "OFL-1.1", G + "almarai/Almarai-Bold.ttf"),
+        SelectableFont("amiri-regular", "fonts/catalog/amiri-regular.ttf", "Amiri", FontStyleTag.NASKH, 400, "OFL-1.1", G + "amiri/Amiri-Regular.ttf", "fonts/licenses/OFL-amiri.txt"),
+        SelectableFont("noto-naskh", "fonts/catalog/notonaskharabic-var.ttf", "Noto Naskh Arabic", FontStyleTag.NASKH, 400, "OFL-1.1", G + "notonaskharabic/", "fonts/licenses/OFL-notonaskharabic.txt"),
+        SelectableFont("cairo", "fonts/catalog/cairo-var.ttf", "Cairo", FontStyleTag.KUFI_GEOMETRIC, 400, "OFL-1.1", G + "cairo/", "fonts/licenses/OFL-cairo.txt"),
+        SelectableFont("tajawal-regular", "fonts/catalog/tajawal-regular.ttf", "Tajawal", FontStyleTag.SANS_MODERN, 400, "OFL-1.1", G + "tajawal/Tajawal-Regular.ttf", "fonts/licenses/OFL-tajawal.txt"),
+        SelectableFont("tajawal-bold", "fonts/catalog/tajawal-bold.ttf", "Tajawal Bold", FontStyleTag.SANS_MODERN, 700, "OFL-1.1", G + "tajawal/Tajawal-Bold.ttf", "fonts/licenses/OFL-tajawal.txt"),
+        SelectableFont("almarai-regular", "fonts/catalog/almarai-regular.ttf", "Almarai", FontStyleTag.SANS_MODERN, 400, "OFL-1.1", G + "almarai/Almarai-Regular.ttf", "fonts/licenses/OFL-almarai.txt"),
+        SelectableFont("almarai-bold", "fonts/catalog/almarai-bold.ttf", "Almarai Bold", FontStyleTag.SANS_MODERN, 700, "OFL-1.1", G + "almarai/Almarai-Bold.ttf", "fonts/licenses/OFL-almarai.txt"),
         SelectableFont("rooyin-regular", "fonts/catalog/rooyinfree-regular.ttf", "Rooyin Free", FontStyleTag.PIXEL, 400, "OFL-1.1", "https://github.com/MohamadDarvishi/Rooyin", "fonts/licenses/OFL-rooyin.txt"),
         SelectableFont("rooyin-bold", "fonts/catalog/rooyinfree-bold.ttf", "Rooyin Free Bold", FontStyleTag.PIXEL, 700, "OFL-1.1", "https://github.com/MohamadDarvishi/Rooyin", "fonts/licenses/OFL-rooyin.txt"),
     )
