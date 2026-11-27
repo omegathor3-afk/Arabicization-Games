@@ -8,6 +8,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.CancellationException
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 
 class BoundedArchiveInputTest {
     @Test
@@ -90,6 +91,48 @@ class BoundedArchiveInputTest {
         assertTrue(cancelled)
         assertEquals(2, checks)
         assertEquals(64 * 1024, output.size())
+    }
+
+    @Test
+    fun cachePreflightRequiresDeclaredSizePlusReserve() {
+        assertTrue(BoundedArchiveInput.hasSufficientSpace(
+            usableSpace = 160L,
+            declaredSize = 100L,
+            maxBytes = 200L,
+            reserveBytes = 60L
+        ))
+        assertFalse(BoundedArchiveInput.hasSufficientSpace(
+            usableSpace = 159L,
+            declaredSize = 100L,
+            maxBytes = 200L,
+            reserveBytes = 60L
+        ))
+    }
+
+    @Test
+    fun unknownProviderSizeStillRequiresSafetyReserve() {
+        assertTrue(BoundedArchiveInput.hasSufficientSpace(32L, null, 200L, 32L))
+        assertFalse(BoundedArchiveInput.hasSufficientSpace(31L, null, 200L, 32L))
+    }
+
+    @Test
+    fun cachePreflightRejectsOversizedDeclaredArchives() {
+        assertFalse(BoundedArchiveInput.hasSufficientSpace(
+            usableSpace = 10_000L,
+            declaredSize = 201L,
+            maxBytes = 200L,
+            reserveBytes = 1L
+        ))
+    }
+
+    @Test
+    fun cachePreflightFailsClosedOnArithmeticOverflow() {
+        assertFalse(BoundedArchiveInput.hasSufficientSpace(
+            usableSpace = Long.MAX_VALUE,
+            declaredSize = Long.MAX_VALUE,
+            maxBytes = Long.MAX_VALUE,
+            reserveBytes = 1L
+        ))
     }
 
     @Test
