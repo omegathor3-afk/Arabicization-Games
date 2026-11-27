@@ -20,6 +20,8 @@ jobs:
   timeout-minutes: 45
   steps:
    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+   - name: Verify screenshot privacy
+     run: python3 .github/scripts/test-screenshot-privacy.py
    - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
      with:
       distribution: temurin
