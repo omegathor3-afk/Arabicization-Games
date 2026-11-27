@@ -83,4 +83,87 @@ class OfflineArabicTranslatorTest {
             assertSame(expected, actual)
         }
     }
+
+    @Test
+    fun cancellationDuringPrimaryTranslationDoesNotStartFallbackOrInvalidateModel() = runBlocking {
+        val expected = CancellationException("cancel primary translation")
+        var fallbackAvailabilityChecked = false
+        var primaryFailureHandled = false
+        var fallbackCalled = false
+
+        try {
+            translateWithFallback(
+                primary = { throw expected },
+                fallbackAvailable = {
+                    fallbackAvailabilityChecked = true
+                    true
+                },
+                onPrimaryFailure = { primaryFailureHandled = true },
+                fallback = {
+                    fallbackCalled = true
+                    "fallback"
+                },
+            )
+            throw AssertionError("primary cancellation must propagate")
+        } catch (actual: CancellationException) {
+            assertSame(expected, actual)
+        }
+
+        assertFalse(fallbackAvailabilityChecked)
+        assertFalse(primaryFailureHandled)
+        assertFalse(fallbackCalled)
+    }
+
+    @Test
+    fun ordinaryPrimaryFailureUsesFallbackAndInvalidatesPrimaryState() = runBlocking {
+        val primaryFailure = IllegalStateException("ML Kit unavailable")
+        var primaryInvalidated = false
+
+        val result = translateWithFallback(
+            primary = { throw primaryFailure },
+            fallbackAvailable = { true },
+            onPrimaryFailure = { primaryInvalidated = true },
+            fallback = { "ترجمة احتياطية" },
+        )
+
+        assertEquals("ترجمة احتياطية", result)
+        assertTrue(primaryInvalidated)
+    }
+
+    @Test
+    fun cancellationDuringFallbackPropagatesInsteadOfMaskingCancellation() = runBlocking {
+        val expected = CancellationException("cancel bundled fallback")
+
+        try {
+            translateWithFallback(
+                primary = { throw IllegalStateException("ML Kit unavailable") },
+                fallbackAvailable = { true },
+                onPrimaryFailure = {},
+                fallback = { throw expected },
+            )
+            throw AssertionError("fallback cancellation must propagate")
+        } catch (actual: CancellationException) {
+            assertSame(expected, actual)
+        }
+    }
+
+    @Test
+    fun fallbackFailureIsSuppressedOnOriginalPrimaryFailure() = runBlocking {
+        val primaryFailure = IllegalStateException("ML Kit unavailable")
+        val fallbackFailure = IllegalArgumentException("Bergamot unavailable")
+
+        try {
+            translateWithFallback(
+                primary = { throw primaryFailure },
+                fallbackAvailable = { true },
+                onPrimaryFailure = {},
+                fallback = { throw fallbackFailure },
+            )
+            throw AssertionError("the primary failure should be preserved")
+        } catch (actual: IllegalStateException) {
+            assertSame(primaryFailure, actual)
+            assertEquals(1, actual.suppressed.size)
+            assertSame(fallbackFailure, actual.suppressed.single())
+        }
+    }
 }

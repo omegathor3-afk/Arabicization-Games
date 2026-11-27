@@ -53,6 +53,36 @@ internal class MlKitModelAvailability {
  }
 }
 
+/**
+ * Runs the primary translator and falls back only for ordinary engine failures.
+ * Coroutine cancellation is control flow, not a translation failure: it must
+ * propagate from either engine without invalidating ML Kit state or starting
+ * additional native work.
+ */
+internal suspend fun <T> translateWithFallback(
+ primary: suspend () -> T,
+ fallbackAvailable: () -> Boolean,
+ onPrimaryFailure: (Exception) -> Unit,
+ fallback: suspend () -> T,
+): T {
+ try {
+  return primary()
+ } catch (cancelled: CancellationException) {
+  throw cancelled
+ } catch (error: Exception) {
+  onPrimaryFailure(error)
+  if (!fallbackAvailable()) throw error
+  return try {
+   fallback()
+  } catch (cancelled: CancellationException) {
+   throw cancelled
+  } catch (fallbackError: Exception) {
+   if (fallbackError !== error) error.addSuppressed(fallbackError)
+   throw error
+  }
+ }
+}
+
 internal class OfflineArabicTranslator(context: Context) {
  private val translationMemory = TranslationMemory()
 
@@ -142,23 +172,16 @@ internal class OfflineArabicTranslator(context: Context) {
   // Treat that as "not confirmed" and try the bundled model before ML Kit.
   val mlKitReady = mlKitAvailability.resolve { isArabicModelDownloaded() }
   if (shouldUseBundledTranslationEngine(mlKitReady, bundled.isUsable())) {
-   lastEngine = "bundled-bergamot"
-   return bundled.translateEnglishToArabic(text)
+   return bundled.translateEnglishToArabic(text).also { lastEngine = "bundled-bergamot" }
   }
-  return try {
-   translator.translate(text).await().also { lastEngine = "mlkit" }
-  } catch (error: Exception) {
-   mlKitAvailability.markUnavailable()
-   if (!bundled.isUsable()) throw error
-   try {
-    lastEngine = "bundled-bergamot"
-    bundled.translateEnglishToArabic(text)
-   } catch (bundledError: Exception) {
-    // Never mask the original engine failure behind the fallback's.
-    error.addSuppressed(bundledError)
-    throw error
-   }
-  }
+  return translateWithFallback(
+   primary = { translator.translate(text).await().also { lastEngine = "mlkit" } },
+   fallbackAvailable = { bundled.isUsable() },
+   onPrimaryFailure = { mlKitAvailability.markUnavailable() },
+   fallback = {
+    bundled.translateEnglishToArabic(text).also { lastEngine = "bundled-bergamot" }
+   },
+  )
  }
 
  fun close() { translator.close(); backTranslator.close(); bundled.close() }
