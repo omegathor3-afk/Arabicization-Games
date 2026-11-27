@@ -87,7 +87,9 @@ internal object BundledModelPackageStager {
                 throw IOException("bundled_model_backup_restore_failed")
             }
             staging.deleteRecursively()
-            return verify(destination) ?: previous
+            val restored = verify(destination)
+            if (restored?.accepted != true) throw IOException("bundled_model_restored_backup_verification_failed")
+            return restored
         }
 
         if (staging.exists() && !staging.deleteRecursively()) {
@@ -101,7 +103,7 @@ internal object BundledModelPackageStager {
             writeSynced(File(staging, MANIFEST_FILE), manifestJson)
             var totalBytes = 0L
 
-            for ((entry, relativePath) in manifest.files.zip(normalizedPaths)) {
+            for (relativePath in normalizedPaths) {
                 val target = resolveContainedFile(staging, relativePath)
                 val targetParent = target.parentFile ?: throw IOException("bundled_model_file_parent_missing")
                 if (!targetParent.isDirectory && !targetParent.mkdirs()) {
