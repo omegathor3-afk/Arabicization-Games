@@ -871,3 +871,9 @@ repackage + run-as).
 - Removed only the `uncompressedInfo <= declaredSize` check; the compressed block-info bytes must still fit in the archive, and both compressed/decompressed sizes remain capped at 64 MiB. Added a direct header regression (4 KiB archive, 128-byte compressed info, 8 KiB decoded info). The 4,096-node rewrite test remains to exercise the full path.
 - The corrected commit's exact-head Android/JUnit, emulator, APK, signing and CodeQL checks are pending. No passing result is claimed for the failing SHA.
 - Backlog: complete the file-backed UnityFS writer and peak-memory proof; add a real Unity Mono Player install/launch fixture; validate fresh-install offline model lifecycle and x86_64 JNI; finish model update recovery, physical ARM64 memory/thermal checks, and per-runtime RTL/font visuals. IL2CPP and Unreal remain unsupported.
+
+## Entry 73 — Instinct: Pixel Wheels in-game Arabic activation leg; gettext merge caveat lifted (2026-11-28)
+
+- Resumed after Omega's pause. ChatGPT's 36-commit batch reviewed: board fully green on 6c9e844; file freezes honored; no disputes. Adopted the new screenshot privacy rule (retain_shot, artifact-only) and registered run-pixelwheels-gettext.sh in the privacy guard.
+- Closed the published Pixel Wheels scope gap: the game maps the Android system locale to a registered language id (verified in its GPL source), and the Arabized build registers <Language id="ar"> with a merged-glyph FontSet, so the job now boots the ARABIFY-signed real-translation APK under ar-EG and retains two validated frames + an ARABIC-ACTIVATION annotation. GettextPoAdapter's extract comment now cites the real-game merge evidence (run 45932475407) instead of the fixture-only caveat.
+- Validation: privacy guard green (7 scripts), bash -n clean, compileDebugKotlin green; device verdict pending.
