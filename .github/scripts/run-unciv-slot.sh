@@ -12,54 +12,16 @@ note_failure() {
   echo "::error::${message}"
 }
 
-DEAD_HOSTS_FILE="build/.upload-shot-dead-hosts"
-host_dead() { [[ -f "$DEAD_HOSTS_FILE" ]] && grep -qx "$1" "$DEAD_HOSTS_FILE"; }
-mark_host_dead() { mkdir -p build; echo "$1" >> "$DEAD_HOSTS_FILE"; }
-# A host that fails once this run stays dead for the rest of the run:
-# 12 swipe screenshots x 5 hosts x per-attempt timeout otherwise eats the
-# whole 60-minute job budget when the hosts are down (observed 2026-11-25:
-# run cancelled at the 1h cap with the test green and evidence pulled).
-upload_shot() {
+# Keep screenshots inside the workflow artifact. Never upload screenshot bytes
+# to third-party hosts or embed them in public log annotations.
+retain_shot() {
   local file="$1" label="$2"
   if [[ ! -s "$file" ]]; then
     echo "::notice::SCREENSHOT ${label}: no file captured"
     return 0
   fi
-  local url err=""
-  if ! host_dead 0x0.st; then
-    url=$(curl --fail --silent --show-error --max-time 60 -F "file=@${file}" https://0x0.st 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || { mark_host_dead 0x0.st; err="0x0.st: $(echo "$url" | tail -c 200)"; }
-  fi
-  if ! host_dead catbox; then
-    url=$(curl --fail --silent --show-error --max-time 60 -F "reqtype=fileupload" -F "fileToUpload=@${file}" https://catbox.moe/user/api.php 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || { mark_host_dead catbox; err="${err} | catbox: $(echo "$url" | tail -c 200)"; }
-  fi
-  if ! host_dead temp.sh; then
-    url=$(curl --fail --silent --show-error --max-time 60 -F "file=@${file}" https://temp.sh/upload 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || { mark_host_dead temp.sh; err="${err} | temp.sh: $(echo "$url" | tail -c 200)"; }
-  fi
-  if ! host_dead file.io; then
-    url=$(curl --fail --silent --show-error --max-time 60 -F "file=@${file}" https://file.io 2>&1 | python3 -c 'import json,sys; print(json.load(sys.stdin).get("link",""))' 2>/dev/null) && [[ -n "$url" ]] && { echo "::notice::SCREENSHOT ${label}: ${url} (single-download link - fetch once)"; return 0; } || { mark_host_dead file.io; err="${err} | file.io: $(echo "$url" | tail -c 200)"; }
-  fi
-  if ! host_dead transfer.sh; then
-    url=$(curl --fail --silent --show-error --max-time 60 --upload-file "$file" "https://transfer.sh/$(basename "$file")" 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || { mark_host_dead transfer.sh; err="${err} | transfer.sh: $(echo "$url" | tail -c 200)"; }
-  fi
-  # Last resort: external file hosts are unreachable from GitHub runners
-  # (observed 2026-11-24: 0x0.st 503, catbox 412, temp.sh 500, file.io empty,
-  # transfer.sh TCP timeout). Embed a downscaled JPEG as base64 inside the
-  # annotation itself - annotations are public and need no egress.
-  local small="build/.upload-shot-small.jpg"
-  if command -v ffmpeg >/dev/null 2>&1; then
-    local scale b64
-    for scale in 720 540 400; do
-      ffmpeg -y -loglevel error -i "$file" -vf "scale=${scale}:-1" -q:v 5 "$small" || continue
-      b64=$(base64 -w0 "$small" 2>/dev/null || base64 "$small" | tr -d '\n')
-      if [[ -n "$b64" && ${#b64} -le 60000 ]]; then
-        echo "::notice::SCREENSHOT-B64 ${label} (JPEG ${scale}px, base64): ${b64}"
-        return 0
-      fi
-    done
-  fi
-  echo "::notice::SCREENSHOT ${label}: upload failed :: ${err}"
+  echo "::notice::SCREENSHOT ${label}: retained only in GitHub Actions artifact (${file})"
 }
-
 
 run_connected_test() {
   local test_class="$1"
@@ -301,29 +263,22 @@ PY
             echo "::notice::UIAutomator hierarchy has zero text nodes on the Unciv picker (libGDX/OpenGL); Arabic visibility is decided by screenshots, not counted as failure"
             echo "NOTE: hierarchy carried no text nodes; Arabic presence verified visually via screenshots." > build/test-game/localized/ui-smoke-validation.txt
             # Scroll the language list so the (completion-sorted) Arabic entry
-            # has a chance to be visible in a capture.
-            # The list is sorted by translation completion and Arabic's rank is
-            # unknown, so capture every scroll position: one of them contains it.
-            # GitHub caps stored annotations at 10 per check run, so the swipe
-            # captures upload quietly and land in ONE combined notice.
-            swipe_links=""
+            # has a chance to be visible. Keep every capture in the workflow
+            # artifact; never upload screenshot bytes or URLs to external hosts.
             for swipe in 1 2 3 4 5 6 7 8 9 10 11 12; do
               adb shell input swipe 1170 800 1170 300 400 >/dev/null 2>&1 || true
               sleep 2
-              adb exec-out screencap -p > "build/test-game/localized/unciv-language-list-${swipe}.png" || true
-              if [[ -s "build/test-game/localized/unciv-language-list-${swipe}.png" ]]; then
-                shot_out=$(upload_shot "build/test-game/localized/unciv-language-list-${swipe}.png" "unciv-language-list-${swipe}")
-                shot_url=$(echo "$shot_out" | grep -o 'https://[^ ]*' | head -1)
-                [[ -n "$shot_url" ]] && swipe_links="${swipe_links}list-${swipe}: ${shot_url} | "
-              fi
+              shot_path="build/test-game/localized/unciv-language-list-${swipe}.png"
+              adb exec-out screencap -p > "$shot_path" || true
+              [[ -s "$shot_path" ]] && retain_shot "$shot_path" "unciv-language-list-${swipe}"
             done
-            echo "::notice::SCREENSHOTS unciv-language-list (12 swipes): ${swipe_links}"
+            echo "::notice::SCREENSHOTS unciv-language-list (12 swipes): retained in GitHub Actions artifact under build/test-game/localized/unciv-language-list-*.png"
           else
             echo "No Arabic text or Arabic language entry was visible in the accessibility hierarchy." >&2
-            # Screenshots are private artifacts, so quote the visible screen
-            # text in the public annotation: it shows which screen the game
-            # was actually on when the check failed.
-            visible_text=$(python3 - "$HIERARCHY_HOST_PATH" <<'PYVIS'
+            # Keep visible UI text in the workflow artifact rather than the
+            # public annotation; the screenshot is retained alongside it.
+            visible_text_file="build/test-game/localized/unciv-visible-screen-text.txt"
+            python3 - "$HIERARCHY_HOST_PATH" > "$visible_text_file" <<'PYVIS'
 import re
 import sys
 try:
@@ -338,9 +293,7 @@ for value in re.findall(r'text="([^"]*)"', xml):
 summary = " | ".join(texts)[:1200]
 print(summary if summary else "<no visible text nodes>")
 PYVIS
-)
-            note_failure "no Arabic text and no Arabic language entry visible on the Unciv screen. Visible screen text: ${visible_text}"
-            launch_status=1
+            note_failure "no Arabic text and no Arabic language entry visible on the Unciv screen; see unciv-visible-screen-text.txt in the workflow artifact"
           fi
         else
           echo "::notice::UIAutomator exposed no hierarchy; relying on screenshot + process checks (not counted as failure)"
@@ -372,7 +325,7 @@ PY
           fi
         fi
         adb logcat -d -v time > build/test-game/localized/game-launch-logcat.txt || true
-        upload_shot build/test-game/localized/unciv-arabic-screen.png "unciv-arabic-screen"
+        retain_shot build/test-game/localized/unciv-arabic-screen.png "unciv-arabic-screen"
       fi
     fi
   fi

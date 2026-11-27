@@ -12,54 +12,16 @@ note_failure() {
   echo "::error::${message}"
 }
 
-DEAD_HOSTS_FILE="build/.upload-shot-dead-hosts"
-host_dead() { [[ -f "$DEAD_HOSTS_FILE" ]] && grep -qx "$1" "$DEAD_HOSTS_FILE"; }
-mark_host_dead() { mkdir -p build; echo "$1" >> "$DEAD_HOSTS_FILE"; }
-# A host that fails once this run stays dead for the rest of the run:
-# 12 swipe screenshots x 5 hosts x per-attempt timeout otherwise eats the
-# whole 60-minute job budget when the hosts are down (observed 2026-11-25:
-# run cancelled at the 1h cap with the test green and evidence pulled).
-upload_shot() {
+# Keep screenshots inside the workflow artifact. Never upload screenshot bytes
+# to third-party hosts or embed them in public log annotations.
+retain_shot() {
   local file="$1" label="$2"
   if [[ ! -s "$file" ]]; then
     echo "::notice::SCREENSHOT ${label}: no file captured"
     return 0
   fi
-  local url err=""
-  if ! host_dead 0x0.st; then
-    url=$(curl --fail --silent --show-error --max-time 60 -F "file=@${file}" https://0x0.st 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || { mark_host_dead 0x0.st; err="0x0.st: $(echo "$url" | tail -c 200)"; }
-  fi
-  if ! host_dead catbox; then
-    url=$(curl --fail --silent --show-error --max-time 60 -F "reqtype=fileupload" -F "fileToUpload=@${file}" https://catbox.moe/user/api.php 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || { mark_host_dead catbox; err="${err} | catbox: $(echo "$url" | tail -c 200)"; }
-  fi
-  if ! host_dead temp.sh; then
-    url=$(curl --fail --silent --show-error --max-time 60 -F "file=@${file}" https://temp.sh/upload 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || { mark_host_dead temp.sh; err="${err} | temp.sh: $(echo "$url" | tail -c 200)"; }
-  fi
-  if ! host_dead file.io; then
-    url=$(curl --fail --silent --show-error --max-time 60 -F "file=@${file}" https://file.io 2>&1 | python3 -c 'import json,sys; print(json.load(sys.stdin).get("link",""))' 2>/dev/null) && [[ -n "$url" ]] && { echo "::notice::SCREENSHOT ${label}: ${url} (single-download link - fetch once)"; return 0; } || { mark_host_dead file.io; err="${err} | file.io: $(echo "$url" | tail -c 200)"; }
-  fi
-  if ! host_dead transfer.sh; then
-    url=$(curl --fail --silent --show-error --max-time 60 --upload-file "$file" "https://transfer.sh/$(basename "$file")" 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || { mark_host_dead transfer.sh; err="${err} | transfer.sh: $(echo "$url" | tail -c 200)"; }
-  fi
-  # Last resort: external file hosts are unreachable from GitHub runners
-  # (observed 2026-11-24: 0x0.st 503, catbox 412, temp.sh 500, file.io empty,
-  # transfer.sh TCP timeout). Embed a downscaled JPEG as base64 inside the
-  # annotation itself - annotations are public and need no egress.
-  local small="build/.upload-shot-small.jpg"
-  if command -v ffmpeg >/dev/null 2>&1; then
-    local scale b64
-    for scale in 720 540 400; do
-      ffmpeg -y -loglevel error -i "$file" -vf "scale=${scale}:-1" -q:v 5 "$small" || continue
-      b64=$(base64 -w0 "$small" 2>/dev/null || base64 "$small" | tr -d '\n')
-      if [[ -n "$b64" && ${#b64} -le 60000 ]]; then
-        echo "::notice::SCREENSHOT-B64 ${label} (JPEG ${scale}px, base64): ${b64}"
-        return 0
-      fi
-    done
-  fi
-  echo "::notice::SCREENSHOT ${label}: upload failed :: ${err}"
+  echo "::notice::SCREENSHOT ${label}: retained only in GitHub Actions artifact (${file})"
 }
-
 
 run_connected_test() {
   local test_class="$1"
@@ -228,7 +190,7 @@ if [[ -s "$GENERATED_APK" ]]; then
             sys_lines="$(grep -E 'FATAL EXCEPTION IN SYSTEM PROCESS|lowmemorykiller|Low on memory|am_kill|am_proc_died|ANR in|has died|Killing [0-9]+:io' build/test-game/localized/game-exit-logcat.txt | tail -8 | cut -c1-200 | tr '\n' '|')"
             logcat_tail="GAME[${game_lines}] SYSTEM[${sys_lines}]"
             if [[ -s "build/test-game/localized/mindustry-last-foreground.png" ]]; then
-              upload_shot build/test-game/localized/mindustry-last-foreground.png "mindustry-last-foreground-frame-tick-${last_ok_tick:-0}"
+              retain_shot build/test-game/localized/mindustry-last-foreground.png "mindustry-last-foreground-frame-tick-${last_ok_tick:-0}"
             fi
             if [[ "$sys_lines" == *"FATAL"* || "$sys_lines" == *"lowmemorykiller"* || "$sys_lines" == *"ANR in"* || "$game_lines" == *"FATAL EXCEPTION"* ]]; then
               # A crash or system kill is a real defect signal; never retry past it.
@@ -286,7 +248,7 @@ if width < 320 or height < 480:
 print(f"Foreground Mindustry screenshot verified: {width}x{height}, {len(data)} bytes.")
 PY
             then
-              upload_shot build/test-game/localized/mindustry-foreground-screen.png "mindustry-foreground-screen"
+              retain_shot build/test-game/localized/mindustry-foreground-screen.png "mindustry-foreground-screen"
               final_foreground="$(adb shell dumpsys activity activities 2>/dev/null | grep -E 'topResumedActivity|mResumedActivity' | tail -n 1 | tr -d '\r')"
               final_pid="$(adb shell pidof io.anuke.mindustry 2>/dev/null | tr -d '\r')"
               if [[ -z "$final_pid" || "$final_foreground" != *"io.anuke.mindustry"* ]]; then
