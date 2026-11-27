@@ -193,6 +193,8 @@ jobs:
               raise SystemExit("Compressed source copies must not be packaged into Android test assets")
           print("Verified both directions: all config-referenced decompressed model assets are present.")
           PY
+      - name: Stage verified en-ar model into the app APK assets
+        run: bash .github/scripts/stage-bundled-model.sh
       - name: Enable KVM access
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules

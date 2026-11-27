@@ -22,3 +22,7 @@ key.properties
 *.apk
 *.aab
 *.ap_
+
+# CI-staged offline model weights (fetched + hash-verified at build time, never committed)
+app/src/main/assets/arabify-models/
+app/src/androidTest/assets/bergamot/

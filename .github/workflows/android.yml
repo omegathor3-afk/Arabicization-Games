@@ -88,6 +88,10 @@ jobs:
        build/unitypy/textasset-oracle.properties
       if-no-files-found: ignore
       retention-days: 7
+   - name: Fetch and stage the verified bundled offline model (en-ar)
+     run: |
+      python3 native/bergamot/audit-mozilla-arabic-models.py
+      bash .github/scripts/stage-bundled-model.sh
    - name: Build debug APK
      run: gradle assembleDebug
    - name: Verify APK structure and signature
@@ -105,6 +109,7 @@ jobs:
       "$AAPT" dump badging "$APK" > badging.txt
       head -n 5 badging.txt
       sha256sum "$APK"
+      echo "::notice::APK-SIZE app-debug.apk $(stat -c %s "$APK") bytes (includes the bundled en-ar offline model)"
    - name: Build instrumentation test APK
      run: gradle assembleDebugAndroidTest
    - name: Checkout pinned open-source Android game source
