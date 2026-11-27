@@ -80,6 +80,7 @@ internal data class ApkScanResult(
 )
 internal object ApkInspector {
  private const val MAX_APK_BYTES=1_500L*1024L*1024L
+ private const val MIN_FREE_SPACE_RESERVE_BYTES=32L*1024L*1024L
  private const val MAX_SINGLE_TEXT_BYTES=512L*1024L
  private const val MAX_TOTAL_TEXT_BYTES=3L*1024L*1024L
  private const val MAX_FONT_BYTES=20L*1024L*1024L
