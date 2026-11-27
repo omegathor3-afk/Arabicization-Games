@@ -65,6 +65,10 @@ class MindustryLocaleSlotInstrumentedTest {
             signed.delete()
             val mode = InstrumentationRegistry.getArguments().getString("translationMode", "pseudo")
             val translator = if (mode == "real") OfflineArabicTranslator(context) else null
+            val roundTrip = RoundTripVerifier()
+            var roundTripAudited = 0
+            var roundTripFlagged = 0
+            val roundTripFlaggedSamples = mutableListOf<String>()
             try {
                 if (translator != null) {
                     Log.i("MindustrySlot", "translationMode=real: downloading the ML Kit English-Arabic model")
@@ -73,13 +77,38 @@ class MindustryLocaleSlotInstrumentedTest {
                         "ML Kit Arabic model is unavailable on this emulator; cannot produce a real-translation build",
                         translator.isArabicModelDownloaded()
                     )
+                    translator.prepareReverseForOfflineUse(requireWifi = false)
                 }
                 val fonts = LocaleSlotLocalizer.FontInjection { f ->
                     context.assets.open(f.assetPath).use { it.readBytes() }
                 }
                 val report = LocaleSlotLocalizer.addArabicLocaleSlotWithFont(installedGameApk, unsigned, fonts) { text ->
                     if (translator != null) {
-                        if (text.isBlank()) text else translator.translateEnglishToArabic(text)
+                        if (text.isBlank()) {
+                            text
+                        } else {
+                            val arabic = translator.translateEnglishToArabic(text)
+                            // Round-trip audit on a sample of mid-length strings:
+                            // translate back and compare content words. Flags are
+                            // evidence for the CI report, never a rewrite.
+                            if (roundTripAudited < 25 && text.trim().length in 10..80) {
+                                try {
+                                    val back = translator.translateArabicToEnglish(arabic)
+                                    val verdict = roundTrip.verify(text.trim(), back)
+                                    roundTripAudited++
+                                    if (!verdict.trustworthy) {
+                                        roundTripFlagged++
+                                        if (roundTripFlaggedSamples.size < 5) {
+                                            roundTripFlaggedSamples +=
+                                                "$text => $arabic => $back (missing: ${verdict.missingWords.take(4).joinToString(", ")})"
+                                        }
+                                    }
+                                } catch (error: Exception) {
+                                    Log.w("MindustrySlot", "round-trip audit sample failed", error)
+                                }
+                            }
+                            arabic
+                        }
                     } else {
                         val trimmed = text.trim()
                         if (trimmed.length >= 3) "العربية ${trimmed.length}" else text
@@ -222,6 +251,14 @@ class MindustryLocaleSlotInstrumentedTest {
                 }
                 publishToDownloads(preservedApk, "mindustry-arabic$suffix.apk", "application/vnd.android.package-archive")
                 publishToDownloads(reportFile, "mindustry-report$suffix.txt", "text/plain")
+                if (translator != null) {
+                    val roundTripFile = File(evidenceDir, "mindustry-roundtrip$suffix.txt")
+                    roundTripFile.writeText(
+                        "audited=$roundTripAudited\nflagged=$roundTripFlagged\n" +
+                            roundTripFlaggedSamples.joinToString("\n") + "\n"
+                    )
+                    publishToDownloads(roundTripFile, "mindustry-roundtrip$suffix.txt", "text/plain")
+                }
                 Log.i("MindustrySlot", "Published signed localized Mindustry APK and report to Downloads/ARABIFY (mode=$mode)")
             } finally {
                 translator?.close()

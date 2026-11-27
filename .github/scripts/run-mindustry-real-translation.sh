@@ -120,6 +120,13 @@ fi
 
 adb pull /sdcard/Download/ARABIFY/mindustry-arabic-real.apk build/test-game/localized/real/mindustry-arabic-real.apk || true
 adb pull /sdcard/Download/ARABIFY/mindustry-report-real.txt build/test-game/localized/real/mindustry-report-real.txt || true
+adb pull /sdcard/Download/ARABIFY/mindustry-roundtrip-real.txt build/test-game/localized/real/mindustry-roundtrip-real.txt || true
+if [[ -s build/test-game/localized/real/mindustry-roundtrip-real.txt ]]; then
+  echo "::notice::ROUNDTRIP-AUDIT $(head -2 build/test-game/localized/real/mindustry-roundtrip-real.txt | tr '\n' ' ')"
+  tail -n +3 build/test-game/localized/real/mindustry-roundtrip-real.txt | head -5 | while IFS= read -r sample; do
+    [[ -n "$sample" ]] && echo "::notice::ROUNDTRIP-FLAGGED ${sample:0:250}"
+  done
+fi
 
 GENERATED_APK="build/test-game/localized/real/mindustry-arabic-real.apk"
 if [[ ! -s "$GENERATED_APK" ]]; then
