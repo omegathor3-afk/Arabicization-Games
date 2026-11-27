@@ -18,52 +18,28 @@ mark_host_dead() { mkdir -p build; echo "$1" >> "$DEAD_HOSTS_FILE"; }
 # 12 swipe screenshots x 5 hosts x per-attempt timeout otherwise eats the
 # whole 60-minute job budget when the hosts are down (observed 2026-11-25:
 # run cancelled at the 1h cap with the test green and evidence pulled).
-upload_shot() {
-  local file="$1" label="$2"
-  if [[ ! -s "$file" ]]; then
-    echo "::notice::SCREENSHOT ${label}: no file captured"
-    return 0
-  fi
-  local url err=""
-  if ! host_dead 0x0.st; then
-    url=$(curl --fail --silent --show-error --max-time 60 -F "file=@${file}" https://0x0.st 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || { mark_host_dead 0x0.st; err="0x0.st: $(echo "$url" | tail -c 200)"; }
-  fi
-  if ! host_dead catbox; then
-    url=$(curl --fail --silent --show-error --max-time 60 -F "reqtype=fileupload" -F "fileToUpload=@${file}" https://catbox.moe/user/api.php 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || { mark_host_dead catbox; err="${err} | catbox: $(echo "$url" | tail -c 200)"; }
-  fi
-  if ! host_dead temp.sh; then
-    url=$(curl --fail --silent --show-error --max-time 60 -F "file=@${file}" https://temp.sh/upload 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || { mark_host_dead temp.sh; err="${err} | temp.sh: $(echo "$url" | tail -c 200)"; }
-  fi
-  if ! host_dead file.io; then
-    url=$(curl --fail --silent --show-error --max-time 60 -F "file=@${file}" https://file.io 2>&1 | python3 -c 'import json,sys; print(json.load(sys.stdin).get("link",""))' 2>/dev/null) && [[ -n "$url" ]] && { echo "::notice::SCREENSHOT ${label}: ${url} (single-download link - fetch once)"; return 0; } || { mark_host_dead file.io; err="${err} | file.io: $(echo "$url" | tail -c 200)"; }
-  fi
-  if ! host_dead transfer.sh; then
-    url=$(curl --fail --silent --show-error --max-time 60 --upload-file "$file" "https://transfer.sh/$(basename "$file")" 2>&1) && { echo "::notice::SCREENSHOT ${label}: ${url}"; return 0; } || { mark_host_dead transfer.sh; err="${err} | transfer.sh: $(echo "$url" | tail -c 200)"; }
-  fi
-  # Last resort: external file hosts are unreachable from GitHub runners
-  # (observed 2026-11-24: 0x0.st 503, catbox 412, temp.sh 500, file.io empty,
-  # transfer.sh TCP timeout). Embed a downscaled JPEG as base64 inside the
-  # annotation itself - annotations are public and need no egress.
-  local small="build/.upload-shot-small.jpg"
-  if command -v ffmpeg >/dev/null 2>&1; then
-    local scale b64
-    for scale in 720 540 400; do
-      ffmpeg -y -loglevel error -i "$file" -vf "scale=${scale}:-1" -q:v 5 "$small" || continue
-      b64=$(base64 -w0 "$small" 2>/dev/null || base64 "$small" | tr -d '\n')
-      if [[ -n "$b64" && ${#b64} -le 60000 ]]; then
-        echo "::notice::SCREENSHOT-B64 ${label} (JPEG ${scale}px, base64): ${b64}"
-        return 0
-      fi
-    done
-  fi
-  echo "::notice::SCREENSHOT ${label}: upload failed :: ${err}"
-}
+# Screenshots stay inside the repository's Actions artifact; never send
+# installed-app UI evidence to third-party file hosts.
 
 dump_hierarchy() {
   local destination="$1"
   adb shell uiautomator dump --compressed /sdcard/arabify-window.xml >/dev/null 2>&1 || return 1
   adb exec-out cat /sdcard/arabify-window.xml > "$destination" || return 1
   [[ -s "$destination" ]]
+}
+
+assert_app_hierarchy() {
+  local xml="$1"
+  if ! grep -q 'package="com.omega.arabify"' "$xml"; then
+    adb logcat -d -t 5000 > build/arabify-ui/logcat.txt 2>&1 || true
+    adb shell dumpsys activity activities > build/arabify-ui/activity-state.txt 2>&1 || true
+    if grep -Eiq 'not responding|لا يستجيب' "$xml"; then
+      note_failure "Android displayed a system/application ANR dialog instead of ARABIFY content; logcat and activity state are saved in the workflow artifact"
+    else
+      note_failure "ARABIFY accessibility nodes are missing; logcat and activity state are saved in the workflow artifact"
+    fi
+    exit 1
+  fi
 }
 
 mkdir -p build/arabify-ui
@@ -123,6 +99,7 @@ fi
 # Capture the initial view and its accessibility hierarchy.
 sleep 8
 dump_hierarchy build/arabify-ui/before-scroll.xml || { note_failure "could not capture the initial accessibility hierarchy"; exit 1; }
+assert_app_hierarchy build/arabify-ui/before-scroll.xml
 adb exec-out screencap -p > build/arabify-ui/arabify-ui-top.png
 [[ -s build/arabify-ui/arabify-ui-top.png ]] || { note_failure "top screenshot missing"; exit 1; }
 
@@ -148,6 +125,7 @@ for attempt in 1 2 3 4 5 6 7 8; do
   fi
   sleep 5
   dump_hierarchy build/arabify-ui/after-scroll.xml || { note_failure "could not capture the post-scroll accessibility hierarchy"; exit 1; }
+  assert_app_hierarchy build/arabify-ui/after-scroll.xml
   if python3 - build/arabify-ui/before-scroll.xml build/arabify-ui/after-scroll.xml <<'PY'
 import sys
 import xml.etree.ElementTree as ET
@@ -199,7 +177,5 @@ for name in ("arabify-ui-top.png", "arabify-ui-scrolled.png"):
         raise SystemExit(f"{name} has implausible dimensions: {width}x{height}")
     print(f"{name}: {width}x{height}, {len(data)} bytes")
 PY
-upload_shot build/arabify-ui/arabify-ui-top.png "arabify-ui-top"
-upload_shot build/arabify-ui/arabify-ui-top-motion.png "arabify-ui-top-motion"
-upload_shot build/arabify-ui/arabify-ui-scrolled.png "arabify-ui-scrolled"
+echo "::notice::UI screenshots and any diagnostics are retained only in the GitHub Actions artifact."
 exit 0
