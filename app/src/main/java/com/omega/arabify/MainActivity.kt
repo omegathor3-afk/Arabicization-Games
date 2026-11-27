@@ -94,6 +94,7 @@ private fun ArabifyApp(context: Context) {
  var translatedText by remember { mutableStateOf<String?>(null) }
  var translationBusy by remember { mutableStateOf(false) }
  var translationError by remember { mutableStateOf<String?>(null) }
+ var repackageError by remember { mutableStateOf<String?>(null) }
  var selectedUri by remember { mutableStateOf<Uri?>(null) }
  var localizeBusy by remember { mutableStateOf(false) }
  var localizationProgress by remember { mutableStateOf(0 to 0) }
@@ -688,6 +689,22 @@ private fun ArabifyApp(context: Context) {
            Text("ثبّت المجموعة من قسم الاستعادة أدناه؛ سيُرسل كل ملفات APK إلى مُثبّت Android في جلسة واحدة.",color=ArabifyPalette.textSecondary,fontSize=11.sp)
           } else {
            ArabifyCtaButton("الخطوة الأخيرة: حفظ APK بعد التعريب",onClick={saveLauncher.launch("arabify_assets_arabic.apk")})
+           val repackagePkg=report.packageName
+           if(!repackagePkg.isNullOrBlank()&&report.outputApk.isFile) {
+            val repackageBlocked by produceState<Boolean?>(initialValue=null,repackagePkg,report.outputApk.absolutePath) {
+             value=withContext(Dispatchers.IO){runCatching{RepackageInstallHelper.installedOriginalBlocksInstall(context,repackagePkg,report.outputApk)}.getOrDefault(false)}
+            }
+            if(repackageBlocked==true) {
+             Text("اللعبة الأصلية مثبتة بتوقيعها الخاص، وأندرويد يرفض النسخة المعربة كتحديث لاختلاف التوقيع. احذف اللعبة الأصلية أولًا ثم ثبّت النسخة المعربة. تنبيه: حذف اللعبة يحذف بياناتها المحفوظة محليًا.",color=ArabifyPalette.warningText,fontSize=12.sp)
+             ArabifyCtaButton("الخطوة ١: حذف اللعبة الأصلية (بموافقتك في نافذة النظام)",onClick={repackageError=null;runCatching{context.startActivity(RepackageInstallHelper.uninstallIntent(repackagePkg))}.onFailure{repackageError=it.message}})
+            }
+            ArabifyCtaButton(if(repackageBlocked==true) "الخطوة ٢: تثبيت النسخة المعربة" else "تثبيت النسخة المعربة",onClick={
+             repackageError=null
+             runCatching{RepackageInstallHelper.install(context,report.outputApk,repackagePkg)}.onFailure{repackageError=it.message ?: "تعذر إرسال الملف إلى مثبّت أندرويد."}
+            })
+            Text("التثبيت يتم بموافقتك في نافذة مثبّت أندرويد. النسخة المعربة موقعة بمفتاح ARABIFY وليس بمفتاح اللعبة الأصلية.",color=ArabifyPalette.textSecondary,fontSize=11.sp)
+            repackageError?.let{Text(it,color=ArabifyPalette.danger,fontSize=12.sp)}
+           }
           }
          }
          assetError?.let{Text(it,color=ArabifyPalette.danger,fontSize=12.sp)}

@@ -19,5 +19,11 @@
    android:noHistory="true"
    android:excludeFromRecents="true"
    android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+  <activity
+   android:name=".RepackageInstallStatusActivity"
+   android:exported="false"
+   android:noHistory="true"
+   android:excludeFromRecents="true"
+   android:theme="@android:style/Theme.Translucent.NoTitleBar" />
  </application>
 </manifest>
