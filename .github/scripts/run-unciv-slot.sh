@@ -294,6 +294,7 @@ summary = " | ".join(texts)[:1200]
 print(summary if summary else "<no visible text nodes>")
 PYVIS
             note_failure "no Arabic text and no Arabic language entry visible on the Unciv screen; see unciv-visible-screen-text.txt in the workflow artifact"
+            launch_status=1
           fi
         else
           echo "::notice::UIAutomator exposed no hierarchy; relying on screenshot + process checks (not counted as failure)"
