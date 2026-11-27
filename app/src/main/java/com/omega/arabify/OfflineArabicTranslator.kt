@@ -12,6 +12,10 @@ import kotlinx.coroutines.tasks.await
 internal fun hasArabicTranslationModel(downloadedLanguages: Set<String>): Boolean =
  TranslateLanguage.ARABIC in downloadedLanguages
 
+/** True when at least one supported offline English-to-Arabic engine is available. */
+internal fun hasUsableArabicTranslationEngine(mlKitModelDownloaded: Boolean, bundledEngineUsable: Boolean): Boolean =
+ mlKitModelDownloaded || bundledEngineUsable
+
 internal class OfflineArabicTranslator(context: Context) {
  private val translationMemory = TranslationMemory()
 
@@ -70,6 +74,9 @@ internal class OfflineArabicTranslator(context: Context) {
    .toSet()
   return hasArabicTranslationModel(downloadedLanguages)
  }
+
+ /** True when this APK has bundled model assets and a loadable native engine for this ABI. */
+ fun isBundledEngineUsable(): Boolean = bundled.isUsable()
 
  suspend fun translateEnglishToArabic(text: String): String {
   require(text.isNotBlank()) { "النص فارغ." }

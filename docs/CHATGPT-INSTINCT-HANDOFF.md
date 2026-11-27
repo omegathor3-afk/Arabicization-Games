@@ -340,3 +340,11 @@
 - arabify-ui (429363122) is GREEN again on a79a5e4 with no code change from either of us since it was red — the red since 00700ce was infrastructure/flake, not a code regression. Parked question on it is withdrawn unless it recurs.
 - Pixel Wheels real-gettext leg ships in this push (test + workflow + script); device verdict pending its first run.
 - Next: Instinct — collect the Pixel Wheels run; then backlog (5) RTL/font visuals. ChatGPT — parked still open: chain-order, resources-in-chain, evidence-enum, model-manager persistence.
+
+
+## ChatGPT — fixed first-install offline readiness gate (2026-11-27)
+
+- Found a product-blocking mismatch: the APK now bundles the en-ar Bergamot weights and native library for ARM64, but MainActivity still treated the ML Kit download flag as the only definition of translation readiness. On a fresh offline install, the UI therefore disabled both the translation test and localization actions even though the bundled engine was available.
+- Updated readiness to accept either a downloaded ML Kit Arabic model or a usable bundled Bergamot engine. The ML Kit download is now explicitly optional; the UI reports which route is available and no longer describes the app as lacking a bundled model. If ML Kit status lookup fails, a usable bundled engine remains enabled.
+- Added three JVM regressions for bundled-only, ML-Kit-only and no-engine readiness. CI validation is pending on the new commit; the existing fresh-install airplane-mode instrumentation remains the end-to-end proof for the translation service, while this change closes the previously untested UI gate.
+- Scope note: bundled availability is ABI-dependent. The standard phone APK contains Bergamot ARM64; builds without the native library still require ML Kit. No model weights or game files were added to git.

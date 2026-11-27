@@ -20,4 +20,19 @@ class OfflineArabicTranslatorTest {
     fun unrelatedLanguageModelDoesNotMarkArabicTranslationReady() {
         assertFalse(hasArabicTranslationModel(setOf(TranslateLanguage.FRENCH)))
     }
+
+    @Test
+    fun bundledEngineMakesFirstInstallTranslationReadyWithoutMlKit() {
+        assertTrue(hasUsableArabicTranslationEngine(mlKitModelDownloaded = false, bundledEngineUsable = true))
+    }
+
+    @Test
+    fun downloadedMlKitModelMakesTranslationReadyWithoutBundledEngine() {
+        assertTrue(hasUsableArabicTranslationEngine(mlKitModelDownloaded = true, bundledEngineUsable = false))
+    }
+
+    @Test
+    fun translationIsNotReadyWhenNeitherEngineIsAvailable() {
+        assertFalse(hasUsableArabicTranslationEngine(mlKitModelDownloaded = false, bundledEngineUsable = false))
+    }
 }

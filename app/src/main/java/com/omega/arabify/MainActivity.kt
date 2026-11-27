@@ -90,6 +90,8 @@ private fun ArabifyApp(context: Context) {
  var busy by remember { mutableStateOf(false) }
  var inspectionProgress by remember { mutableStateOf(0 to 0) }
  var modelReady by remember { mutableStateOf(false) }
+ var mlKitModelReady by remember { mutableStateOf(false) }
+ var bundledEngineAvailable by remember { mutableStateOf(false) }
  var translationInput by remember { mutableStateOf("The gate is locked. Find the ancient key.") }
  var translatedText by remember { mutableStateOf<String?>(null) }
  var translationBusy by remember { mutableStateOf(false) }
@@ -132,11 +134,26 @@ private fun ArabifyApp(context: Context) {
  val offlineTranslator = remember(context) { OfflineArabicTranslator(context) }
  DisposableEffect(offlineTranslator) { onDispose { offlineTranslator.close() } }
  LaunchedEffect(offlineTranslator) {
+  val bundledAvailable = try {
+   withContext(Dispatchers.IO) { offlineTranslator.isBundledEngineUsable() }
+  } catch (cancelled: CancellationException) {
+   throw cancelled
+  } catch (_: Exception) {
+   false
+  }
+  bundledEngineAvailable = bundledAvailable
+  // First-install offline must not wait for ML Kit's optional model query.
+  modelReady = bundledAvailable
   try {
-   modelReady = withContext(Dispatchers.IO) { offlineTranslator.isArabicModelDownloaded() }
-  } catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception) {
-   modelReady = false
-   translationError = e.message ?: "تعذر التحقق من حالة نموذج الترجمة."
+   val downloaded = withContext(Dispatchers.IO) { offlineTranslator.isArabicModelDownloaded() }
+   mlKitModelReady = downloaded
+   modelReady = hasUsableArabicTranslationEngine(downloaded, bundledAvailable)
+  } catch (cancelled: CancellationException) {
+   throw cancelled
+  } catch (e: Exception) {
+   mlKitModelReady = false
+   modelReady = bundledAvailable
+   if (!bundledAvailable) translationError = e.message ?: "تعذر التحقق من حالة نموذج الترجمة."
   }
  }
  val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri:Uri? ->
@@ -232,8 +249,8 @@ private fun ArabifyApp(context: Context) {
   val uri=selectedUri ?: return
   if(localizeBusy||assetBusy||unityDeepBusy) return
   if(!modelReady) {
-   localizationError="نزّل نموذج الترجمة أولًا، ثم اضغط ابدأ التعريب."
-   assetError="نزّل نموذج الترجمة أولًا، ثم اضغط ابدأ التعريب."
+   localizationError="لا يوجد محرك ترجمة جاهز. نزّل نموذج ML Kit عبر اتصال Wi-Fi أو استخدم نسخة تتضمن محرك Bergamot المضمّن."
+   assetError="لا يوجد محرك ترجمة جاهز. نزّل نموذج ML Kit عبر اتصال Wi-Fi أو استخدم نسخة تتضمن محرك Bergamot المضمّن."
    showLocalizationChoice=false
    return
   }
@@ -426,7 +443,7 @@ private fun ArabifyApp(context: Context) {
    }
    unityDeepError?.let { appendLine("خطأ فحص UnityFS: " + it) }
   }
-  appendLine("النموذج: ${if(modelReady) "جاهز" else "لم يتم تجهيزه"}")
+  appendLine("محرك الترجمة: ${offlineTranslator.lastEngine ?: if(mlKitModelReady) "ML Kit (نموذج مُنزّل)" else if(bundledEngineAvailable) "Bergamot المضمّن (متاح لهذا ABI)" else "غير جاهز"}")
   translatedText?.let { appendLine("الترجمة التجريبية: $it") }
   translationError?.let { appendLine("خطأ الترجمة: $it") }
   localizationReport?.let { appendLine("موارد Android: ${it.translatedStrings}/${it.discoveredStrings} نصًا") }
@@ -569,15 +586,20 @@ private fun ArabifyApp(context: Context) {
      HextechPanel(containerColor=ArabifyPalette.surface, contentPadding=PaddingValues(0.dp)) {
       Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
        Text("محرك الترجمة المحلي",color=Color.White,fontSize=18.sp,fontWeight=FontWeight.Bold)
-       Text("تنبيه بوضوح: النسخة الحالية تستخدم نموذج ML Kit يتم تنزيله عند الطلب، وليس حزمة عربية/إنجليزية مضمّنة بالكامل. بعد التنزيل تعمل الترجمة النصية دون اتصال، لكن ذلك لا يعني تعريب كل ملفات اللعبة تلقائيًا.",color=ArabifyPalette.textSecondary,fontSize=12.sp)
-       ArabifyCtaButton(if(modelReady) "النموذج الحالي جاهز" else "تنزيل نموذج الترجمة (مرة واحدة)",onClick={
+       Text("تتضمن نسخة الهاتف ذات مكتبة ARM64 محرك Bergamot ووزنه العربي/الإنجليزي داخل APK؛ لذلك يمكن أن تبدأ الترجمة من أول تثبيت دون تنزيل. عند توفر نموذج ML Kit محليًا يُفضَّل، ويمكن تنزيله اختياريًا. لا يعني توفر المحرك أن كل ملفات اللعبة مدعومة.",color=ArabifyPalette.textSecondary,fontSize=12.sp)
+       Text(if(bundledEngineAvailable) "محرك Bergamot المضمّن متاح لهذا المعالج." else "محرك Bergamot المضمّن غير متاح في هذه البنية/ABI؛ يلزم نموذج ML Kit مُنزّل.",color=if(modelReady) ArabifyPalette.success else ArabifyPalette.warningText,fontSize=11.sp)
+       ArabifyCtaButton(if(mlKitModelReady) "نموذج ML Kit مُنزّل" else "تنزيل ML Kit الاختياري",onClick={
         translationBusy=true;translationError=null
         scope.launch {
-         try { withContext(Dispatchers.IO){offlineTranslator.prepareForOfflineUse()};modelReady=true }
-         catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception){translationError=e.message ?: "تعذر تجهيز نموذج الترجمة."}
+         try {
+          withContext(Dispatchers.IO){offlineTranslator.prepareForOfflineUse()}
+          mlKitModelReady=true
+          modelReady=true
+         }
+         catch (cancelled: CancellationException) { throw cancelled } catch (e: Exception){translationError=e.message ?: "تعذر تجهيز نموذج ML Kit."}
          finally{translationBusy=false}
         }
-       },enabled=!translationBusy)
+       },enabled=!translationBusy&&!mlKitModelReady)
        OutlinedTextField(value=translationInput,onValueChange={translationInput=it},label={Text("اختبر المحرك بجملة قصيرة")},modifier=Modifier.fillMaxWidth())
        ArabifyCtaButton("اختبار الترجمة المحلية",onClick={
         translationBusy=true;translationError=null;translatedText=null
