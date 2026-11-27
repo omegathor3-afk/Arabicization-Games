@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -528,12 +529,19 @@ private fun ArabifyApp(context: Context) {
         Text("${visibleApps.size} نتيجة",color=ArabifyPalette.primary,fontSize=11.sp,fontWeight=FontWeight.Bold)
        }
        if(visibleApps.isEmpty()) Text("لا توجد نتائج. تأكد من تثبيت التطبيق أو استخدم اختيار APK اليدوي.",color=ArabifyPalette.textMuted,fontSize=12.sp)
-       visibleApps.forEach { app ->
+       LazyColumn(Modifier.fillMaxWidth().heightIn(max=520.dp), verticalArrangement=Arrangement.spacedBy(8.dp)) {
+        items(visibleApps, key={it.packageName}) { app ->
         val rowSelected=selectedInstalledApp?.packageName==app.packageName
         Row(Modifier.fillMaxWidth().clip(CutCornerShape(10.dp)).background(if(rowSelected) ArabifyPalette.surfaceAccent else ArabifyPalette.surfaceRaised).border(1.dp,if(rowSelected) ArabifyPalette.outlineNeon else ArabifyPalette.outline,CutCornerShape(10.dp)).padding(horizontal=10.dp,vertical=7.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(11.dp)) {
-         val appIcon=remember(app.packageName) { drawableToBitmap(context.packageManager.getApplicationIcon(app.packageName)).asImageBitmap() }
+         val appIcon=rememberInstalledAppIcon(context,app.packageName)
          Box(Modifier.size(44.dp).clip(CutCornerShape(10.dp)).background(ArabifyPalette.canvas).border(1.dp,ArabifyPalette.outlineNeon.copy(alpha=0.7f),CutCornerShape(10.dp)).padding(4.dp)) {
-          Image(bitmap=appIcon,contentDescription="أيقونة التطبيق",modifier=Modifier.fillMaxSize().clip(CutCornerShape(6.dp)))
+          if (appIcon != null) {
+           Image(bitmap=appIcon,contentDescription="أيقونة التطبيق",modifier=Modifier.fillMaxSize().clip(CutCornerShape(6.dp)))
+          } else {
+           Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) {
+            Text(app.label.take(1).uppercase(),color=ArabifyPalette.primary,fontWeight=FontWeight.Bold,fontSize=18.sp)
+           }
+          }
          }
          Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)) {
           Text(app.label,color=ArabifyPalette.textPrimary,fontWeight=FontWeight.SemiBold,fontSize=14.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
@@ -579,7 +587,8 @@ private fun ArabifyApp(context: Context) {
          modifier=Modifier.semantics { contentDescription = "اختيار ${app.label} ${app.packageName}" }) { Text(if(rowSelected) "محدد" else "اختيار") }
         }
        }
-       if(busy && selectedInstalledApp!=null) {
+       
+       }if(busy && selectedInstalledApp!=null) {
         val fraction=if(inspectionProgress.second>0) inspectionProgress.first.toFloat()/inspectionProgress.second else 0f
         LinearProgressIndicator(progress={fraction.coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth())
         Text("فحص ملفات التثبيت: ${inspectionProgress.first} من ${inspectionProgress.second}",color=ArabifyPalette.info,fontSize=11.sp)
@@ -965,6 +974,22 @@ private suspend fun copyUriToCache(
 }
 
 
+
+@Composable
+private fun rememberInstalledAppIcon(context: Context, packageName: String): androidx.compose.ui.graphics.ImageBitmap? {
+ val icon by produceState<androidx.compose.ui.graphics.ImageBitmap?>(initialValue = null, packageName) {
+  value = withContext(Dispatchers.IO) {
+   try {
+    drawableToBitmap(context.packageManager.getApplicationIcon(packageName)).asImageBitmap()
+   } catch (cancelled: CancellationException) {
+    throw cancelled
+   } catch (_: Exception) {
+    null
+   }
+  }
+ }
+ return icon
+}
 
 private fun drawableToBitmap(drawable:Drawable):Bitmap {
  val width=drawable.intrinsicWidth.coerceAtLeast(1).coerceAtMost(192)
