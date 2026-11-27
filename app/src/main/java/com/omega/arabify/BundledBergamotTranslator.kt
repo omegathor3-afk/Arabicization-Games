@@ -26,6 +26,21 @@ internal class BundledBergamotTranslator(private val context: Context) {
     private var session: Long = 0L
     private var prepareError: String? = null
 
+    // The pinned JNI library ships only in builds that package it (the
+    // bergamot workflow and the standard debug APK); touching the object
+    // forces System.loadLibrary. Any failure (UnsatisfiedLinkError is an
+    // Error, not an Exception) must degrade to "engine unavailable", never
+    // crash the translation flow.
+    private val nativeAvailable: Boolean by lazy {
+        try {
+            BergamotNative.toString()
+            true
+        } catch (error: Throwable) {
+            Log.w(tag, "bergamot native library unavailable in this build", error)
+            false
+        }
+    }
+
     /** True when the APK actually carries the bundled en-ar package. */
     fun isPackaged(): Boolean = try {
         context.assets.list("$ASSET_ROOT/en-ar")?.contains("config.yml") == true
@@ -34,17 +49,28 @@ internal class BundledBergamotTranslator(private val context: Context) {
         false
     }
 
+    /** True when this APK can actually serve bundled translations (weights AND native lib). */
+    fun isUsable(): Boolean = isPackaged() && nativeAvailable
+
     /** Translates synchronously on the calling thread; callers dispatch off the main thread. */
     fun translateEnglishToArabic(text: String): String {
         require(text.isNotBlank()) { "النص فارغ." }
         synchronized(lock) {
-            return BergamotNative.nativeTranslate(ensureSession(), text)
+            try {
+                return BergamotNative.nativeTranslate(ensureSession(), text)
+            } catch (error: Throwable) {
+                // Normalize every failure (including native Errors) so the
+                // caller's Exception-based fallback keeps working.
+                prepareError = error.message ?: error.javaClass.simpleName
+                throw IllegalStateException("bundled translation failed: $prepareError", error)
+            }
         }
     }
 
     private fun ensureSession(): Long {
         session.takeIf { it != 0L }?.let { return it }
         prepareError?.let { throw IllegalStateException("bundled model unavailable: $it") }
+        check(nativeAvailable) { "bergamot native library is not packaged in this build" }
         try {
             val root = File(context.filesDir, "bundled-models/en-ar")
             stageAssets(root)
@@ -57,9 +83,9 @@ internal class BundledBergamotTranslator(private val context: Context) {
             Log.i(tag, "bundled en-ar model loaded (${verification.totalBytes} verified bytes)")
             session = handle
             return handle
-        } catch (error: Exception) {
+        } catch (error: Throwable) {
             prepareError = error.message ?: error.javaClass.simpleName
-            throw error
+            throw IllegalStateException("bundled model unavailable: $prepareError", error)
         }
     }
 

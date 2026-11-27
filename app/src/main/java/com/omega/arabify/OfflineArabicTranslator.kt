@@ -93,7 +93,7 @@ internal class OfflineArabicTranslator(context: Context) {
   */
  private suspend fun translateWithBestAvailableEngine(text: String): String {
   val mlKitReady = mlKitArabicAvailable ?: isArabicModelDownloaded().also { mlKitArabicAvailable = it }
-  if (!mlKitReady && bundled.isPackaged()) {
+  if (!mlKitReady && bundled.isUsable()) {
    lastEngine = "bundled-bergamot"
    return bundled.translateEnglishToArabic(text)
   }
@@ -101,9 +101,15 @@ internal class OfflineArabicTranslator(context: Context) {
    translator.translate(text).await().also { lastEngine = "mlkit" }
   } catch (error: Exception) {
    mlKitArabicAvailable = false
-   if (!bundled.isPackaged()) throw error
-   lastEngine = "bundled-bergamot"
-   bundled.translateEnglishToArabic(text)
+   if (!bundled.isUsable()) throw error
+   try {
+    lastEngine = "bundled-bergamot"
+    bundled.translateEnglishToArabic(text)
+   } catch (bundledError: Exception) {
+    // Never mask the original engine failure behind the fallback's.
+    error.addSuppressed(bundledError)
+    throw error
+   }
   }
  }
 
