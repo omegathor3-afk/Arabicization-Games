@@ -11,6 +11,8 @@ internal data class SelectableFont(
     val weight: Int,
     val licenseId: String,
     val sourceUrl: String,
+    /** Exact bundled notice that must accompany this redistributable font. */
+    val licenseAssetPath: String = "fonts/licenses/OFL-google-fonts.txt",
 )
 
 internal data class FontChoice(
@@ -38,8 +40,8 @@ internal object FontSelector {
         SelectableFont("tajawal-bold", "fonts/catalog/tajawal-bold.ttf", "Tajawal Bold", FontStyleTag.SANS_MODERN, 700, "OFL-1.1", G + "tajawal/Tajawal-Bold.ttf"),
         SelectableFont("almarai-regular", "fonts/catalog/almarai-regular.ttf", "Almarai", FontStyleTag.SANS_MODERN, 400, "OFL-1.1", G + "almarai/Almarai-Regular.ttf"),
         SelectableFont("almarai-bold", "fonts/catalog/almarai-bold.ttf", "Almarai Bold", FontStyleTag.SANS_MODERN, 700, "OFL-1.1", G + "almarai/Almarai-Bold.ttf"),
-        SelectableFont("rooyin-regular", "fonts/catalog/rooyinfree-regular.ttf", "Rooyin Free", FontStyleTag.PIXEL, 400, "OFL-1.1", "https://github.com/MohamadDarvishi/Rooyin"),
-        SelectableFont("rooyin-bold", "fonts/catalog/rooyinfree-bold.ttf", "Rooyin Free Bold", FontStyleTag.PIXEL, 700, "OFL-1.1", "https://github.com/MohamadDarvishi/Rooyin"),
+        SelectableFont("rooyin-regular", "fonts/catalog/rooyinfree-regular.ttf", "Rooyin Free", FontStyleTag.PIXEL, 400, "OFL-1.1", "https://github.com/MohamadDarvishi/Rooyin", "fonts/licenses/OFL-rooyin.txt"),
+        SelectableFont("rooyin-bold", "fonts/catalog/rooyinfree-bold.ttf", "Rooyin Free Bold", FontStyleTag.PIXEL, 700, "OFL-1.1", "https://github.com/MohamadDarvishi/Rooyin", "fonts/licenses/OFL-rooyin.txt"),
     )
 
     /** Infers the game font's style from its profile; serif detection is not possible from tables alone. */
