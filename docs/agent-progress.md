@@ -751,3 +751,16 @@ repackage + run-as).
 - Implemented a shared `translateWithFallback` helper that rethrows cancellation from either engine, only invalidates ML Kit after ordinary failures, lazily checks fallback availability, preserves the original primary exception, and attaches a distinct fallback failure as suppressed. `lastEngine` is now updated only after a successful translation.
 - Added four unit regressions: primary cancellation does not start fallback or invalidate state; ordinary primary failure uses fallback; fallback cancellation propagates; fallback failure is suppressed on the original failure. Validation on the new SHA is pending GitHub Actions. A local Gradle run was not possible in this session because the sandbox could not resolve github.com for a shallow clone; no local test/build success is claimed.
 - Persistent backlog: (1) validate the cancellation regressions on the new SHA; (2) package/verify the Bergamot JNI library for x86_64 in the standard debug build or clearly constrain that ABI; (3) finish the file-backed single-UnityFS rewrite and whole-pipeline memory proof; (4) install/launch a legally redistributable real Unity Mono Player fixture after localization; (5) complete model lifecycle/update/recovery plus physical ARM64 memory/thermal checks; (6) RTL/font visual verification per runtime; (7) IL2CPP and Unreal remain unsupported/research only.
+
+
+## Entry 74 — ChatGPT: transactional bundled-model staging and integrity hardening (2026-11-27)
+
+- Baseline: `672e1fe0a3ed05efc3219d003e8120843ebef729`.
+- Added a file-backed model stager with bounded copy, SHA-256 verification before activation, same-directory promotion, previous-package preservation, interrupted-swap recovery, and repair of corrupt staged files.
+- Added eight JVM regression tests for stage/reuse, corrupt weights/config, interrupted copy, backup recovery, path traversal, missing config hash, and aggregate budget failure.
+- Added `config.yml` to the build-time model hash manifest because the native engine consumes it directly.
+- Integrated the stager into `BundledBergamotTranslator`; transient preparation failures can retry, and only `LinkageError`/ordinary `Exception` are normalized. Fatal VM errors are allowed to propagate.
+- README now distinguishes first-install offline ARM64 from x86_64 (which still needs the ML Kit model in the standard APK), and documents the repackage-signature/data-loss warning.
+- Commits: `e817eb7`, `2f46df5`, `64b4eba`, `10fd466`, `61b6306`, `aaac6d8`, `eb5c4ef`, `672e1fe`.
+- Validation: pending exact-final-SHA Android CI. No local Gradle test/build is claimed. The eight new tests have not yet been reported as executed.
+- Backlog: (1) verify this batch on the exact head and inspect unit XML; (2) validate fresh-install airplane-mode test; (3) build Bergamot JNI for x86_64 or explicitly constrain standard APK claims; (4) physical ARM64 memory/thermal checks; (5) UnityFS file-backed rewrite and real Unity Player launch; (6) per-runtime RTL/font visuals; (7) IL2CPP and Unreal remain unsupported.
