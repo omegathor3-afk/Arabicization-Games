@@ -774,3 +774,10 @@ repackage + run-as).
 - Hardened staging to require the staged manifest to match the bounded APK manifest byte-for-byte, and to refuse symlinked destination/staging/backup roots. Hardened `TranslationModelPackageVerifier` to reject symlinked package roots and symlink components in every manifest-listed path rather than following them.
 - Added regressions for a tampered staged manifest, a symlinked package root that must not alter its target, and a symlinked manifest-listed payload path. Validation for this change is pending the exact new SHA; no local Gradle run is claimed in this GitHub-only edit session.
 - Backlog remains: complete the exact-head Android build/emulator verdict and inspect APK/artifacts; add a real Unity Mono Player install/launch fixture; implement file-backed UnityFS rewriting; finish the model lifecycle/update/recovery and physical ARM64 memory/thermal gates; verify RTL/font behavior per runtime. IL2CPP and Unreal remain unsupported.
+
+
+## Entry 76 — Model package recovery edge-case coverage (2026-11-27)
+
+- Extended the new manifest-integrity regression coverage: a missing staged `manifest.json` must trigger a fresh bounded copy from APK assets rather than reusing the payload-only verification result.
+- Added a nested-directory symlink fixture to prove the verifier checks every path component, not just the final file. The outside target is asserted byte-identical after refusal.
+- These are test-only follow-ups to `9322f74`; exact-head CI remains the acceptance gate. No local Gradle result is claimed.

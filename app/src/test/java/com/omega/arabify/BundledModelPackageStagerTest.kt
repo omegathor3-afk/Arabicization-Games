@@ -143,6 +143,33 @@ class BundledModelPackageStagerTest {
     }
 
     @Test
+    fun missingStoredManifestIsRebuiltFromTheApkManifest() {
+        val parent = createTempDir()
+        try {
+            val root = File(parent, "en-ar")
+            val fixture = fixture("model bytes".toByteArray())
+            var opened = 0
+
+            assertTrue(stage(root, fixture) { path ->
+                opened++
+                fixture.assets.getValue(path)
+            }.accepted)
+            assertTrue(File(root, "manifest.json").delete())
+
+            val repaired = stage(root, fixture) { path ->
+                opened++
+                fixture.assets.getValue(path)
+            }
+
+            assertTrue(repaired.accepted)
+            assertEquals(4, opened)
+            assertArrayEquals(fixture.manifestJson, File(root, "manifest.json").readBytes())
+        } finally {
+            parent.deleteRecursively()
+        }
+    }
+
+    @Test
     fun refusesSymlinkedPackageRootWithoutModifyingItsTarget() {
         val parent = createTempDir()
         try {

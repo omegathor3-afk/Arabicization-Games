@@ -72,6 +72,25 @@ class TranslationModelPackageVerifierTest {
         }
     }
 
+    @Test fun rejectsSymlinkedParentDirectoriesInsteadOfFollowingThem() {
+        val parent = createTempDir()
+        try {
+            val root = File(parent, "package").apply { mkdirs() }
+            val outside = File(parent, "outside").apply { mkdirs() }
+            val bytes = "model".toByteArray()
+            File(outside, "model.bin").writeBytes(bytes)
+            Files.createSymbolicLink(File(root, "nested").toPath(), outside.toPath())
+
+            val result = TranslationModelPackageVerifier.verify(
+                root,
+                manifest("nested/model.bin", hash(bytes))
+            )
+            assertFalse(result.accepted)
+            assertEquals("symbolic_link_not_allowed", result.reason)
+            assertArrayEquals(bytes, File(outside, "model.bin").readBytes())
+        } finally { parent.deleteRecursively() }
+    }
+
     @Test fun rejectsMissingLicenseMetadata() {
         val root = createTempDir()
         try {
