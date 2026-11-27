@@ -115,6 +115,24 @@ class BundledModelPackageStagerTest {
     }
 
     @Test
+    fun corruptNativeConfigIsRebuiltBecauseItIsPartOfTheManifest() {
+        val parent = createTempDir()
+        try {
+            val root = File(parent, "en-ar")
+            val fixture = fixture("model bytes".toByteArray())
+            assertTrue(stage(root, fixture).accepted)
+
+            File(root, "config.yml").writeText("models: []")
+
+            val repaired = stage(root, fixture)
+            assertTrue(repaired.accepted)
+            assertArrayEquals(fixture.assets.getValue("config.yml"), File(root, "config.yml").readBytes())
+        } finally {
+            parent.deleteRecursively()
+        }
+    }
+
+    @Test
     fun failedReplacementKeepsThePreviouslyInstalledPackageIntact() {
         val parent = createTempDir()
         try {
