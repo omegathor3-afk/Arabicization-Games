@@ -886,3 +886,9 @@ repackage + run-as).
 ## Entry 75 — Instinct: Pixel Wheels in-game activation green; annotations consolidated (2026-11-28)
 
 - Run 46087470097 (c5fe7dc): Pixel Wheels job fully green — control launch of the original game alive, Arabized build booted under ar-EG via poll + explicit-start fallback, frames validated and retained. The first-run failure was launch timing, not an artifact defect. Annotation consolidation keeps the ARABIC-ACTIVATION verdict under GitHub's 10-annotation cap.
+
+## Entry 76 — Instinct: real Unity Mono player leg (Car Runner, MIT) shipped (2026-11-28)
+
+- Issue #6 fixture chosen after rejecting Daggerfall (needs non-redistributable assets), dragon-ball (IL2CPP), DoggyMan3D (507MB): Car Runner v1.2.0, MIT, Unity 2019 Mono, 39.6MB, pinned sha256. The leg asserts real-game Mono detection, the localizer's honest no-text refusal (zero in-scope files), and repackaging-route install/launch safety. ARM-only ABI on the x86_64 emulator is the empirical unknown, handled as environmental if it fails.
+- Handoff carries the serialized-scene MonoBehaviour text rewrite proposal - the actual Unity UI text location in every real game surveyed.
+- Validation: guard (8 scripts) + YAML + compile green; device verdict pending.
