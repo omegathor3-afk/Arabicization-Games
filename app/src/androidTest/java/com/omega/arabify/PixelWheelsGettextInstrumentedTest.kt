@@ -107,6 +107,20 @@ class PixelWheelsGettextInstrumentedTest {
                 )
                 assertTrue("Unsigned localized APK missing", unsigned.isFile && unsigned.length() > 0L)
 
+                // Handoff for PixelWheelsVisualArabicInstrumentedTest: expose the
+                // merged fonts so the visual leg can render reference templates
+                // with the exact rasterizer input the game uses.
+                val fontHandoff = File(context.filesDir, "visual-fonts").apply { deleteRecursively(); mkdirs() }
+                ZipFile(unsigned).use { localized ->
+                    report.fontsMerged.forEachIndexed { index, path ->
+                        val entry = localized.getEntry(path) ?: error("merged font entry missing from output: $path")
+                        localized.getInputStream(entry).use { input ->
+                            File(fontHandoff, "merged-$index.ttf").outputStream().use { input.copyTo(it) }
+                        }
+                    }
+                }
+                Log.i("PixelWheelsGettext", "visual font handoff: ${report.fontsMerged}")
+
                 ZipFile(unsigned).use { localized ->
                     val arPo = localized.getEntry(report.addedEntry) ?: error("ar.po entry missing")
                     val arPoText = localized.getInputStream(arPo).use { it.readBytes() }.toString(Charsets.UTF_8)
