@@ -43,12 +43,33 @@ class PixelWheelsVisualArabicInstrumentedTest {
 
     @Test
     fun arabicMenuLabelsAreVisiblyRenderedWithMergedFont() {
-        val fontDir = File(context.filesDir, "visual-fonts")
-        val fonts = fontDir.listFiles { f -> f.name.startsWith("merged-") && f.name.endsWith(".ttf") }
-            ?.sortedBy { it.name }
-            ?: emptyList()
+        // Font handoff via MediaStore Downloads/ARABIFY (published by
+        // PixelWheelsGettextInstrumentedTest): the proven channel across the
+        // visual leg's locale reboot.
+        val fonts = mutableListOf<File>()
+        val projection = arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME)
+        val selection = "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ? AND ${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?"
+        val selectionArgs = arrayOf("Download/ARABIFY%", "merged-font-%.ttf")
+        context.contentResolver.query(
+            MediaStore.Downloads.EXTERNAL_CONTENT_URI, projection, selection, selectionArgs, null,
+        )?.use { cursor ->
+            val nameCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+            while (cursor.moveToNext()) {
+                val name = cursor.getString(nameCol)
+                val uri = android.net.Uri.withAppendedPath(
+                    MediaStore.Downloads.EXTERNAL_CONTENT_URI, cursor.getLong(0).toString(),
+                )
+                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                if (bytes != null && bytes.isNotEmpty()) {
+                    val out = File(context.cacheDir, name)
+                    out.writeBytes(bytes)
+                    fonts += out
+                }
+            }
+        }
+        fonts.sortBy { it.name }
         assertTrue(
-            "merged font handoff missing (PixelWheelsGettextInstrumentedTest must run first and extract the merged fonts)",
+            "merged font handoff missing in Downloads/ARABIFY (PixelWheelsGettextInstrumentedTest must publish merged-font-*.ttf first)",
             fonts.isNotEmpty(),
         )
         val typefaces = fonts.map { Typeface.createFromFile(it) }
