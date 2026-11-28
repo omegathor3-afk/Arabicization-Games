@@ -68,6 +68,22 @@ adb_with_reconnect() {
 mkdir -p build/test-game/localized/pulled-evidence
 adb install build/test-game/pixelwheels.apk || { install_rc=$?; note_failure "adb install of pinned Pixel Wheels APK failed (exit $install_rc)"; exit $install_rc; }
 
+# Control: does the ORIGINAL game even launch on this emulator? If it does
+# not, a failed activation leg says nothing about the Arabized build.
+adb shell monkey -p com.agateau.tinywheels.android 1 || true
+control_alive=0
+for attempt in $(seq 1 6); do
+  sleep 10
+  if adb shell pidof com.agateau.tinywheels.android >/dev/null 2>&1; then control_alive=1; break; fi
+done
+if [[ "$control_alive" -eq 1 ]]; then
+  echo "::notice::CONTROL original Pixel Wheels launches and stays alive on this emulator"
+  adb shell am force-stop com.agateau.tinywheels.android || true
+else
+  adb logcat -d -v time > build/test-game/localized/control-launch-logcat.txt || true
+  echo "::notice::CONTROL-WARN original Pixel Wheels did not stay running on this emulator either; activation evidence is environmental, see control-launch-logcat.txt in the workflow artifact"
+fi
+
 test_status=0
 
 # Pseudo leg: deterministic, and it carries the planner-dispatch assertion on
@@ -165,9 +181,39 @@ if [[ "$launch_status" -eq 0 ]]; then
   fi
 fi
 if [[ "$launch_status" -eq 0 ]]; then
+  adb logcat -c || true
   adb shell monkey -p com.agateau.tinywheels.android 1 || { launch_status=1; note_failure "monkey launch of the Arabized Pixel Wheels failed"; }
-  sleep 15
-  adb shell pidof com.agateau.tinywheels.android > build/test-game/localized/game-process.txt || { launch_status=1; note_failure "Pixel Wheels process not running after launch (pidof empty)"; }
+  # The game can be slow to reach a live process on swiftshader right after
+  # a locale reboot: poll for up to 60s, then fall back to an explicit
+  # activity start before declaring the launch dead.
+  process_alive=0
+  for attempt in $(seq 1 6); do
+    sleep 10
+    if adb shell pidof com.agateau.tinywheels.android > build/test-game/localized/game-process.txt 2>/dev/null && [[ -s build/test-game/localized/game-process.txt ]]; then
+      process_alive=1
+      break
+    fi
+  done
+  if [[ "$process_alive" -eq 0 && "$launch_status" -eq 0 ]]; then
+    adb shell am start -n com.agateau.tinywheels.android/com.agateau.pixelwheels.android.AndroidLauncher || true
+    for attempt in $(seq 1 6); do
+      sleep 10
+      if adb shell pidof com.agateau.tinywheels.android > build/test-game/localized/game-process.txt 2>/dev/null && [[ -s build/test-game/localized/game-process.txt ]]; then
+        process_alive=1
+        break
+      fi
+    done
+  fi
+  if [[ "$process_alive" -eq 0 ]]; then
+    # Diagnosability first: keep the crash evidence in the artifact and quote
+    # the fatal lines in a public annotation (text is allowed; screenshots
+    # stay artifact-only per the privacy guard).
+    adb logcat -d -v time > build/test-game/localized/game-launch-logcat.txt || true
+    adb logcat -b crash -d -v time > build/test-game/localized/game-crash-logcat.txt || true
+    fatal_excerpt=$(grep -m1 -A12 'FATAL EXCEPTION\|Fatal signal\|AndroidRuntime' build/test-game/localized/game-launch-logcat.txt 2>/dev/null | head -13 | tr '\n' ' ' | cut -c1-800)
+    note_failure "Pixel Wheels process not running after monkey + explicit activity start. Fatal excerpt: ${fatal_excerpt:-<no FATAL EXCEPTION in logcat; see game-launch-logcat.txt in the workflow artifact>}"
+    launch_status=1
+  fi
 fi
 if [[ "$launch_status" -eq 0 ]]; then
   # libGDX renders every label in OpenGL, so a uiautomator hierarchy usually
