@@ -920,3 +920,7 @@ repackage + run-as).
 ## 2026-11-28 07:25 UTC+2 — Visual leg calibration: font handoff moved to MediaStore
 
 - First visual run (46107910208): every earlier leg green including ARABIC-ACTIVATION; the visual test failed on "merged font handoff missing" - filesDir did not survive the leg's locale reboot. Fix: pseudo/real tests publish merged fonts to Downloads/ARABIFY/merged-font-*.ttf (the channel every other leg already uses across reboots); the visual test reads them back via MediaStore.
+
+## 2026-11-28 08:15 UTC+2 — Visual leg calibration round 2: cross-reboot handoff eliminated
+
+- Round 1 (MediaStore handoff, run 46111890145) failed identically to filesDir: app-visible state does not survive the leg's locale reboot (installed packages do; MediaStore rows and filesDir apparently do not). Design fix instead of another storage retry: the visual test now renders its template with the app's bundled Amiri directly. The merge copies Amiri's Arabic glyph outlines verbatim into the game's fonts, so the template is exactly what a correct render looks like. Zero state crosses the reboot.
