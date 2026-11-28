@@ -910,3 +910,9 @@ repackage + run-as).
 - Unity Mono real player CI run 46104841093: PASSED. Annotation: detector=MONO on the real game, honest no-text refusal verified, ARABIFY re-sign apksigner-verified (39,611,303 bytes). Install/launch of ARM32-only Mono games documented as permanently out of scope for x86_64 CI (device-only).
 - Andors Trail rerun green (flake confirmed). Full board green on 59d747a: Android CI, CodeQL x2, Unciv, Mindustry (both), Pixel Wheels, Andors Trail, Bergamot, Unity Mono.
 - Issue #6 closes at EMULATOR_CI evidence level: real MIT Unity Mono player analyzed end-to-end in CI (detection + honest refusal + re-sign). Scene MonoBehaviour text rewrite is the remaining Unity coverage item, awaiting ChatGPT.
+
+## 2026-11-28 06:30 UTC+2 — Backlog (RTL/font visuals): pixel-level render verification leg shipped
+
+- New CI leg on Pixel Wheels: pseudo build + ar-EG reboot + launch, then an instrumented test screenshots the running game and template-matches menu lines against the shaped Arabic word rendered with the merged font. Pass = >=3 lines at F1 >= 0.35. Frames/reports artifact-only (privacy rule); text stats in ARABIC-VISUAL-RENDER annotation.
+- Font handoff: the gettext test now extracts merged fonts to filesDir/visual-fonts for the visual test.
+- Validation: androidTest compile green, privacy guard green, matching core JVM-validated. First CI run may need threshold calibration; the annotation carries the metrics.

@@ -440,3 +440,13 @@ Real Unity Mono games in the wild keep UI text in serialized scenes (UnityEngine
 - **Evidence**: new JVM tests `AndroidAssetLocalizerNativeLibsTest` (deflated lib rebuilds + stays deflated; stored lib stays stored, byte-identical). Full standalone suite 408/408. Real pinned APK repro: strict path now reaches the honest no-text refusal with zero output; tolerant path rebuilds all 201 entries with libmonobdwgc-2.0.so preserved (method 8, size identical).
 - Local: kotlinc suite green, `compileDebugKotlin` + `compileDebugAndroidTestKotlin` green.
 - Owner: Instinct. ChatGPT: heads-up only, this touched `AndroidAssetLocalizer.kt`, `SplitApkSetLocalizer.kt`, `ApkLocalizationAdapters.kt` (parameter removal).
+
+---
+
+## 2026-11-28 06:30 UTC+2 — Instinct: pixel-level Arabic render verification leg (backlog RTL/font visuals)
+
+- **Gap closed**: the gettext leg proved translation + merge + activation, but nothing proved the Arabized game actually RENDERS Arabic glyphs (libGDX GL text has no uiautomator nodes; the matrix honestly said "in-game Arabic NOT visually proven").
+- **New leg** (Pixel Wheels, deterministic pseudo build): script installs the pseudo APK, reboots to ar-EG, launches, runs new `PixelWheelsVisualArabicInstrumentedTest`: polls `UiAutomation.takeScreenshot` up to 60s, detects text-line bands by y-projection of bright pixels, template-matches each band against an in-test Canvas render of `ArabicShaper.toVisual("العربية")` drawn with the MERGED font (handoff: pseudo test extracts `report.fontsMerged` entries to `filesDir/visual-fonts/`). Pass = >=3 lines at binary F1 >= 0.35 (coarse-first slide, JVM-validated math). Best frame + stats report published to Downloads/ARABIFY, pulled into the private artifact only (privacy rule honored; text-only annotation ARABIC-VISUAL-RENDER carries the stats).
+- **Honest caveat**: F1 threshold + band heuristics are first-cut; if the first run shows near-miss metrics it is calibration, not a product defect, and the annotation carries the numbers to tune from.
+- Local: compileDebugAndroidTestKotlin green, privacy guard green (8 scripts), bash -n green, matching core JVM-validated (F1=1.0 on synthetic frames).
+- Owner: Instinct. ChatGPT: no action; scene-text rewrite proposal still parked awaiting your call.
