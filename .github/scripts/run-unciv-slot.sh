@@ -129,6 +129,23 @@ fi
 if [[ -s "$OUTPUT_DIR/unciv-arabic.apk" ]]; then
   echo "::notice::LAUNCH pulled localized APK ($(stat -c%s "$OUTPUT_DIR/unciv-arabic.apk") bytes)"
 fi
+# Visual-leg preparation: build the deterministic pseudo Unciv APK while the
+# ORIGINAL game is still installed (the Arabized real build already carries
+# an Arabic slot and the localizer honestly refuses those). Pulled under a
+# distinct name; the real evidence APK was already pulled above.
+visual_status=0
+if [[ "$test_status" -eq 0 ]]; then
+  run_connected_test com.omega.arabify.UncivLocaleSlotInstrumentedTest \
+    -Pandroid.testInstrumentationRunnerArguments.translationMode=pseudo || visual_status=$?
+fi
+if [[ "$test_status" -eq 0 && "$visual_status" -eq 0 ]]; then
+  adb_with_reconnect pull /sdcard/Download/ARABIFY/unciv-arabic.apk "$OUTPUT_DIR/unciv-arabic-pseudo.apk" || { visual_status=1; note_failure "pseudo Unciv APK pull failed"; }
+fi
+if [[ "$test_status" -eq 0 && "$visual_status" -ne 0 ]]; then
+  note_failure "pseudo Unciv build failed; the visual-render leg cannot run"
+  test_status=1
+fi
+
 GENERATED_APK="$OUTPUT_DIR/unciv-arabic.apk"
 launch_status=0
 if [[ -s "$GENERATED_APK" ]]; then
@@ -343,12 +360,6 @@ fi
 # runtime). Pixel-level proof that pre-shaped presentation forms produce
 # VISIBLE Arabic glyph shapes; frames stay in the private artifact.
 if [[ "$test_status" -eq 0 && "$launch_status" -eq 0 ]]; then
-  visual_status=0
-  run_connected_test com.omega.arabify.UncivLocaleSlotInstrumentedTest \
-    -Pandroid.testInstrumentationRunnerArguments.translationMode=pseudo || visual_status=$?
-  if [[ "$visual_status" -eq 0 ]]; then
-    adb_with_reconnect pull /sdcard/Download/ARABIFY/unciv-arabic.apk "$OUTPUT_DIR/unciv-arabic-pseudo.apk" || { visual_status=1; note_failure "pseudo Unciv APK pull failed"; }
-  fi
   if [[ "$visual_status" -eq 0 ]]; then
     adb_with_reconnect uninstall com.unciv.app || true
     adb_with_reconnect install "$OUTPUT_DIR/unciv-arabic-pseudo.apk" || { visual_status=1; note_failure "install of the pseudo Unciv build failed"; }
