@@ -882,3 +882,7 @@ repackage + run-as).
 
 - Run 46081244821: localization legs green; launch leg failed (pidof empty after monkey). Local JVM repro of the exact production localizer on the pinned APK proves the artifact parses clean (languages.xml strict-parse OK, merged TTFs re-analyze OK, ar.po well-formed), narrowing the cause to runtime or environment. Script now polls pidof, falls back to explicit am start, captures logcat main+crash with a public FATAL excerpt, and launches the ORIGINAL game first as a control so environment faults cannot masquerade as artifact bugs.
 - Validation: privacy guard + bash -n green. Device verdict pending this push.
+
+## Entry 75 — Instinct: Pixel Wheels in-game activation green; annotations consolidated (2026-11-28)
+
+- Run 46087470097 (c5fe7dc): Pixel Wheels job fully green — control launch of the original game alive, Arabized build booted under ar-EG via poll + explicit-start fallback, frames validated and retained. The first-run failure was launch timing, not an artifact defect. Annotation consolidation keeps the ARABIC-ACTIVATION verdict under GitHub's 10-annotation cap.
