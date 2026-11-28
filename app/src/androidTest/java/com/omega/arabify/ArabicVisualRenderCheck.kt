@@ -281,7 +281,7 @@ internal object ArabicVisualRenderCheck {
     internal fun asciiLuminanceMap(frame: Bitmap): String {
         val cols = 64
         val rows = 20
-        val ramp = " .:-=+*#%@"
+        val ramp = " .:-=+*#8@"
         val scaled = Bitmap.createScaledBitmap(frame, cols, rows, true)
         val out = StringBuilder()
         for (y in 0 until rows) {
@@ -297,28 +297,83 @@ internal object ArabicVisualRenderCheck {
         return out.toString()
     }
 
-    /** Text-line detection from the y-axis projection of ink pixels. Returns bands to the max row ink count. */
+    /**
+     * Text-line detection from the y-axis projection of ink TRANSITIONS.
+     * Raw ink counts fail on textured screens (a map, a wallpaper): large
+     * bright or dark regions merge into screen-spanning "bands" that the
+     * height filter rejects, swallowing the text inside them. Text rows
+     * instead have MANY ink/non-ink flips along x (glyph strokes); solid
+     * regions and smooth terrain have almost none. Returns the detected
+     * bands to the max raw row ink count (diagnostic only).
+     */
     private fun detectBands(mask: BooleanArray, width: Int, height: Int): Pair<List<Band>, Int> {
+        val rowTransitions = IntArray(height)
         val rowCounts = IntArray(height)
         for (y in 0 until height) {
+            var transitions = 0
             var count = 0
             val base = y * width
-            for (x in 0 until width) if (mask[base + x]) count++
+            var prev = mask[base]
+            if (prev) count++
+            for (x in 1 until width) {
+                val v = mask[base + x]
+                if (v) count++
+                if (v != prev) transitions++
+                prev = v
+            }
+            rowTransitions[y] = transitions
             rowCounts[y] = count
         }
         var maxRow = 0
         for (c in rowCounts) maxRow = maxOf(maxRow, c)
+        // Runs of text-dense rows, merged across small dips (glyph ascender
+        // gaps), then height-filtered. The density threshold adapts to the
+        // frame (P90 of row transitions, floor 8): on clean menus the fixed
+        // floor applies; on textured screens (map terrain) the terrain's own
+        // density raises the bar so it cannot link the whole screen into one
+        // rejected giant run. If P90 still saturates everything, retry at P97.
+        // The densest bands go first and the count is capped: busy terrain
+        // may form false bands, and template matching must stay under the
+        // 2.5s frame polling budget.
+        val sorted = rowTransitions.sortedArray()
+        val p90 = sorted[(height * 90) / 100]
+        val p97 = sorted[(height * 97) / 100]
+        val threshold = maxOf(8, p90)
+        var bands = buildRuns(rowTransitions, height, threshold)
+        if (bands.isEmpty() && p97 > threshold) bands = buildRuns(rowTransitions, height, p97)
+        if (bands.size > 40) {
+            val avg = bands.map { band ->
+                var sum = 0
+                for (row in band.top until band.bottom) sum += rowTransitions[row]
+                sum.toDouble() / (band.bottom - band.top)
+            }
+            val order = bands.indices.sortedByDescending { avg[it] }.take(40).sorted()
+            bands = order.map { bands[it] }
+        }
+        return bands to maxRow
+    }
+
+    private fun buildRuns(rowTransitions: IntArray, height: Int, threshold: Int): List<Band> {
         val bands = mutableListOf<Band>()
         var y = 0
         while (y < height) {
-            if (rowCounts[y] >= 12) {
+            if (rowTransitions[y] >= threshold) {
                 var end = y
-                while (end + 1 < height && (rowCounts[end + 1] >= 4 || (end + 2 < height && rowCounts[end + 2] >= 4))) end++
+                var gap = 0
+                while (end + 1 < height) {
+                    if (rowTransitions[end + 1] >= threshold) {
+                        end++
+                        gap = 0
+                    } else if (gap < 3 && end + 2 < height && rowTransitions[end + 2] >= threshold) {
+                        end += 2
+                        gap = 0
+                    } else break
+                }
                 if (end - y + 1 in 10..160) bands.add(Band(y, end + 1))
                 y = end + 1
             } else y++
         }
-        return bands to maxRow
+        return bands
     }
 
     /** Renders the shaped word in white with [typeface] and binarizes by alpha. */
