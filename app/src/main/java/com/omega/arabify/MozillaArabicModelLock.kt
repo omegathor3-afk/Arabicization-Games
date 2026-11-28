@@ -3,8 +3,11 @@ package com.omega.arabify
 /**
  * Locked Mozilla Remote Settings records for the Arabic direction pair.
  * Hashes below are the SHA-256 of the downloaded .zst attachment AND the
- * decompressed payload hash published by Mozilla. They are not yet proof
- * that the native runtime can load model v3.0 on Android.
+ * decompressed payload hash published by Mozilla. The Android app packages
+ * the en-ar direction; runtime readiness is separately checked by the
+ * app-private package verifier, native session creation and an Arabic smoke
+ * translation. Registry hashes alone do not prove translation quality or
+ * physical-device compatibility.
  */
 internal object MozillaArabicModelLock {
     const val collectionUrl = "https://firefox.settings.services.mozilla.com/v1/buckets/main/collections/translations-models-v2/records"

@@ -14,8 +14,14 @@ internal fun hasArabicTranslationModel(downloadedLanguages: Set<String>): Boolea
  TranslateLanguage.ARABIC in downloadedLanguages
 
 /** True when at least one supported offline English-to-Arabic engine is available. */
-internal fun hasUsableArabicTranslationEngine(mlKitModelDownloaded: Boolean, bundledEngineUsable: Boolean): Boolean =
- mlKitModelDownloaded || bundledEngineUsable
+internal fun hasUsableArabicTranslationEngine(mlKitModelDownloaded: Boolean, bundledEngineReady: Boolean): Boolean =
+ mlKitModelDownloaded || bundledEngineReady
+
+/** Bundle presence is only a capability check; prepare it only when ML Kit is not already ready. */
+internal fun shouldPrepareBundledTranslationEngine(
+ mlKitModelDownloaded: Boolean,
+ bundledEngineAvailable: Boolean
+): Boolean = bundledEngineAvailable && !mlKitModelDownloaded
 
 /** Prefer the bundled engine when the optional ML Kit model is not confirmed available. */
 internal fun shouldUseBundledTranslationEngine(mlKitModelDownloaded: Boolean, bundledEngineUsable: Boolean): Boolean =
@@ -146,6 +152,9 @@ internal class OfflineArabicTranslator(context: Context) {
 
  /** True when this APK has bundled model assets and a loadable native engine for this ABI. */
  fun isBundledEngineUsable(): Boolean = bundled.isUsable()
+
+ /** Verify the bundled package, create the native session, and run a real Arabic smoke translation. */
+ fun prepareBundledEngine(): Boolean = bundled.prepare()
 
  suspend fun translateEnglishToArabic(text: String): String {
   require(text.isNotBlank()) { "النص فارغ." }

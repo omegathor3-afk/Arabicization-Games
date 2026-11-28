@@ -934,3 +934,14 @@ repackage + run-as).
 
 - Shared ArabicVisualRenderCheck extracted; Pixel Wheels visual test is a thin caller (unchanged behavior, still green).
 - New Unciv visual leg: pseudo build + settings seed + system-font template match (Unciv rasterizes via Android system fonts). UNCIV-VISUAL-RENDER annotation, frames artifact-only. Adds ~8 min to the unfiltered Unciv workflow.
+
+
+## 2026-11-28 — ChatGPT: verify the bundled engine before reporting it ready
+
+- Audited exact branch head `c6dfdb6a1c0898ae65c3852d7f39847ce17489c4` and its current-head Actions artifacts. Android CI built a Debug APK and arm64 Bergamot JNI; JVM XML: 70 suites / 468 tests / 0 failures / 0 errors / 0 skipped. Android lint: 23 warnings, 0 errors. CodeQL/Gitleaks succeeded. Unciv emulator CI was still running at audit time.
+- Downloaded the exact-head Debug APK (119,162,763 bytes; SHA-256 `a36908da23cce4cc0acb1fe73522651009712d90909e111bbc5766dd6b44367d`), verified ZIP integrity, and checked every en-ar model file against its embedded manifest: config, lexicon, model weights and SentencePiece vocabulary all matched SHA-256. APK signature verification passed with v2. The standard Android CI APK contains arm64-v8a Bergamot JNI but no x86_64 Bergamot JNI; the x86_64 path therefore relies on the ML Kit model download.
+- Found a product-truth issue: MainActivity treated the presence of model assets + a loadable ABI library as `modelReady`, before the app-private stager had checked hashes or the native session had loaded. Added a real preparation probe: stage/verify the manifest-listed package, create the native session and require an Arabic smoke translation before the UI enables localization on first install.
+- Tightened `BundledFirstInstallOfflineInstrumentedTest` to require that the fresh emulator has no ML Kit Arabic model, prepare the bundled engine offline, and assert that the production translator selected `bundled-bergamot`. Expanded the Bergamot workflow path filters so changes to the production translator, stager, verifier, model lock or model staging script trigger the offline JNI workflow.
+- Corrected stale Bergamot KDoc/audit/lock metadata that still described the JNI bridge as test-only or not integrated. Physical ARM64 memory/thermal behavior and broad translation quality remain explicitly unverified.
+- Validation for this new batch is pending exact-head Actions; no local Gradle/Android SDK is available in this execution environment.
+- Backlog: verify this commit's Android/JUnit, lint, CodeQL, dedicated first-install offline Bergamot workflow, APK model/signature and Unity Mono emulator results; then address the file-backed UnityFS writer and real Unity Mono scene-text formats without broadening unsupported claims.

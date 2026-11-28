@@ -46,7 +46,11 @@ class BundledFirstInstallOfflineInstrumentedTest {
         val translator = OfflineArabicTranslator(context)
         try {
             val mlKitReady = translator.isArabicModelDownloaded()
-            Log.i(tag, "mlkit-arabic-model-downloaded=$mlKitReady (fresh install expects false)")
+            Log.i(tag, "mlkit-arabic-model-downloaded=$mlKitReady (fresh install requires false)")
+            assertFalse("fresh-install offline test unexpectedly has an ML Kit Arabic model", mlKitReady)
+
+            val prepared = translator.prepareBundledEngine()
+            assertTrue("bundled model package did not verify/load/translate its smoke sentence", prepared)
 
             val output = translator.translateEnglishToArabic("The ocean is deep.")
             Log.i(tag, "production-translate engine=${translator.lastEngine} outputLength=${output.length}")
@@ -59,13 +63,11 @@ class BundledFirstInstallOfflineInstrumentedTest {
                 "production translation carries no Arabic script offline",
                 output.any { it.code in 0x0600..0x06FF },
             )
-            if (!mlKitReady) {
-                assertEquals(
-                    "with no ML Kit model and no network, production must use the bundled engine",
-                    "bundled-bergamot",
-                    translator.lastEngine,
-                )
-            }
+            assertEquals(
+                "with no ML Kit model and no network, production must use the bundled engine",
+                "bundled-bergamot",
+                translator.lastEngine,
+            )
 
             // A second string must also translate (session reuse, not a one-shot).
             val second = translator.translateEnglishToArabic("The sea is dark.")

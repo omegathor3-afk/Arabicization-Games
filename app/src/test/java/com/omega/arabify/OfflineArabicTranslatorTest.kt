@@ -27,17 +27,45 @@ class OfflineArabicTranslatorTest {
 
     @Test
     fun bundledEngineMakesFirstInstallTranslationReadyWithoutMlKit() {
-        assertTrue(hasUsableArabicTranslationEngine(mlKitModelDownloaded = false, bundledEngineUsable = true))
+        assertTrue(hasUsableArabicTranslationEngine(mlKitModelDownloaded = false, bundledEngineReady = true))
     }
 
     @Test
     fun downloadedMlKitModelMakesTranslationReadyWithoutBundledEngine() {
-        assertTrue(hasUsableArabicTranslationEngine(mlKitModelDownloaded = true, bundledEngineUsable = false))
+        assertTrue(hasUsableArabicTranslationEngine(mlKitModelDownloaded = true, bundledEngineReady = false))
     }
 
     @Test
     fun translationIsNotReadyWhenNeitherEngineIsAvailable() {
-        assertFalse(hasUsableArabicTranslationEngine(mlKitModelDownloaded = false, bundledEngineUsable = false))
+        assertFalse(hasUsableArabicTranslationEngine(mlKitModelDownloaded = false, bundledEngineReady = false))
+    }
+
+    @Test
+    fun packagedBundledEngineMustBePreparedBeforeItCanMarkTranslationReady() {
+        assertTrue(shouldPrepareBundledTranslationEngine(
+            mlKitModelDownloaded = false,
+            bundledEngineAvailable = true
+        ))
+        assertFalse(hasUsableArabicTranslationEngine(
+            mlKitModelDownloaded = false,
+            bundledEngineReady = false
+        ))
+        assertTrue(hasUsableArabicTranslationEngine(
+            mlKitModelDownloaded = false,
+            bundledEngineReady = true
+        ))
+    }
+
+    @Test
+    fun bundledWarmupIsSkippedWhenMlKitIsReadyOrTheAbiHasNoNativeLibrary() {
+        assertFalse(shouldPrepareBundledTranslationEngine(
+            mlKitModelDownloaded = true,
+            bundledEngineAvailable = true
+        ))
+        assertFalse(shouldPrepareBundledTranslationEngine(
+            mlKitModelDownloaded = false,
+            bundledEngineAvailable = false
+        ))
     }
 
     @Test

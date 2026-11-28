@@ -1,6 +1,6 @@
 # Bergamot / Marian Android integration audit
 
-Status: engineering gate / not yet a shipping translation engine.
+Status: production-wired offline translation candidate; not Release-qualified and not validated on a physical ARM64 phone. The user-facing path now stages and verifies the bundled en-ar package, creates a JNI session and uses an Arabic smoke translation before advertising the bundled engine as ready.
 
 ## Candidate stack
 
@@ -14,7 +14,7 @@ Status: engineering gate / not yet a shipping translation engine.
 
 Mozilla documents Arabic among Firefox Translations supported languages, and the Mozilla translations pipeline publishes direction-specific Bergamot-compatible model packages. This establishes Arabic as a viable candidate, not yet a pinned model artifact: before shipping, select the exact `en→ar` and `ar→en` registry entries, record each file revision/size/SHA-256/license, and run Arabic game-dialogue quality tests. Bergamot models are directional; do not assume one model handles both directions. See https://www.mozilla.org/en-US/firefox/features/translate/ and https://github.com/mozilla/translations.
 
-## Initial implementation decision
+## Initial implementation decision (historical design record)
 
 1. Introduce a strict model-package integrity gate before any native loader is called.
 2. A package is rejected unless all required files exist, paths remain inside the package directory, and every SHA-256 matches.
@@ -30,7 +30,9 @@ Mozilla documents Arabic among Firefox Translations supported languages, and the
 - [x] Build pinned native arm64-v8a and x86_64 artifacts with NDK/CMake and verify ABI/dependencies in CI.
 - [x] Load both real directional model-v3.0 packages and translate in airplane mode on an API 35 emulator.
 - [x] Record emulator package size, load latency, warm latency and PSS; add repeated-call memory regression ceilings.
-- [ ] Integrate an atomic, app-private production model installer and explicit session lifecycle into the app.
+- [x] Integrate the bundled en-ar package into OfflineArabicTranslator: app-private transactional staging, manifest/hash verification, native session creation and explicit close lifecycle.
+- [x] Require a real Arabic smoke translation before the UI marks the bundled engine ready; package/library presence alone is not readiness.
+- [ ] Run the dedicated first-install offline production-path workflow on every relevant code SHA (the path filter now includes the production translator, stager and verifier).
 - [ ] Measure memory, native heap, battery/thermal behavior and output quality on target physical phones before setting minimum hardware requirements.
 
 ## Sources checked
@@ -62,9 +64,9 @@ Pinned source candidate: `browsermt/bergamot-translator@9271618ebbdc5d21ac4dc4df
 
 This is a source pin, not yet an Android native binary. The upstream CMake project is C++17 and initializes git submodules during CMake configuration by default. A mobile integration must explicitly disable implicit submodule mutation and check out the exact gitlinks above. The Android JNI pattern in RTranslator v3.00 is a useful implementation reference, but its app-level Apache-2.0 license does not relicense Bergamot, Marian, SentencePiece or other native dependencies.
 
-**Updated compatibility status (2026-11-12):** CI now downloads and verifies the pinned zstd attachments and decompressed hashes, builds the pinned JNI source for arm64-v8a and x86_64, generates both directional model configs, and loads/translates the actual model-v3.0 payloads in an Android 15 / API 35 x86_64 emulator with networking disabled. The two directions produced meaningful output. This closes the emulator model/runtime compatibility gate, but it does not establish physical ARM64 device compatibility or a shippable translation feature.
+**Updated compatibility status (2026-11-28):** CI builds the pinned JNI source for arm64-v8a and the dedicated native workflow builds x86_64 for emulator testing. The app packages only en-ar weights in the phone APK. OfflineArabicTranslator selects bundled Bergamot when the ML Kit Arabic model is absent; the bundled stager verifies the exact APK manifest and all payload SHA-256 values before nativeCreate. The startup readiness probe now loads the session and runs a short Arabic smoke translation rather than trusting the presence of metadata or a shared library. The exact-head first-install offline workflow is triggered by changes to this production path; its run result must still be checked before claiming the current commit passed. Physical ARM64 memory/thermal behavior and broad dialogue quality remain open.
 
-The successful emulator run measured approximately 250–260 MiB PSS after the first translation, with first-call latency around 210 ms and subsequent calls around 6–8 ms. These values are recorded in native/bergamot/README.md and the CI metrics artifact. The native bridge remains test-only; the production model installer, lifecycle integration, physical-device memory/thermal benchmarks, and dialogue-quality evaluation remain open. Do not label Bergamot as an end-user feature until those gates pass.
+The successful emulator run measured approximately 250–260 MiB PSS after the first translation, with first-call latency around 210 ms and subsequent calls around 6–8 ms. These values are recorded in native/bergamot/README.md and the CI metrics artifact. The native bridge is now wired into the production translation service for ABIs that ship libarabify_bergamot. The app APK packages the en-ar model and arm64-v8a library; the standard Android CI x86_64 APK does not include that library and still needs the ML Kit model download. The dedicated native workflow builds an x86_64 test library and runs a fresh-install production-path airplane-mode test. This is bounded English-to-Arabic evidence, not proof of arbitrary-device performance, broad dialogue quality, or universal game support.
 
 Sources:
 - Official Mozilla registry: https://firefox.settings.services.mozilla.com/v1/buckets/main/collections/translations-models-v2/records

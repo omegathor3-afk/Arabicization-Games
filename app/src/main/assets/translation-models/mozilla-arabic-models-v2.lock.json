@@ -7,7 +7,7 @@
     "repository": "https://github.com/browsermt/bergamot-translator",
     "commit": "9271618ebbdc5d21ac4dc4df9e72beb7ce644774",
     "license": "MPL-2.0",
-    "status": "pinned-source-candidate; Android NDK/JNI build not yet integrated or validated"
+    "status": "JNI is integrated into OfflineArabicTranslator; the en-ar package is bundled and SHA-256-verified in app-private storage before native session creation; arm64-v8a is included in the phone APK; exact-head first-install offline CI and physical ARM64 validation remain separate gates"
   },
   "modelLicense": "MPL-2.0",
   "modelVersion": "3.0",

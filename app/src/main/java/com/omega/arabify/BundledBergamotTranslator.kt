@@ -50,8 +50,21 @@ internal class BundledBergamotTranslator(private val context: Context) {
         false
     }
 
-    /** True when this APK can actually serve bundled translations (weights AND native lib). */
+    /** True when this APK has the assets and ABI-specific native library needed by the engine. */
     fun isUsable(): Boolean = isPackaged() && nativeAvailable
+
+    /**
+     * Proves runtime readiness, not just metadata presence: stage and hash-check every
+     * manifest-listed file, create the native session, then require an Arabic smoke result.
+     */
+    fun prepare(): Boolean {
+        if (!isUsable()) return false
+        val smokeTranslation = translateEnglishToArabic("The ocean is deep.")
+        check(smokeTranslation.any { it.code in 0x0600..0x06FF }) {
+            "bundled_model_smoke_translation_not_arabic"
+        }
+        return true
+    }
 
     /** Translates synchronously on the calling thread; callers dispatch off the main thread. */
     fun translateEnglishToArabic(text: String): String {
