@@ -22,8 +22,8 @@ import java.io.File
  * screenshots the running game and checks that rendered menu lines actually
  * contain the shaped Arabic word the pipeline wrote, template-matched against
  * an in-test Canvas render of ArabicShaper.toVisual("العربية") drawn with the
- * merged font extracted by PixelWheelsGettextInstrumentedTest (font handoff
- * in filesDir/visual-fonts).
+ * app's bundled Amiri, whose Arabic glyph outlines the merge copies verbatim
+ * into the game's fonts (so the template is exactly a correct render).
  *
  * This is the pixel-level leg the uiautomator hierarchy cannot give (libGDX
  * renders labels in OpenGL with zero text nodes): it proves the pre-shaped
@@ -43,36 +43,20 @@ class PixelWheelsVisualArabicInstrumentedTest {
 
     @Test
     fun arabicMenuLabelsAreVisiblyRenderedWithMergedFont() {
-        // Font handoff via MediaStore Downloads/ARABIFY (published by
-        // PixelWheelsGettextInstrumentedTest): the proven channel across the
-        // visual leg's locale reboot.
-        val fonts = mutableListOf<File>()
-        val projection = arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME)
-        val selection = "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ? AND ${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?"
-        val selectionArgs = arrayOf("Download/ARABIFY%", "merged-font-%.ttf")
-        context.contentResolver.query(
-            MediaStore.Downloads.EXTERNAL_CONTENT_URI, projection, selection, selectionArgs, null,
-        )?.use { cursor ->
-            val nameCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
-            while (cursor.moveToNext()) {
-                val name = cursor.getString(nameCol)
-                val uri = android.net.Uri.withAppendedPath(
-                    MediaStore.Downloads.EXTERNAL_CONTENT_URI, cursor.getLong(0).toString(),
-                )
-                val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                if (bytes != null && bytes.isNotEmpty()) {
-                    val out = File(context.cacheDir, name)
-                    out.writeBytes(bytes)
-                    fonts += out
-                }
-            }
+        // Reference template font: the app's bundled Amiri. The merged
+        // Xolonium-*-Ar fonts the game renders with carry Amiri's Arabic
+        // glyph outlines verbatim (the merge copies glyph tables, proven by
+        // FontMerger tests and the merge report), so an Amiri-rendered
+        // template is exactly what a correct on-screen render must look like.
+        // No cross-test handoff needed: no state crosses the locale reboot.
+        val amiri = File(context.cacheDir, "amiri-template.ttf")
+        context.assets.open("fonts/Amiri-Regular.ttf").use { input ->
+            amiri.outputStream().use { input.copyTo(it) }
         }
-        fonts.sortBy { it.name }
-        assertTrue(
-            "merged font handoff missing in Downloads/ARABIFY (PixelWheelsGettextInstrumentedTest must publish merged-font-*.ttf first)",
-            fonts.isNotEmpty(),
-        )
+        assertTrue("bundled Amiri font missing from app assets", amiri.isFile && amiri.length() > 0L)
+        val fonts = listOf(amiri)
         val typefaces = fonts.map { Typeface.createFromFile(it) }
+
 
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val templateWord = ArabicShaper.toVisual("العربية")

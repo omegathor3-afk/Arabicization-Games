@@ -107,38 +107,7 @@ class PixelWheelsGettextInstrumentedTest {
                 )
                 assertTrue("Unsigned localized APK missing", unsigned.isFile && unsigned.length() > 0L)
 
-                // Handoff for PixelWheelsVisualArabicInstrumentedTest: publish the
-                // merged fonts to Downloads/ARABIFY so the visual leg can render
-                // reference templates with the exact rasterizer input the game
-                // uses. MediaStore is the proven channel across the visual leg's
-                // locale reboot; filesDir did not survive it in CI.
-                val handoffSelection = "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ? AND ${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?"
-                val handoffArgs = arrayOf("Download/ARABIFY%", "merged-font-%.ttf")
-                context.contentResolver.delete(MediaStore.Downloads.EXTERNAL_CONTENT_URI, handoffSelection, handoffArgs)
-                ZipFile(unsigned).use { localized ->
-                    report.fontsMerged.forEachIndexed { index, path ->
-                        val entry = localized.getEntry(path) ?: error("merged font entry missing from output: $path")
-                        val bytes = localized.getInputStream(entry).use { it.readBytes() }
-                        val values = ContentValues().apply {
-                            put(MediaStore.MediaColumns.DISPLAY_NAME, "merged-font-$index.ttf")
-                            put(MediaStore.MediaColumns.MIME_TYPE, "font/ttf")
-                            put(MediaStore.MediaColumns.RELATIVE_PATH, "Download/ARABIFY")
-                            put(MediaStore.MediaColumns.IS_PENDING, 1)
-                        }
-                        val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-                            ?: error("Could not create Downloads entry for merged-font-$index.ttf")
-                        try {
-                            context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
-                                ?: error("Could not open Downloads output for merged-font-$index.ttf")
-                            val ready = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
-                            context.contentResolver.update(uri, ready, null, null)
-                        } catch (handoffError: Throwable) {
-                            context.contentResolver.delete(uri, null, null)
-                            throw handoffError
-                        }
-                    }
-                }
-                Log.i("PixelWheelsGettext", "visual font handoff: ${report.fontsMerged}")
+
 
                 ZipFile(unsigned).use { localized ->
                     val arPo = localized.getEntry(report.addedEntry) ?: error("ar.po entry missing")
