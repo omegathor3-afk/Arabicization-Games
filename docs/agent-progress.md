@@ -916,3 +916,7 @@ repackage + run-as).
 - New CI leg on Pixel Wheels: pseudo build + ar-EG reboot + launch, then an instrumented test screenshots the running game and template-matches menu lines against the shaped Arabic word rendered with the merged font. Pass = >=3 lines at F1 >= 0.35. Frames/reports artifact-only (privacy rule); text stats in ARABIC-VISUAL-RENDER annotation.
 - Font handoff: the gettext test now extracts merged fonts to filesDir/visual-fonts for the visual test.
 - Validation: androidTest compile green, privacy guard green, matching core JVM-validated. First CI run may need threshold calibration; the annotation carries the metrics.
+
+## 2026-11-28 07:25 UTC+2 — Visual leg calibration: font handoff moved to MediaStore
+
+- First visual run (46107910208): every earlier leg green including ARABIC-ACTIVATION; the visual test failed on "merged font handoff missing" - filesDir did not survive the leg's locale reboot. Fix: pseudo/real tests publish merged fonts to Downloads/ARABIFY/merged-font-*.ttf (the channel every other leg already uses across reboots); the visual test reads them back via MediaStore.
