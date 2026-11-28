@@ -366,9 +366,6 @@ internal class AndroidAssetsInPlaceAdapter(private val deps: AdapterRuntimeDeps?
         val output = runtime.outputFor(input, "inplace-unsigned")
         val report = AndroidAssetLocalizer.transformToUnsignedApk(
             file, output,
-            // Package flags need the host's PackageManager; assume the safe
-            // default and say so until the dispatch host supplies them.
-            extractNativeLibs = false,
             onProgress = runtime.onProgress,
             tx = runtime.translate,
         )
@@ -379,7 +376,6 @@ internal class AndroidAssetsInPlaceAdapter(private val deps: AdapterRuntimeDeps?
             skipped = report.stringsSkipped,
             warnings = listOf(
                 "output APK is unsigned; the dispatch host finalizes signing",
-                "package flags unavailable without a host Context; extractNativeLibs assumed false",
             ) + report.fitWarningSamples.take(2),
             // DispatchPathInstrumentedTest runs this exact wrapper through
             // PlannerDispatch on a synthetic JSON-only fixture on the emulator

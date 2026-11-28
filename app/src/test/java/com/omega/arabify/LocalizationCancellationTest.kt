@@ -35,7 +35,6 @@ class LocalizationCancellationTest {
                     AndroidAssetLocalizer.transformToUnsignedApk(
                         inputApk = input,
                         unsignedApk = output,
-                        extractNativeLibs = false,
                         requireTranslations = true
                     ) {
                         translationCalls++

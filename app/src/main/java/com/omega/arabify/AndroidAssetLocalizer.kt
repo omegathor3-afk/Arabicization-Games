@@ -486,8 +486,7 @@ internal object AndroidAssetLocalizer {
    context.packageManager.getPackageArchiveInfo(inputApk.absolutePath,0)
   }catch(_:Exception){null}
   val packageName=archiveInfo?.packageName
-  val extractNativeLibs=archiveInfo?.applicationInfo?.let { it.flags and ApplicationInfo.FLAG_EXTRACT_NATIVE_LIBS != 0 } ?: false
-  val report=transformToUnsignedApk(inputApk,unsignedApk,extractNativeLibs,allowedPathPrefixes,onProgress,requireTranslations=true){value->
+  val report=transformToUnsignedApk(inputApk,unsignedApk,allowedPathPrefixes,onProgress,requireTranslations=true){value->
    translator.translateEnglishToArabic(value)
   }
   ApkSigningService.signAndVerify(context,unsignedApk,signedApk)
@@ -495,7 +494,7 @@ internal object AndroidAssetLocalizer {
  }
 
  internal suspend fun transformToUnsignedApk(
-  inputApk:File,unsignedApk:File,extractNativeLibs:Boolean,
+  inputApk:File,unsignedApk:File,
   allowedPathPrefixes:List<String> = allowedRoots,onProgress:(Int,Int)->Unit={_,_->},
   requireTranslations:Boolean=true,
   tx:suspend (String)->String
@@ -514,7 +513,6 @@ internal object AndroidAssetLocalizer {
    val entries=zip.entries()
    val candidates=mutableListOf<ZipEntry>()
    val archiveEntryNames=ArchiveEntryNameGuard()
-   var hasNativeLibraries=false
    var archiveEntryCount=0
    while(entries.hasMoreElements()){
     operationContext.ensureActive()
@@ -526,15 +524,20 @@ internal object AndroidAssetLocalizer {
     require(archiveEntryNames.register(entry.name,normalizedCandidatePath)){
      "ملف APK يحتوي على اسم ZIP فارغ أو مكرر، أو مسارين نصيين متطابقين بعد تطبيع الفواصل؛ أوقفنا إعادة البناء لتجنب استبدال محتوى غير محدد."
     }
-    if(entry.name.startsWith("lib/")&&entry.name.endsWith(".so",true))hasNativeLibraries=true
     if(supportedTextEntry){
      candidates+=entry
      require(candidates.size<=MAX_CANDIDATE_FILES){"عدد ملفات النصوص المرشحة يتجاوز حد المعالجة الآمن (2,048)."}
     }
    }
-   if(hasNativeLibraries&&!extractNativeLibs){
-    error("تحتوي اللعبة على مكتبات native غير مستخرجة. إعادة بناء APK تحتاج محاذاة ZIP خاصة قبل التثبيت؛ أوقفنا العملية لحماية الملف بدل إنشاء APK قد يفشل تثبيته.")
-   }
+   // Native libraries need no blanket refusal: DEFLATED .so entries keep
+   // their compression and install-time extraction semantics, and STORED
+   // .so entries keep their method and are re-aligned by ApkZipEntryPolicy
+   // (0xD935 alignment extra preserved or recreated), so the rebuilt APK
+   // installs exactly like the original. The old extractNativeLibs guard
+   // also mis-fired on legacy APKs (e.g. Unity Mono players) whose flag is
+   // unset although their deflated libs extract at install. The only truly
+   // broken shape (deflated .so with explicit extractNativeLibs=false) is an
+   // uninstallable input, which ApkZipEntryPolicy's alignment bounds reject.
    discovered=candidates.size
    candidates.forEachIndexed { index,entry ->
     operationContext.ensureActive()

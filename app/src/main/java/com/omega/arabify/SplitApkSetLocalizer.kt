@@ -39,7 +39,6 @@ internal object SplitApkSetLocalizer {
     suspend fun localizeSet(
         inputApks: List<File>,
         outputDir: File,
-        extractNativeLibsResolver: (File) -> Boolean,
         onProgress: (Int, Int) -> Unit = { _, _ -> },
         tx: suspend (String) -> String
     ): SetReport {
@@ -52,7 +51,7 @@ internal object SplitApkSetLocalizer {
             val out = File(outputRoot, name)
             require(out.absoluteFile.parentFile == outputRoot) { "مسار إخراج غير آمن." }
             val report = AndroidAssetLocalizer.transformToUnsignedApk(
-                apk, out, extractNativeLibsResolver(apk),
+                apk, out,
                 onProgress = onProgress, requireTranslations = false, tx = tx
             )
             MemberReport(apk.name, out, report, report.stringsTranslated > 0)
@@ -65,10 +64,10 @@ internal object SplitApkSetLocalizer {
 
     /**
      * Device-side orchestration: rebuild the whole set tolerantly, then sign
-     * every member with the persisted app key. extractNativeLibs is resolved
-     * per member from PackageManager; an unreadable member falls back to the
-     * safe default (false), which makes the rebuild refuse lib-carrying APKs
-     * instead of risking a broken install.
+     * every member with the persisted app key. Native libraries need no flag
+     * resolution: DEFLATED .so entries keep their install-time extraction
+     * semantics and STORED entries are re-aligned by ApkZipEntryPolicy, so a
+     * rebuilt member installs exactly like its original.
      */
     suspend fun localizeAndSignSet(
         context: Context,
@@ -77,15 +76,8 @@ internal object SplitApkSetLocalizer {
         translator: OfflineArabicTranslator,
         onProgress: (Int, Int) -> Unit = { _, _ -> }
     ): Pair<SetReport, List<File>> {
-        val resolver: (File) -> Boolean = { apk ->
-            val info = try {
-                @Suppress("DEPRECATION")
-                context.packageManager.getPackageArchiveInfo(apk.absolutePath, 0)
-            } catch (_: Exception) { null }
-            info?.applicationInfo?.let { it.flags and ApplicationInfo.FLAG_EXTRACT_NATIVE_LIBS != 0 } ?: false
-        }
         val setReport = localizeSet(
-            inputApks, File(workDir, "unsigned"), resolver, onProgress
+            inputApks, File(workDir, "unsigned"), onProgress
         ) { value -> translator.translateEnglishToArabic(value) }
         val signed = signSet(context, setReport, File(workDir, "signed"))
         return setReport to signed

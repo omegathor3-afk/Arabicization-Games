@@ -72,7 +72,7 @@ class SplitApkSetLocalizerTest {
             val dir = createTempDir()
             val outDir = File(dir, "out")
             val setReport = SplitApkSetLocalizer.localizeSet(
-                buildSet(dir), outDir, { true }, tx = fakeArabic
+                buildSet(dir), outDir, tx = fakeArabic
             )
             assertEquals(3, setReport.members.size)
             assertTrue(setReport.anyTransformed)
@@ -107,7 +107,7 @@ class SplitApkSetLocalizerTest {
             var failed = false
             try {
                 SplitApkSetLocalizer.localizeSet(
-                    listOf(binaryOnly), File(dir, "out"), { true }, tx = fakeArabic
+                    listOf(binaryOnly), File(dir, "out"), tx = fakeArabic
                 )
             } catch (expected: IllegalArgumentException) {
                 failed = true
