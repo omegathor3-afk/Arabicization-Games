@@ -159,12 +159,13 @@ internal object LocaleSlotLocalizer {
                         null
                     }
                     if (profile != null && !profile.hasArabicCore) {
+                        val role = FontSelector.inferRole(profile, fe)
                         if (profile.isIconFont) {
                             // Icon-merged font: never replace (icons would break). Instead merge
                             // Arabic glyphs from a catalog font into a copy, keeping every
                             // original glyph byte-identical, and shape the slot values.
                             try {
-                                val choice = FontSelector.selectForMerge(profile) { f -> FontAnalyzer.analyze(fonts.fontBytes(f)) }
+                                val choice = FontSelector.selectForMerge(profile, role) { f -> FontAnalyzer.analyze(fonts.fontBytes(f)) }
                                 val merged = FontMerger.mergeArabicInto(gameFont, fonts.fontBytes(choice.font))
                                 fontEntryName = fe
                                 fontBytes = merged.fontBytes
@@ -175,7 +176,7 @@ internal object LocaleSlotLocalizer {
                             }
                         } else {
                             try {
-                                val choice = FontSelector.select(profile) { f -> FontAnalyzer.analyze(fonts.fontBytes(f)) }
+                                val choice = FontSelector.select(profile, role) { f -> FontAnalyzer.analyze(fonts.fontBytes(f)) }
                                 val replacement = fonts.fontBytes(choice.font)
                                 fontEntryName = fe
                                 fontBytes = replacement

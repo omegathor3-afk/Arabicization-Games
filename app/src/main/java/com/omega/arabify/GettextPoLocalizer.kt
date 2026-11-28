@@ -220,9 +220,8 @@ internal object GettextPoLocalizer {
         val merged = LinkedHashMap<String, ByteArray>()
         val reasons = ArrayList<String>()
 
-        // One catalog font serves every merge; select once against the default font's profile.
-        var choice: FontChoice? = null
-        fun mergedCopy(assetName: String): String? {
+        // Select independently for each FontSet role; a UI font must not dictate the title font.
+        fun mergedCopy(assetName: String, role: ArabicFontRole): String? {
             val mergedPath = fontDir + assetName.removeSuffix(".ttf") + "-Ar.ttf"
             if (merged.containsKey(mergedPath)) return mergedPath
             val entry = zip.getEntry(fontDir + assetName) ?: return null
@@ -236,17 +235,17 @@ internal object GettextPoLocalizer {
             if (profile.hasArabicCore && ArabicShaper.emittedCodepoints.all(profile::supports)) {
                 return fontDir + assetName // already covers every glyph the pre-shaper can emit
             }
-            val pick = choice ?: try {
-                FontSelector.selectForMerge(profile) { f -> FontAnalyzer.analyze(fonts.fontBytes(f)) }.also { choice = it }
+            val pick = try {
+                FontSelector.selectForMerge(profile, role) { f -> FontAnalyzer.analyze(fonts.fontBytes(f)) }
             } catch (error: Exception) {
-                reasons.add("لا يوجد خط عربي مناسب (${error.message ?: "سبب غير معروف"})")
+                reasons.add("لا يوجد خط عربي آمن لدور ${role.name.lowercase()} في $assetName (${error.message ?: "سبب غير معروف"})")
                 return null
             }
             return try {
                 val result = FontMerger.mergeArabicInto(bytes, fonts.fontBytes(pick.font))
                 val mergedName = assetName.removeSuffix(".ttf") + "-Ar.ttf"
                 merged[fontDir + mergedName] = result.fontBytes
-                reasons.add("تم دمج ${result.codepointsAdded} رمزاً عربياً من ${pick.font.family} في نسخة من $assetName (${pick.font.licenseId}).")
+                reasons.add("تم دمج ${result.codepointsAdded} رمزاً عربياً من ${pick.font.family} لدور ${role.name.lowercase()} في نسخة من $assetName (${pick.font.licenseId}).")
                 fontDir + mergedName
             } catch (error: FontMerger.FontMergeException) {
                 reasons.add("تعذر دمج العربية في $assetName (${error.message ?: "صيغة غير مدعومة"})")
@@ -264,17 +263,17 @@ internal object GettextPoLocalizer {
             return FontPlan(emptyList(), emptyMap(), null, null, "FontSet بلا defaultFontName؛ النصوص بدون خط عربي.")
         }
 
-        val newDefault = defaultFont.takeIf { it.endsWith(".ttf") }?.let { mergedCopy(it) }
+        val newDefault = defaultFont.takeIf { it.endsWith(".ttf") }?.let { mergedCopy(it, ArabicFontRole.UI) }
         if (newDefault == null) {
             return FontPlan(emptyList(), emptyMap(), null, null,
                 "تعذر توفير خط عربي للعبة ($defaultFont غير قابل للدمج). " + reasons.joinToString(" "))
         }
-        val newBold = boldFont?.takeIf { it.endsWith(".ttf") }?.let { mergedCopy(it) } ?: newDefault
-        val newTitle = titleFont?.takeIf { it.endsWith(".ttf") }?.let { mergedCopy(it) } ?: newBold
+        val newBold = boldFont?.takeIf { it.endsWith(".ttf") }?.let { mergedCopy(it, ArabicFontRole.UI) } ?: newDefault
+        val newTitle = titleFont?.takeIf { it.endsWith(".ttf") }?.let { mergedCopy(it, ArabicFontRole.TITLE) } ?: newBold
         if (titleFont != null && !titleFont.endsWith(".ttf")) {
             reasons.add("خط العنوان $titleFont غير قابل للدمج (CFF/OTF)؛ استُخدم خط عريض مدمج بدلاً منه.")
         }
-        val newHud = hudFont?.takeIf { it.endsWith(".ttf") }?.let { mergedCopy(it) } ?: newDefault
+        val newHud = hudFont?.takeIf { it.endsWith(".ttf") }?.let { mergedCopy(it, ArabicFontRole.UI) } ?: newDefault
 
         val setId = "arabic"
         val fontSetXml = """

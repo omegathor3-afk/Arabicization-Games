@@ -94,3 +94,24 @@ via emulator screenshots.
 - Emulator (CI): Mindustry slot + injected font + shaped bundle, launch,
   screenshot published via temp.sh; matrix row moves FONT-BLOCKED ->
   EMULATOR only when the screenshot visually shows connected Arabic.
+
+
+## 7. Single catalog contract and role-safe selection (2026-11-28)
+
+ArabicFontCatalog is now the only source of font metadata. The legacy
+FontSelector.catalog view points at the same entries, not a second list. Each
+entry records its family-specific license path, source, weight, style, roles
+and whether the actual bundled file contains every glyph emitted by
+ArabicShaper.
+
+Selection is performed separately for UI, body/dialogue and title roles in
+the gettext FontSet; the UI font no longer supplies every other role by
+default. Pixel roles are restricted to Rooyin candidates. A monospaced game
+font is a hard layout constraint: until a fixed-width Arabic candidate has
+passed glyph and runtime checks, the original mono font is kept and the
+adapter reports that no safe replacement exists. A proportional fallback is
+deliberately not offered.
+
+This metadata is not a universal visual-fit proof. Runtime line width,
+baseline, clipping and per-engine rendering remain separate verification
+gates; no catalog candidate is silently injected into unsupported formats.

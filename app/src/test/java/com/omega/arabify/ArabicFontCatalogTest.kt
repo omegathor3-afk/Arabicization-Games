@@ -8,7 +8,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ArabicFontCatalogTest {
-
     private fun assetFile(relativePath: String): File {
         val direct = File("src/main/assets", relativePath)
         if (direct.isFile) return direct
@@ -19,78 +18,83 @@ class ArabicFontCatalogTest {
 
     private fun unsuitableFont(path: String = "game.ttf") = ArabicFontAssessment(
         path = path, format = "TTF", mappedArabicLetters = 3, totalArabicLetters = 100,
-        coveragePercent = 3, hasArabicShapingTables = false, suitableForArabic = false,
-        fileSize = 1024
+        coveragePercent = 3, hasArabicShapingTables = false, suitableForArabic = false, fileSize = 1024
     )
 
     private fun suitableFont(path: String = "game-ar.ttf") = ArabicFontAssessment(
         path = path, format = "TTF", mappedArabicLetters = 95, totalArabicLetters = 100,
-        coveragePercent = 95, hasArabicShapingTables = true, suitableForArabic = true,
-        fileSize = 2048
+        coveragePercent = 95, hasArabicShapingTables = true, suitableForArabic = true, fileSize = 2048
     )
 
     @Test
-    fun everyCatalogFontExistsAndParsesAsSuitableArabic() {
+    fun everyCatalogFontExistsAndDeclaredShapingCapabilityMatchesTheActualFile() {
         ArabicFontCatalog.entries.forEach { entry ->
-            val bytes = assetFile(entry.assetPath).readBytes()
-            val assessment = ArabicFontAnalyzer.inspect(entry.assetPath, bytes)
-            assertTrue(
-                "${entry.family} must render Arabic suitably: coverage=${assessment.coveragePercent}% shaping=${assessment.hasArabicShapingTables}",
-                assessment.suitableForArabic
+            val profile = FontAnalyzer.analyze(assetFile(entry.assetPath).readBytes())
+            assertTrue("${entry.family} must cover the Arabic core", profile.hasArabicCore)
+            assertEquals(
+                "${entry.id}: presentation-form metadata must match actual cmap coverage",
+                entry.supportsPresentationForms,
+                ArabicShaper.emittedCodepoints.all(profile::supports)
             )
-            assertEquals("Amiri", assessment.familyName)
         }
     }
 
     @Test
-    fun everyCatalogEntryShipsItsLicenseText() {
+    fun everyCatalogEntryShipsItsFamilySpecificLicenseText() {
         ArabicFontCatalog.entries.forEach { entry ->
             val license = assetFile(entry.licenseAssetPath).readText(Charsets.UTF_8)
+            assertEquals(entry.copyright, license.lineSequence().first().trim())
             assertTrue(license.contains("SIL OPEN FONT LICENSE", ignoreCase = true))
-            assertTrue(entry.copyright.isNotBlank())
+            assertEquals(ArabicFontCatalog.LICENSE_OFL_1_1, entry.licenseId)
+            assertTrue(entry.roles.isNotEmpty())
         }
     }
 
     @Test
-    fun catalogLoadValidatedLicenses() {
-        // The catalog's init guard rejects unapproved licenses; the object
-        // loading at all proves every entry passed. Assert it explicitly.
-        assertTrue(ArabicFontCatalog.entries.isNotEmpty())
-        ArabicFontCatalog.entries.forEach {
-            assertEquals(ArabicFontCatalog.LICENSE_OFL_1_1, it.licenseId)
-            assertTrue(!it.assetPath.startsWith("/") && !it.assetPath.contains(".."))
-        }
+    fun selectorAndRoleCatalogAreTheSameSingleSourceOfTruth() {
+        assertEquals(ArabicFontCatalog.entries.map { it.id }, FontSelector.catalog.map { it.id })
+        assertEquals(9, ArabicFontCatalog.entries.size)
     }
 
     @Test
-    fun matchReturnsNullEntryWhenGameFontAlreadyCoversArabic() {
+    fun matchReturnsNullEntryWhenTheRoleFontAlreadyCoversArabic() {
         val result = ArabicFontCatalog.match(ArabicFontRole.UI, listOf(suitableFont(), unsuitableFont()))
         assertNull(result.catalogEntry)
         assertTrue(result.reason.contains("لا حاجة"))
     }
 
     @Test
-    fun matchPicksCatalogFontForRoleWhenNoGameFontIsSuitable() {
+    fun matchPicksOnlyAFullShapingCandidateForTheRequestedRole() {
         val result = ArabicFontCatalog.match(ArabicFontRole.BODY, listOf(unsuitableFont()))
         assertNotNull(result.catalogEntry)
         assertEquals("Amiri", result.catalogEntry!!.family)
         assertEquals(ArabicFontCatalog.LICENSE_OFL_1_1, result.catalogEntry!!.licenseId)
         assertTrue(result.catalogEntry!!.roles.contains(ArabicFontRole.BODY))
+        assertTrue(result.catalogEntry!!.supportsPresentationForms)
     }
 
     @Test
-    fun monoRoleFallsBackToCatalogHead() {
+    fun pixelRoleUsesThePixelFamilyInsteadOfTheGeneralCatalogHead() {
+        val result = ArabicFontCatalog.match(ArabicFontRole.PIXEL, emptyList())
+        assertEquals("Rooyin Free", result.catalogEntry?.family)
+    }
+
+    @Test
+    fun monoRoleHasNoUnsafeProportionalFallback() {
         val result = ArabicFontCatalog.match(ArabicFontRole.MONO, emptyList())
-        assertNotNull(result.catalogEntry)
-        assertEquals("Amiri", result.catalogEntry!!.family)
+        assertNull(result.catalogEntry)
+        assertTrue(result.reason.contains("mono"))
+        assertTrue(result.reason.contains("الحفاظ على الخط الأصلي"))
     }
 
     @Test
-    fun matchAllCoversEveryRequestedRole() {
+    fun matchAllCoversEveryRequestedRoleInStableOrder() {
         val results = ArabicFontCatalog.matchAll(
-            setOf(ArabicFontRole.UI, ArabicFontRole.MONO), listOf(unsuitableFont())
+            setOf(ArabicFontRole.UI, ArabicFontRole.MONO, ArabicFontRole.PIXEL), listOf(unsuitableFont())
         )
-        assertEquals(2, results.size)
-        assertEquals(listOf(ArabicFontRole.UI, ArabicFontRole.MONO), results.map { it.role })
+        assertEquals(3, results.size)
+        assertEquals(listOf(ArabicFontRole.UI, ArabicFontRole.PIXEL, ArabicFontRole.MONO), results.map { it.role })
+        assertNotNull(results.first { it.role == ArabicFontRole.PIXEL }.catalogEntry)
+        assertNull(results.first { it.role == ArabicFontRole.MONO }.catalogEntry)
     }
 }

@@ -92,6 +92,7 @@ msgstr ""
             "assets/ui/languages.xml" to languageXmlText.toByteArray(),
             "assets/fonts/Xolonium-Regular.ttf" to TinyFont.build("Xolonium"),
             "assets/fonts/Xolonium-Bold.ttf" to TinyFont.build("Xolonium Bold"),
+            "assets/fonts/Xolonium-Title.ttf" to TinyFont.build("Xolonium Title"),
             "assets/fonts/Amiri-Regular.ttf" to File("src/main/assets/fonts/Amiri-Regular.ttf").readBytes(),
         ))
         return apk
@@ -139,6 +140,28 @@ msgstr ""
             assertTrue(readEntry(output, "assets/fonts/Xolonium-Regular.ttf")!!
                 .contentEquals(readEntry(input, "assets/fonts/Xolonium-Regular.ttf")!!))
             assertTrue(readEntry(output, "assets/po/de.po")!!.contentEquals(readEntry(input, "assets/po/de.po")!!))
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun selectsCatalogFontsIndependentlyForUiAndTitleRoles() {
+        runBlocking {
+            val dir = createTempDir()
+            val roleXml = languagesXml.replace("Kwajong-Italic.otf", "Xolonium-Title.ttf")
+            val input = buildGameApk(dir, languageXmlText = roleXml)
+            val output = File(dir, "role-specific-out.apk")
+            val assets = File("src/main/assets")
+            val fonts = GettextPoLocalizer.FontInjection { font -> File(assets, font.assetPath).readBytes() }
+
+            val report = GettextPoLocalizer.addArabicGettextSlot(input, output, fonts) { fakeArabic(it) }
+            val patchedXml = String(readEntry(output, "assets/ui/languages.xml")!!, Charsets.UTF_8)
+
+            assertTrue(patchedXml.contains("defaultFontName=\\"Xolonium-Regular-Ar.ttf\\""))
+            assertTrue(patchedXml.contains("titleFontName=\\"Xolonium-Title-Ar.ttf\\""))
+            assertTrue(readEntry(output, "assets/fonts/Xolonium-Title-Ar.ttf") != null)
+            assertTrue(report.fontReason.orEmpty().contains("Noto Naskh Arabic"))
+            assertTrue(report.fontReason.orEmpty().contains("Amiri"))
             dir.deleteRecursively()
         }
     }
