@@ -143,6 +143,54 @@ for leg in "" "-real"; do
 done
 [[ -n "$verified_apks" ]] && echo "::notice::APK-VERIFIED ${verified_apks}(ARABIFY-signed, apksigner clean)"
 
+# Visual Arabic render evidence on the deterministic pseudo build: the
+# instrumented visual test screenshots the RUNNING game and template-matches
+# menu lines against an in-test render of the shaped word drawn with the
+# merged font. This is the pixel-level proof that pre-shaped presentation
+# forms + the merged font produce visible Arabic glyph shapes (not tofu, not
+# vanished glyphs). Frames stay in the private artifact per the privacy rule.
+if [[ "$test_status" -eq 0 ]]; then
+  visual_status=0
+  PSEUDO_APK="$OUTPUT_DIR/pixelwheels-arabic.apk"
+  if [[ ! -s "$PSEUDO_APK" ]]; then
+    note_failure "pseudo Pixel Wheels APK missing; the visual-render leg cannot run"
+    visual_status=1
+  else
+    adb_with_reconnect uninstall com.agateau.tinywheels.android || true
+    adb_with_reconnect install "$PSEUDO_APK" || { visual_status=1; note_failure "install of the pseudo Pixel Wheels build failed"; }
+  fi
+  if [[ "$visual_status" -eq 0 ]]; then
+    adb_with_reconnect shell settings put system system_locales ar-EG || { visual_status=1; note_failure "locale switch for the visual leg failed"; }
+  fi
+  if [[ "$visual_status" -eq 0 ]]; then
+    timeout 30 adb reboot || { visual_status=$?; note_failure "adb reboot after the visual-leg locale switch failed"; }
+  fi
+  if [[ "$visual_status" -eq 0 ]]; then
+    timeout 180 adb wait-for-device || { visual_status=1; note_failure "emulator did not return to ADB after the visual-leg reboot"; }
+  fi
+  if [[ "$visual_status" -eq 0 ]]; then
+    BOOTED=""
+    for attempt in $(seq 1 90); do
+      BOOTED="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')"
+      [[ "$BOOTED" == "1" ]] && break
+      sleep 2
+    done
+    if [[ "$BOOTED" != "1" ]]; then note_failure "emulator did not finish booting for the visual leg"; visual_status=1; fi
+  fi
+  if [[ "$visual_status" -eq 0 ]]; then
+    adb shell monkey -p com.agateau.tinywheels.android 1 || { visual_status=1; note_failure "monkey launch of the pseudo Pixel Wheels build failed"; }
+    run_connected_test com.omega.arabify.PixelWheelsVisualArabicInstrumentedTest || visual_status=$?
+  fi
+  adb_with_reconnect pull /sdcard/Download/ARABIFY/pixelwheels-visual-frame.png "$OUTPUT_DIR/pixelwheels-visual-frame.png" || true
+  adb_with_reconnect pull /sdcard/Download/ARABIFY/pixelwheels-visual-report.txt "$OUTPUT_DIR/pixelwheels-visual-report.txt" || true
+  if [[ "$visual_status" -eq 0 && -s "$OUTPUT_DIR/pixelwheels-visual-report.txt" ]]; then
+    echo "::notice::ARABIC-VISUAL-RENDER $(tr '\n' ' ' < "$OUTPUT_DIR/pixelwheels-visual-report.txt" | head -c 700) (best frame retained in the private workflow artifact per the privacy rule)"
+  else
+    note_failure "visual Arabic render verification failed or produced no report (status $visual_status)"
+    test_status=1
+  fi
+fi
+
 # In-game Arabic activation evidence: Pixel Wheels picks its language from
 # the Android system locale (Languages.findBestLanguageId reads
 # Locale.getDefault), and the Arabized build registers <Language id="ar">
