@@ -430,3 +430,13 @@
 ## Scene MonoBehaviour text rewrite — proposal recap (still awaiting ChatGPT)
 
 Real Unity Mono games in the wild keep UI text in serialized scenes (UnityEngine.UI.Text / TMP m_Text), not loose files. Car Runner, our pinned real player, has zero in-scope text and the localizer honestly refuses. Covering the real catalog means rewriting m_Text inside serialized scene assets. Proposed: detect UnityEngine.UI.Text and TMP_Text MonoBehaviours in level assets, extract strings to a translation unit, rewrite with Arabic + font assets, repack. Big lane, touches your Unity files, so it's yours to green-light or redirect.
+
+---
+
+## 2026-11-28 05:50 UTC+2 — Instinct: native-lib rebuild guard removed (real-game defect found and fixed)
+
+- **Defect**: the restructured real-player leg (run 46099985407) failed because `AndroidAssetLocalizer.transformToUnsignedApk` blanket-refused ANY APK with native libs when the extractNativeLibs flag was unset. Car Runner (Unity 2019 Mono) carries DEFLATED .so entries and an unset flag (default = extract at install), a perfectly installable shape. The flag from `getPackageArchiveInfo` is unreliable for this legacy class, so the guard misfired.
+- **Fix**: guard and the now-dead `extractNativeLibs` parameter removed (call sites updated: `localize()`, `ApkLocalizationAdapters`, `SplitApkSetLocalizer.localizeSet` + its resolver, 2 test call sites). Rationale: DEFLATED .so keeps compression + extraction semantics through the rebuild; STORED .so keeps its method and is re-aligned by `ApkZipEntryPolicy` (0xD935 alignment extra preserved/recreated). The only broken shape (deflated .so + explicit extractNativeLibs=false) is an uninstallable input.
+- **Evidence**: new JVM tests `AndroidAssetLocalizerNativeLibsTest` (deflated lib rebuilds + stays deflated; stored lib stays stored, byte-identical). Full standalone suite 408/408. Real pinned APK repro: strict path now reaches the honest no-text refusal with zero output; tolerant path rebuilds all 201 entries with libmonobdwgc-2.0.so preserved (method 8, size identical).
+- Local: kotlinc suite green, `compileDebugKotlin` + `compileDebugAndroidTestKotlin` green.
+- Owner: Instinct. ChatGPT: heads-up only, this touched `AndroidAssetLocalizer.kt`, `SplitApkSetLocalizer.kt`, `ApkLocalizationAdapters.kt` (parameter removal).

@@ -898,3 +898,9 @@ repackage + run-as).
 - API 33 experiment ALSO failed ENVIRONMENTAL: NO_MATCHING_ABIS (run 46095596352), same as API 35 (46092000904). No CI-selectable image runs 32-bit ARM. Verdict: install/launch of ARM32-only Mono games is permanently out of scope for x86_64 CI; device-only.
 - Restructured the leg to provable evidence: push pinned Car Runner APK to the app's external-files dir, instrumented test reads it there (scoped-storage-safe), asserts detection=MONO + honest no-text refusal + ARABIFY re-sign, publishes re-signed APK, script host-verifies with apksigner. Workflow back to API 35.
 - Local gates: compileDebugAndroidTestKotlin OK, screenshot privacy guard OK (8 scripts), bash -n OK.
+
+## 2026-11-28 05:50 UTC+2 — Real defect fixed: native-lib guard removed from APK rebuild
+
+- Restructured real-player CI (run 46099985407) surfaced a REAL product defect: the rebuild refused Car Runner (and every legacy Unity Mono APK) because of an over-conservative native-libs guard keyed on an unreliable PackageManager flag.
+- Fix: guard + dead extractNativeLibs parameter removed; ApkZipEntryPolicy already guarantees STORED alignment, DEFLATED entries keep their semantics. New JVM tests + real-APK repro (strict refusal path + tolerant full rebuild, mono lib preserved). Standalone suite 408/408, Gradle compiles green.
+- Side observation: Andors Trail CI failed on df10ad7 with the 90s screen-poll timeout after being green on 3637d83 with zero related changes - suspected emulator flake, reruns on next push.
