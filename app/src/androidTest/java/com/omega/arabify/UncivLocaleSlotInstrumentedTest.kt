@@ -197,7 +197,14 @@ class UncivLocaleSlotInstrumentedTest {
                         throw error
                     }
                 }
-                publishToDownloads(preservedApk, "unciv-arabic.apk", "application/vnd.android.package-archive")
+                // MediaStore dedupes duplicate DISPLAY_NAMEs by renaming, so the
+                // pseudo build must publish under its own name or the script's
+                // pull silently grabs the real build again.
+                publishToDownloads(
+                    preservedApk,
+                    if (mode == "real") "unciv-arabic.apk" else "unciv-arabic-pseudo.apk",
+                    "application/vnd.android.package-archive",
+                )
                 publishToDownloads(reportFile, "unciv-report.txt", "text/plain")
                 publishToDownloads(roundTripFile, "unciv-roundtrip.txt", "text/plain")
                 Log.i("UncivSlot", "Published signed localized Unciv APK and report to Downloads/ARABIFY")

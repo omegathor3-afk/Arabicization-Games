@@ -139,7 +139,7 @@ if [[ "$test_status" -eq 0 ]]; then
     -Pandroid.testInstrumentationRunnerArguments.translationMode=pseudo || visual_status=$?
 fi
 if [[ "$test_status" -eq 0 && "$visual_status" -eq 0 ]]; then
-  adb_with_reconnect pull /sdcard/Download/ARABIFY/unciv-arabic.apk "$OUTPUT_DIR/unciv-arabic-pseudo.apk" || { visual_status=1; note_failure "pseudo Unciv APK pull failed"; }
+  adb_with_reconnect pull /sdcard/Download/ARABIFY/unciv-arabic-pseudo.apk "$OUTPUT_DIR/unciv-arabic-pseudo.apk" || { visual_status=1; note_failure "pseudo Unciv APK pull failed"; }
 fi
 if [[ "$test_status" -eq 0 && "$visual_status" -ne 0 ]]; then
   note_failure "pseudo Unciv build failed; the visual-render leg cannot run"
@@ -378,6 +378,10 @@ if [[ "$test_status" -eq 0 && "$launch_status" -eq 0 ]]; then
     fi
   fi
   if [[ "$visual_status" -eq 0 ]]; then
+    # Finish dexopt BEFORE launching (Mindustry evidence: a post-install
+    # compile during first launch pauses/kills the game or stalls boot).
+    adb shell cmd package compile -m speed -f com.unciv.app > build/test-game/localized/visual-dexopt.txt 2>&1 || true
+    sleep 3
     adb shell settings put secure immersive_mode_confirmations confirmed >/dev/null 2>&1 || true
     adb shell settings put global policy_control immersive.confirmations=confirmed >/dev/null 2>&1 || true
     adb shell monkey -p com.unciv.app 1 || { visual_status=1; note_failure "monkey launch of the pseudo Unciv build failed"; }
