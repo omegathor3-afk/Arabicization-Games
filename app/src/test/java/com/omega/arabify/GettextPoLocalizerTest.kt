@@ -157,8 +157,8 @@ msgstr ""
             val report = GettextPoLocalizer.addArabicGettextSlot(input, output, fonts) { fakeArabic(it) }
             val patchedXml = String(readEntry(output, "assets/ui/languages.xml")!!, Charsets.UTF_8)
 
-            assertTrue(patchedXml.contains("defaultFontName=\\"Xolonium-Regular-Ar.ttf\\""))
-            assertTrue(patchedXml.contains("titleFontName=\\"Xolonium-Title-Ar.ttf\\""))
+            assertTrue(patchedXml.contains("defaultFontName=\"Xolonium-Regular-Ar.ttf\""))
+            assertTrue(patchedXml.contains("titleFontName=\"Xolonium-Title-Ar.ttf\""))
             assertTrue(readEntry(output, "assets/fonts/Xolonium-Title-Ar.ttf") != null)
             assertTrue(report.fontReason.orEmpty().contains("Noto Naskh Arabic"))
             assertTrue(report.fontReason.orEmpty().contains("Amiri"))
