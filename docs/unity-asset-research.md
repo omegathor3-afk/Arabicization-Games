@@ -1,0 +1,133 @@
+# Unity Mono Serialized Asset Research and bounded TextAsset write-back
+
+## Scope and safety gate
+
+ARABIFY now has a narrow Unity Mono write-back path in addition to read-only inventory: it handles built-in TextAsset (class ID 49) only when a complete, fully resolved TypeTree matches the exact known `m_Name` / `m_Script` / optional `m_PathName` schema. The production path translates loose StreamingAssets text and supported TextAssets inside UnityFS bundles, patches only the `m_Script` payload, rebuilds the affected bundle/APK, signs the output, then re-parses and verifies the target and unrelated data. The source APK is never modified.
+
+This is not a generic Unity serializer. Other object types, stripped/no-TypeTree objects, unknown schemas, external `.resS`/`.resource` streams, managed DLLs, and IL2CPP remain unsupported or read-only. The TextAsset preview/manifest UI is review-only; the separate production localization action applies supported TextAssets automatically, so per-string review before applying remains a product gap.
+
+A valid SerializedFile header is not proof that its TypeTree or object table can be parsed. Player builds often omit TypeTrees; without a supported TypeTree, generic object decoding is not safely possible. Text-looking bytes inside arbitrary objects are not treated as translatable strings.
+
+## Format map
+
+- `resources.assets`, `sharedassets*.assets`, `levelN`, `globalgamemanagers`: Unity SerializedFiles. The format has a header, metadata, type records/optional TypeTrees, object table, script metadata, external references, and object data.
+- `.bundle`, `.unity3d`, and related files: Unity Archive / AssetBundle containers. Common signatures include `UnityFS`, `UnityRaw`, and `UnityWeb`. A bundle may contain one or more SerializedFiles (often `CAB-...`) and sidecar data.
+- `.resS` and `.resource`: external binary streams referenced by serialized objects; textures/meshes and audio/video may live here.
+- Android Unity players can wrap `assets/bin/Data` in an inner `data.unity3d` archive, so APK ZIP listing alone is not a full content inventory.
+- `StreamingAssets` plain text is a separate, lower-risk candidate path; it is not evidence that other Unity assets are editable.
+
+## Library assessment
+
+| Project | License / state | Android integration decision |
+|---|---|---|
+| [UnityPy](https://github.com/K0lb3/UnityPy) | MIT; active Python parser/editor | Best reference implementation for format behavior and differential fixtures. Not a drop-in Kotlin/Android dependency: Python runtime and package dependencies/native decoders need a separate size, ABI, and compatibility evaluation. No package added in this phase. |
+| [UnityDataTools](https://github.com/Unity-Technologies/UnityDataTools) | Unity Companion License for Unity-dependent projects; .NET 9 toolchain; wraps native UnityFileSystemApi | Excellent authoritative reference for SerializedFiles, Archives, inventory and test data. Current packaged native binaries target desktop OSes, not Android. Do not bundle into this Android app until license scope and Android native port/build are independently cleared. |
+| [AssetRipper](https://github.com/AssetRipper/AssetRipper) | GPL-3.0; desktop-oriented .NET application | Useful for understanding extraction breadth, but not selected as an embedded dependency. GPL obligations and desktop/runtime footprint require a separate distribution decision. |
+| [AssetStudio](https://github.com/Perfare/AssetStudio) | MIT; archived upstream | Useful historical C# reference, but not selected as a production parser without a maintained fork and compatibility review. |
+
+License statements are based on upstream repository license files/readmes at the time of this study. Re-check pinned commit licenses and all transitive dependencies before vendoring or distributing code.
+
+## Implemented in this phase
+
+- Read-only APK inventory for Unity data entries, with explicit support states and parser-stage reporting.
+- SerializedFile header validation for legacy, v9–21 and v22+ layouts, followed by a bounded full-metadata read capped at 64 MiB.
+- Metadata preamble, SerializedType records, supported flat TypeTrees / v23+ TypeTree handlers, and the object-info table are connected through `UnitySerializedFileInspector`.
+- The APK inventory reports Unity version, platform, TypeTree state, type count, object count and the achieved inspection stage when parsing succeeds.
+- UnityFS header parsing, decompressed block-info parsing, and a read-only storage-block decoder for NONE, LZ4 and LZMA. Defaults cap compressed/decoded blocks at 64 MiB, aggregate decoded bytes at 512 MiB and the working set at 192 MiB.
+- The UnityFS decoder streams decoded storage blocks to a caller-owned output stream.
+- A read-only CAB-node extractor validates path traversal, case-insensitive duplicates, overlapping/out-of-range byte ranges, per-file and aggregate limits, file/directory collisions and destination symlinks. It writes to a fresh staging tree and publishes the complete tree with a same-filesystem directory move that refuses an existing target; partial output is cleaned on failure.
+- `UnityFsBundleExtractor` composes bounded UnityFS decoding with CAB-node extraction through a private scratch file that is deleted on success or failure. The original bundle is never modified.
+- Classification for StreamingAssets text candidates, SerializedFiles, bundles, external streams, managed DLLs and unknown binary data.
+- `UnityTextAssetSerializedPatcher` rewrites only the `m_Script` string in a validated TextAsset object, updates the object table's size/offsets, preserves alignment, re-inspects the output, re-reads the reviewed script, and byte-compares every non-target object payload.
+- `UnityFsBundleRewriter` replaces one CAB node, rebuilds storage blocks, decodes the result again, and compares the full rebuilt stream and every non-target node. The current writer emits NONE/LZ4 block-info only; LZMA block-info rewrite is refused even though the reader supports LZMA.
+- `UnityTextAssetBundleLocalizer` composes decode, strict extraction, translation, SerializedFile patching and UnityFS rewrite. `UnityApkBundleLocalizer` applies the supported bundle path to APK entries; `UnityMonoLocalizer` chains it with loose StreamingAssets localization and signs the resulting APK.
+- Synthetic tests cover parser bounds, endian handling, object counts, decompression limits and byte-identical preservation. The on-device test uses a synthetic real-format Unity Mono APK and does not claim a real Unity Player launch.
+
+## SerializedFile / TypeTree progress (bounded read/write for the exact TextAsset schema)
+
+- The full SerializedFile inspector reads the declared metadata region only after enforcing a 64 MiB cap. A separate partial-prefix mode remains available for inventory fallback when a complete metadata read is not possible.
+- A bounded metadata-preamble reader extracts those fields for supported endian-aware format versions and stops before interpreting type records.
+- A bounded standalone parser now reads the raw flat TypeTree node/string-buffer representation for TypeTree format versions 12–100 (the TypeTree format version is not always identical to the enclosing SerializedFile version).
+- It uses Unity's 24-byte node layout, expanding to 32 bytes when the TypeTree format version is 19+, and reads the node's 16-bit version field correctly.
+- It validates node counts, record-buffer arithmetic, hierarchy levels, local string offsets, NUL termination, UTF-8 validity, and trailing bytes before accepting a tree.
+- Common-string-table offsets are retained as unresolved references rather than guessed or silently mapped to the wrong field name.
+- The `mhtt` TypeTreeNodeInfoHandler envelope used by SerializedFile versions 23+ now has its own bounded parser, including per-tree format version and reference-hash arrays.
+- A bounded SerializedType table parser now reads class IDs, stripped flags, script type indices, applicable script IDs, type hashes, inline TypeTrees or v23+ handlers, and v21+ type dependencies.
+- A separate bounded SerializedFile object-table parser now reads PathIDs, data-relative offsets, byte sizes, type IDs, legacy class/script fields, and version-specific PathID alignment (including the v7–13 big-ID flag).
+- Deep inspection enforces a 100,000-record per-file cap and a 250,000-record aggregate object-index cap across selected UnityFS bundles. CAB output also has a cumulative byte budget across the complete inspection, separate from per-bundle decoded-storage and CAB-output ceilings. Scratch preflight reserves the peak concurrent bundle copy, decoded-storage intermediate, CAB staging tree and safety margin; those temporary files are removed before the next bundle starts.
+- Object-table indexing is capped at 100,000 records per SerializedFile to bound the temporary object list and PathID set on memory-constrained Android devices.
+- A read-only TextAsset payload reader accepts only class ID 49 with a fully resolved TypeTree whose root is `TextAsset` and whose direct fields are exactly `m_Name`, `m_Script`, and optionally `m_PathName`, each using the known aligned string-array layout. It bounds object/string bytes, validates UTF-8 strictly, rejects NUL/control/binary payloads and unknown fields, and verifies the object range against the exact extracted SerializedFile length before reading.
+- UnityFS deep inspection counts successfully decoded TextAssets and non-empty UTF-8 script strings under per-file and aggregate byte budgets. Per-file candidate, per-object/aggregate byte, and preview-count/code-point limits are reported explicitly; reaching a limit is never presented as complete coverage. If no TextAsset can be decoded, the report warns that this may mean no TextAsset, stripped TypeTrees, unsupported schemas, or binary/non-UTF-8 data—not proof that the game contains no text. The preview/manifest UI remains review-only, while the separate production `UnityMonoLocalizer` path translates and writes TextAssets that pass this exact schema gate. It does not apply the user's edited review text, and per-string approval before apply is not wired yet. If a declared count exceeds the configured object-table cap, the inspector reports the declared count and limit explicitly; it does not display the file as a complete zero-object table, and the file remains read-only.
+- Deep-inspection reports distinguish a successfully parsed empty object table (`objects=0`) from a malformed or unsupported table (`objects=unavailable`); only successfully indexed records consume the aggregate object-record budget. When both per-file and aggregate limits would reject a table, the per-file limit is reported first and the aggregate budget is not consumed; aggregate exhaustion is reported only when the table fits the per-file cap.
+- The TypeTree/type-record parser's CI compile failure in run #155 was traced to two block-bodied local helpers missing explicit `return` statements; both were fixed in commit `6472731`. Run #155 did not reach tests or APK packaging, so it produced no valid APK for that revision.
+- Object records are rejected for duplicate PathIDs, invalid type indices, negative offsets, truncated metadata, excessive counts, or ranges outside the declared file/data section. Alignment is calculated against the absolute file position and padding bytes are skipped without assuming a particular fill value.
+- The object-table parser is wired into the bounded inspector and APK inventory. It returns offsets and IDs only; it does not authorize edits. The separate TextAsset reader may read a strictly validated class-ID-49 payload, but never writes it.
+- The trailing-metadata parser is now wired into the same streaming inspector. It reports script identifiers, external file references (including GUID/type/path), v20+ reference type records, v26+ shared TypeTree handlers, user information, and any unconsumed tail-byte count. The inventory and deep-inspection details expose counts without resolving or modifying references.
+- External paths are not yet resolved to APK entries or sidecar .resS/.resource byte ranges. The only object writer is the exact TextAsset `m_Script` adapter; other object types and external resources remain untouched. UnityFS LZMA block-info write-back is refused; the current writer rebuilds NONE/LZ4 block-info only.
+- Synthetic tests cover versions 18/19, local strings, unresolved common-string references, malformed counts, hierarchy, offsets, and trailing data. Real Unity fixtures and differential comparison against UnityPy/UnityDataTools remain required.
+
+## Player builds with stripped TypeTrees — verified constraint
+
+Unity's current documentation states that the `binary2text` inspection tool is only useful for SerializedFiles containing TypeTrees and that **Player data does not include TypeTrees by default** ([Unity: Analyze built assets](https://docs.unity.com/en-us/engine/6000.6/manual/assets-and-media/assets-optimizing/assets-analyze-built-assets)). Unity's TextAsset documentation also makes clear that imported `.bytes` assets can contain arbitrary binary data, so the class name alone is not permission to treat every TextAsset payload as UTF-8 ([Unity: Text assets](https://docs.unity.com/en-us/engine/6000.6/manual/assets-and-media/asset-types/class-text-asset)).
+
+UnityDataTools exposes this distinction explicitly: `enableTypeTree` may be false while the type-entry count is still present; its documentation notes that TypeTrees are required for object-list and external-reference subcommands to show type names ([UnityDataTools SerializedFile command](https://github.com/Unity-Technologies/UnityDataTools/blob/main/Documentation/command-serialized-file.md)). Therefore, an absent TypeTree is a normal Player-build condition, not proof of a corrupt file. ARABIFY may continue to report numeric type IDs, object ranges and references where their metadata is valid, but it must not run a generic object decoder without a trusted schema.
+
+### Safe fallback strategy (not yet implemented)
+
+- **Built-in Unity classes:** evaluate a versioned, hash-pinned TypeTree schema database. UnityPy's upstream implementation uses its TPK data blob and resolves a class's versioned schema by class ID and Unity version ([UnityPy TPK helper](https://github.com/K0lb3/UnityPy/blob/master/UnityPy/helpers/Tpk.py)). This is a reference for a possible offline schema catalog, not approval to bundle the TPK resource: its provenance, redistribution terms, size, and version coverage must be audited first.
+- **MonoBehaviour scripts:** require a resolved MonoScript reference and matching managed assembly/class identity. A script name, class ID 114, or a nearby string is not sufficient to infer a serialized layout. Assembly stripping, missing dependencies, generic types, and version drift must produce an unsupported result.
+- **TextAsset candidates:** decode only after a schema has been established and the payload's length, encoding, and expected fields validate. Preserve binary `.bytes` data and invalid/unknown encodings unchanged.
+- **Write gate:** only the exact TextAsset schema writer is enabled, with read -> write -> read verification and unrelated-object byte comparisons. Generic object writers remain disabled until equivalent versioned fixtures, external-reference preservation and Unity Player smoke tests exist.
+
+The SerializedType reader also enforces a **250,000-node aggregate TypeTree budget per type table**, in addition to the per-tree limit. This is a defensive memory policy, not a Unity format maximum. A table whose individual trees fit but whose combined node count exceeds the budget is rejected at the type-table stage before object indexing; it is never partially decoded. Regression tests cover both inline format-22 trees and format-23 `mhtt` handlers.
+
+The current regression fixture deliberately has `typeTreeEnabled=false`; it verifies that metadata and the object index can still be read without claiming that the payload is decodable. This distinction is now an explicit test requirement.
+
+## Remaining gates before broader Unity support
+
+1. Expand fixtures across Unity versions and serialization layouts, including stripped/no-TypeTree files, LZMA block-info, external resource streams, cancellation, corrupt/truncated data and low-storage rollback.
+2. Install and launch a legally redistributable real Unity Player APK after localization. The current Android instrumentation test uses a synthetic real-format APK and verifies signed read-back; it does not launch a Unity Player.
+3. Wire the editable TextAsset review/manifest into the production apply path. Today the production Unity action automatically translates supported TextAssets; the review text is not the applied source.
+4. Add device-level failure tests for insufficient storage, interrupted writes and recovery, and prove that source APKs remain byte-identical.
+5. Keep all MonoBehaviour, texture/audio/video, arbitrary class-ID and IL2CPP writers disabled until their own versioned schemas and runtime tests exist.
+
+## Test provenance
+
+The unit tests still use generated minimal binary headers, synthetic UnityFS bundles, synthetic TextAsset payloads and synthetic ZIP fixtures for parser invariants. In addition, CI now runs a **real Unity Editor-built TextAsset fixture** from the MIT-licensed `fatal10110/unity-asset-reader` repository (pinned commit `226687d59a5ec3430af451cc0ada76ee950f3240`). Its fixture documentation states that the bundle was generated from the maintainer's own Unity project, contains no third-party game data, and includes one UTF-8 TextAsset with a four-byte emoji. The 2019.4.41f2 fixture is downloaded only in CI, SHA-256 checked, and is never bundled into ARABIFY. The UnityPy oracle and Kotlin test compare the extracted CAB bytes, SerializedFile v21 header/type/object metadata, every TextAsset TypeTree node, object offsets, name, and exact script bytes.
+
+This closes the missing real-TextAsset test gate for **one TypeTree-enabled Unity 2019.4.41f2 editor fixture only**. It does not validate stripped Player builds, TextAssets containing arbitrary binary `.bytes` data, all Unity versions, external resource streams, or any write/repack path. The pinned UnityPy `atlas_test` fixture remains a separate UnityFS differential fixture and contains no TextAsset object.
+
+## Independent real TextAsset fixture (read-only)
+
+Android CI also downloads `fixtures/bundles/editor/2019.4.41f2/lz4/shared` from [fatal10110/unity-asset-reader](https://github.com/fatal10110/unity-asset-reader/tree/226687d59a5ec3430af451cc0ada76ee950f3240). The upstream fixture guide identifies this as a Unity 2019.4.41f2 Editor build (UnityFS v7, SerializedFile v21) containing one TextAsset. The repository is MIT-licensed; its fixture documentation says the editor-built samples come from the maintainer's own Unity project and contain no third-party game data. The fixture's `hello.txt` source is 58 bytes of UTF-8 and includes accented Latin, the euro sign, and a four-byte emoji.
+
+- Pinned source commit: `226687d59a5ec3430af451cc0ada76ee950f3240`
+- Fixture size: 1,219 bytes
+- Fixture SHA-256: `3d5e40d3ba950e2df737c2e5f83a5e7fc3f5311e91b90929b37186c846e16115`
+- CI-only; not copied into the APK or committed as game data.
+- UnityPy 1.24.2 generates an independent manifest. Kotlin must match extracted member paths/sizes/hashes, SerializedFile metadata, object offsets, the full TextAsset TypeTree node list, the TextAsset name, and the exact UTF-8 script bytes.
+- The test verifies that the original UnityFS file remains byte-identical after inspection.
+
+This is a parser-validation fixture, not a game-compatibility claim. It does not exercise a stripped Player build, binary `.bytes` payloads, every Unity version, or asset rewriting. Upstream provenance: [fixture inventory](https://github.com/fatal10110/unity-asset-reader/blob/226687d59a5ec3430af451cc0ada76ee950f3240/fixtures/README.md), [fixture build recipe](https://github.com/fatal10110/unity-asset-reader/blob/226687d59a5ec3430af451cc0ada76ee950f3240/fixtures/BUILDING.md), and [MIT license](https://github.com/fatal10110/unity-asset-reader/blob/226687d59a5ec3430af451cc0ada76ee950f3240/LICENSE).
+
+## Independent UnityFS differential fixture
+
+The Android CI downloads the public UnityPy `atlas_test` LFS fixture from the pinned UnityPy repository commit `417d59522a998fdee9a9c2b29fe35f3063222457`. Its expected LFS object is 76,771 bytes with SHA-256 `61ee5afb5f5c64f0a4f65f039d09b2509198363e713423289c895067ac215177`. The fixture identifies itself as UnityFS format 6 from Unity `2018.4.11f1`.
+
+CI uses UnityPy 1.24.2 in read-only mode to produce an oracle manifest. The Kotlin test must match every extracted member path, byte count and SHA-256, then agree with UnityPy on each inner SerializedFile's header, Unity version, target platform, TypeTree flag, type count/class IDs, object count and external-reference paths. The fixture bytes are downloaded only for CI and are not committed or bundled in the APK.
+
+UnityPy is an independent parser/oracle here, not a production writer: ARABIFY does not use UnityPy to rewrite game files. UnityDataTools remains a useful official format reference, but its repository is under the Unity Companion License; ARABIFY does not bundle it or make it an app dependency. A passing fixture proves this exact UnityFS sample and its contained SerializedFiles, not universal compatibility with every Unity version or game.
+
+### TypeTree common-string resolution
+
+Known common-string offsets are resolved through a bounded table adapted from AssetsTools.NET's MIT-licensed `TypeTreeType.COMMON_STRING_TABLE` (upstream commit `2d66992b60d583d6d82dd6e278d3946cf5827286`; attribution and license text are in `licenses/AssetsTools.NET-MIT.txt`). The current table contains 114 NUL-terminated UTF-8 entries. Unknown offsets are never guessed and remain explicitly unresolved.
+
+The UnityPy 1.24.2 differential fixture now compares every TypeTree node for the Unity 2018.4.11f1 SerializedFile: node count, version, level, flags, type/field names, byte size, index, metadata flags and reference hash. A pass validates the common-string table and TypeTree decoding for this fixture version only; new Unity version families still require their own fixtures before broader support is claimed.
+
+
+
+## On-device Unity Mono write-back fixture (24 Nov 2026)
+
+Android CI run [45362192860](https://github.com/omegathor3-afk/Arabicization-Games/actions/runs/45362192860) ran `UnityMonoPipelineInstrumentedTest` on Android 15. The test builds a synthetic but real-format APK containing a UnityFS bundle with a SerializedFile v17 TextAsset plus a loose StreamingAssets text file. It downloads the English-to-Arabic ML Kit model, disables Wi-Fi and mobile data, confirms that no validated internet network remains, calls the same `UnityMonoLocalizer.localize` function used by the Android UI, signs the output, and reads both the loose text and the bundled TextAsset back through the app's strict parsers.
+
+The instrumentation test passed **1/1**. It translated 3 strings in total (2 inside the bundle), and the read-back TextAsset contained Arabic. This proves the bounded production path, Android-side signing, and post-download offline translation for this synthetic fixture. It does **not** prove that an actual Unity Player APK can be installed/launched after rewriting, that the game renders the Arabic, or that every Unity version/compression mode is supported.

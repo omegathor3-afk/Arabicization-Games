@@ -5,6 +5,29 @@ import com.reandroid.arsc.chunk.PackageBlock
 import com.reandroid.arsc.chunk.TableBlock
 import com.reandroid.arsc.value.ResConfig
 import java.io.File
+import java.util.Locale
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+
+
+
+/**
+ * Run one recoverable resource-localization step without converting structured
+ * coroutine cancellation into an ordinary skipped-string result.
+ */
+internal suspend fun runRecoverableLocalizationStep(
+ onFailure: (Exception) -> Unit,
+ block: suspend () -> Unit
+) {
+ try {
+  block()
+ } catch (cancelled: CancellationException) {
+  throw cancelled
+ } catch (error: Exception) {
+  onFailure(error)
+ }
+}
 
 internal data class AndroidLocalizationReport(
  val packageName: String,
@@ -22,6 +45,37 @@ internal object AndroidResourceLocalizer {
   unsignedApk: File,
   translator: OfflineArabicTranslator,
   context: android.content.Context,
+  onProgress: (Int, Int) -> Unit = { _, _ -> }
+ ): AndroidLocalizationReport = localizeEnglishStrings(
+  inputApk, outputApk, unsignedApk,
+  { text -> translator.translateEnglishToArabic(text) },
+  context, onProgress
+ )
+
+ suspend fun localizeEnglishStrings(
+  inputApk: File,
+  outputApk: File,
+  unsignedApk: File,
+  translate: suspend (String) -> String,
+  context: android.content.Context,
+  onProgress: (Int, Int) -> Unit = { _, _ -> }
+ ): AndroidLocalizationReport {
+  val report = transformEnglishStringsToUnsigned(inputApk, unsignedApk, translate, onProgress)
+  ApkSigningService.signAndVerify(context, unsignedApk, outputApk)
+  return report.copy(signedApk = outputApk)
+ }
+
+ /**
+  * JVM-pure core: rewrites the default string table into an -ar config and
+  * writes the UNSIGNED APK. The host (MainActivity) owns the Context needed
+  * for signing, so adapter wrappers can run this core without one. The
+  * returned report's signedApk carries the unsigned artifact until the host
+  * finalizes it.
+  */
+ internal suspend fun transformEnglishStringsToUnsigned(
+  inputApk: File,
+  unsignedApk: File,
+  translate: suspend (String) -> String,
   onProgress: (Int, Int) -> Unit = { _, _ -> }
  ): AndroidLocalizationReport {
   require(inputApk.isFile) { "ملف اللعبة الأصلي غير موجود." }
@@ -51,6 +105,9 @@ internal object AndroidResourceLocalizer {
    var skipped = 0
    val arabicConfig = ResConfig.parse("-ar")
    sources.forEachIndexed { index, (name, source) ->
+    // Some entries are glossary hits or already localized and may not suspend;
+    // check cancellation on every iteration, not only inside the translator.
+    currentCoroutineContext().ensureActive()
     val existing = packageBlock.getEntry(arabicConfig, "string", name)
     if (existing != null && !existing.isNull()) {
      existingArabic++
@@ -62,21 +119,21 @@ internal object AndroidResourceLocalizer {
      onProgress(index + 1, sources.size)
      return@forEachIndexed
     }
+    // Exact UI labels use a small reviewed glossary; longer phrases still
+    // go through the offline translator and its placeholder/quality checks.
     val protected = PlaceholderProtector.protect(source)
-    try {
-     val translatedText = translator.translateEnglishToArabic(protected.text)
-     val tokenWasLost = protected.tokens.indices.any { tokenIndex ->
-      !translatedText.contains("__ARABIFY_TOKEN_${tokenIndex}__")
-     }
-     if (tokenWasLost) {
+    runRecoverableLocalizationStep(onFailure = { skipped++ }) {
+     val translatedText = ArabicUiGlossary.translateExact(source)
+      ?: translate(protected.text)
+     val expectedTokens = protected.markers
+     val quality = TranslationQualityGate.review(source, translatedText, expectedTokens)
+     if (!quality.accepted) {
       skipped++
      } else {
-      val restored = PlaceholderProtector.restore(translatedText, protected.tokens)
+      val restored = PlaceholderProtector.restore(translatedText, protected)
       packageBlock.getOrCreate(arabicConfig, "string", name).setValueAsString(restored)
       translated++
      }
-    } catch (e: Exception) {
-     skipped++
     }
     onProgress(index + 1, sources.size)
    }
@@ -91,9 +148,8 @@ internal object AndroidResourceLocalizer {
    oldSignatureFiles.forEach { module.removeInputSource(it) }
    unsignedApk.parentFile?.mkdirs()
    module.writeApk(unsignedApk)
-   ApkSigningService.signAndVerify(context, unsignedApk, outputApk)
 
-   return AndroidLocalizationReport(packageName, sources.size, translated, existingArabic, skipped, outputApk)
+   return AndroidLocalizationReport(packageName, sources.size, translated, existingArabic, skipped, unsignedApk)
   } finally {
    module.close()
   }
@@ -105,4 +161,68 @@ internal object AndroidResourceLocalizer {
   }
   return null
  }
+}
+
+
+/**
+ * High-confidence exact UI labels that should not depend on model wording.
+ * This is deliberately exact-match only: sentences and game-specific prose
+ * continue through the offline translator instead of receiving a bad substring
+ * replacement.
+ */
+internal object ArabicUiGlossary {
+    /** Term source for the phrase term base (full-coverage composition). */
+    val terms: Map<String, String> get() = exactTranslations
+
+    private val exactTranslations = mapOf(
+        "create" to "إنشاء",
+        "play" to "العب",
+        "quit" to "خروج",
+        "exit" to "خروج",
+        "options" to "خيارات",
+        "about" to "حول",
+        "resume" to "استئناف",
+        "pause" to "إيقاف مؤقت",
+        "credits" to "فريق العمل",
+        "mods" to "إضافات",
+        "join game" to "انضم للعبة",
+        "new game" to "لعبة جديدة",
+        "settings" to "الإعدادات",
+        "easy" to "سهل",
+        "medium" to "متوسط",
+        "hard" to "صعب",
+        "ng" to "دون تخمين",
+        "nf" to "دون أعلام",
+        "beginner" to "مبتدئ",
+        "intermediate" to "متوسط",
+        "expert" to "خبير",
+        "more info" to "مزيد من المعلومات",
+        "more information" to "مزيد من المعلومات",
+        "support minesweeper" to "دعم كاسحة الألغام",
+        "minesweeper" to "كاسحة الألغام",
+        "add mode" to "إضافة وضع",
+        "edit mode" to "تعديل الوضع",
+        "create anyway" to "إنشاء على أي حال",
+        "use existing" to "استخدام الموجود",
+        "no guess mode" to "وضع دون تخمين",
+        "no flag mode" to "وضع دون أعلام",
+        "continue" to "متابعة",
+        "back" to "رجوع",
+        "save" to "حفظ",
+        "add" to "إضافة",
+        "edit" to "تعديل",
+        "delete" to "حذف",
+        "cancel" to "إلغاء",
+        "close" to "إغلاق",
+        "open" to "فتح",
+        "apply" to "تطبيق",
+        "mode" to "الوضع",
+        "name" to "الاسم",
+        "width" to "العرض",
+        "height" to "الارتفاع",
+        "mines" to "الألغام"
+    )
+
+    fun translateExact(source: String): String? =
+        exactTranslations[source.trim().lowercase(Locale.ROOT)]
 }

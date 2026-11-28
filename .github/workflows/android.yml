@@ -13,23 +13,254 @@ permissions:
 jobs:
  build:
   runs-on: ubuntu-latest
-  timeout-minutes: 30
+  timeout-minutes: 45
   steps:
-   - uses: actions/checkout@v4
-   - uses: actions/setup-java@v4
+   - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+   - name: Verify screenshot privacy
+     run: python3 .github/scripts/test-screenshot-privacy.py
+   - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
      with:
       distribution: temurin
       java-version: "17"
-   - uses: gradle/actions/setup-gradle@v4
+   - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
      with:
       gradle-version: "8.13"
+   - name: Prepare pinned UnityPy differential fixture
+     shell: bash
+     run: |
+      set -euo pipefail
+      VENV="$RUNNER_TEMP/unitypy-venv"
+      python3 -m venv "$VENV"
+      "$VENV/bin/python" -m pip install --disable-pip-version-check --prefer-binary "UnityPy==1.24.2"
+      mkdir -p build/unitypy
+      FIXTURE_URL="https://media.githubusercontent.com/media/K0lb3/UnityPy/417d59522a998fdee9a9c2b29fe35f3063222457/tests/samples/atlas_test"
+      curl --fail --location --retry 3 --retry-all-errors "$FIXTURE_URL" --output build/unitypy/atlas_test
+      printf '%s  %s\n' '61ee5afb5f5c64f0a4f65f039d09b2509198363e713423289c895067ac215177' 'build/unitypy/atlas_test' | sha256sum --check -
+      "$VENV/bin/python" .github/scripts/create-unitypy-oracle.py build/unitypy/atlas_test build/unitypy/oracle.properties build/unitypy/oracle.json
+      TEXT_ASSET_FIXTURE="build/unitypy/unity-2019.4-textasset.bundle"
+      TEXT_ASSET_URL="https://raw.githubusercontent.com/fatal10110/unity-asset-reader/226687d59a5ec3430af451cc0ada76ee950f3240/fixtures/bundles/editor/2019.4.41f2/lz4/shared"
+      curl --fail --location --retry 3 --retry-all-errors "$TEXT_ASSET_URL" --output "$TEXT_ASSET_FIXTURE"
+      printf '%s  %s\n' '3d5e40d3ba950e2df737c2e5f83a5e7fc3f5311e91b90929b37186c846e16115' "$TEXT_ASSET_FIXTURE" | sha256sum --check -
+      python3 -m py_compile .github/scripts/create-unitypy-textasset-oracle.py
+      "$VENV/bin/python" .github/scripts/create-unitypy-textasset-oracle.py "$TEXT_ASSET_FIXTURE" build/unitypy/textasset-oracle.properties build/unitypy/textasset-oracle.json
+      echo "ARABIFY_UNITYFS_FIXTURE=$GITHUB_WORKSPACE/build/unitypy/atlas_test" >> "$GITHUB_ENV"
+      echo "ARABIFY_UNITYPY_ORACLE=$GITHUB_WORKSPACE/build/unitypy/oracle.properties" >> "$GITHUB_ENV"
+      echo "ARABIFY_UNITY_TEXTASSET_FIXTURE=$GITHUB_WORKSPACE/$TEXT_ASSET_FIXTURE" >> "$GITHUB_ENV"
+      echo "ARABIFY_UNITY_TEXTASSET_ORACLE=$GITHUB_WORKSPACE/build/unitypy/textasset-oracle.properties" >> "$GITHUB_ENV"
    - name: Unit tests
-     run: gradle testDebugUnitTest
+     run: |
+      set -o pipefail
+      gradle testDebugUnitTest 2>&1 | tee build/unit-test-gradle.log
+   - name: Surface failing unit tests as annotations
+     if: failure()
+     run: |
+      python3 - <<'PY'
+      import glob, xml.etree.ElementTree as ET
+      found = False
+      for path in sorted(glob.glob('app/build/test-results/testDebugUnitTest/*.xml')):
+          tree = ET.parse(path)
+          for case in tree.getroot().iter('testcase'):
+              for bad in list(case.iter('failure')) + list(case.iter('error')):
+                  found = True
+                  msg = (bad.get('message') or '').replace('\n', ' ')[:300]
+                  print(f"::notice::TEST-FAIL {case.get('classname')}.{case.get('name')}: {msg}")
+      if not found:
+          # No JUnit XML: gradle failed before/without running tests (compile
+          # error, dependency fetch, daemon crash). Quote the log tail so the
+          # cause is public - Actions logs need auth, annotations do not.
+          try:
+              lines = open('build/unit-test-gradle.log', encoding='utf-8', errors='replace').read().splitlines()
+          except OSError:
+              lines = []
+          interesting = [l for l in lines if any(k in l.lower() for k in ('error:', 'failed', 'exception', 'could not', '429'))]
+          tail = interesting[-6:] if interesting else lines[-6:]
+          summary = ' | '.join(l.strip()[:200] for l in tail) or '<no gradle log captured>'
+          print(f"::error::UNIT-TEST-STEP-FAILED without test XML (build/infra failure): {summary[:1500]}")
+      PY
+   - name: Upload unit test reports
+     if: always()
+     uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+     with:
+      name: arabify-unit-test-results
+      path: |
+       app/build/test-results/testDebugUnitTest/
+       build/unitypy/oracle.json
+       build/unitypy/oracle.properties
+       build/unitypy/textasset-oracle.json
+       build/unitypy/textasset-oracle.properties
+      if-no-files-found: ignore
+      retention-days: 7
+   - name: Install pinned Android NDK and CMake
+     run: |
+      ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+      SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
+      test -n "$SDKMANAGER" && test -x "$SDKMANAGER"
+      yes | "$SDKMANAGER" --licenses >/dev/null
+      "$SDKMANAGER" --install "ndk;27.2.12479018" "cmake;3.31.6"
+      echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+      echo "$ANDROID_HOME/cmake/3.31.6/bin" >> "$GITHUB_PATH"
+   - name: Build pinned Bergamot JNI library (arm64-v8a, phone builds)
+     run: |
+      NINJA="$ANDROID_HOME/cmake/3.31.6/bin/ninja"
+      if [[ ! -x "$NINJA" ]]; then sudo apt-get update && sudo apt-get install -y ninja-build; fi
+      bash native/bergamot/build-android.sh
+   - name: Build pinned Bergamot JNI library (x86_64, emulator and x86_64 devices)
+     run: ANDROID_ABI=x86_64 bash native/bergamot/build-android.sh
+   - name: Fetch and stage the verified bundled offline model (en-ar)
+     run: |
+      python3 native/bergamot/audit-mozilla-arabic-models.py
+      bash .github/scripts/stage-bundled-model.sh
    - name: Build debug APK
      run: gradle assembleDebug
-   - uses: actions/upload-artifact@v4
+   - name: Verify APK structure and signature
+     shell: bash
+     run: |
+      set -euo pipefail
+      APK="app/build/outputs/apk/debug/app-debug.apk"
+      test -s "$APK"
+      unzip -t "$APK"
+      unzip -Z1 "$APK" > apk-entries.txt
+      grep -Fx 'lib/arm64-v8a/libarabify_bergamot.so' apk-entries.txt >/dev/null
+      grep -Fx 'lib/x86_64/libarabify_bergamot.so' apk-entries.txt >/dev/null
+      grep -Fx 'assets/arabify-models/en-ar/manifest.json' apk-entries.txt >/dev/null
+      APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n1)"
+      AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n1)"
+      test -x "$APKSIGNER"
+      test -x "$AAPT"
+      "$APKSIGNER" verify --verbose "$APK"
+      "$AAPT" dump badging "$APK" > badging.txt
+      head -n 5 badging.txt
+      sha256sum "$APK"
+      echo "::notice::APK-SIZE app-debug.apk $(stat -c %s "$APK") bytes (includes the bundled en-ar offline model)"
+   - name: Build instrumentation test APK
+     run: gradle assembleDebugAndroidTest
+   - name: Enable KVM access before offline first-install test
+     run: |
+      echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+      sudo udevadm control --reload-rules
+      sudo udevadm trigger --name-match=kvm
+   - name: Run first-install bundled translation offline on Android 15 x86_64
+     uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+     with:
+      api-level: 35
+      target: google_apis
+      arch: x86_64
+      profile: pixel_5
+      disable-linux-hw-accel: false
+      pre-emulator-launch-script: |
+       adb kill-server || true
+       adb start-server
+       adb devices
+      emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+      disable-animations: true
+      script: |
+       bash .github/scripts/run-bundled-first-install-offline.sh
+   - name: Upload bundled first-install offline evidence
+     if: always()
+     uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+     with:
+      name: arabify-bundled-first-install-offline
+      path: |
+       app/build/outputs/androidTest-results/connected/
+       app/build/reports/androidTests/connected/
+       build/bundled-first-install-offline/
+      if-no-files-found: ignore
+      retention-days: 14
+   - name: Checkout pinned open-source Android game source
+     uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+     with:
+      repository: JoelDankert/Minesweeper-for-Android
+      ref: 115ee86a0d5d998c6c882de63953aef54100a1fd
+      path: build/test-game/source
+   - name: Prepare Minesweeper localization fixture
+     run: bash .github/scripts/prepare-minesweeper-fixture.sh
+   - name: Build real game APK from GitHub source
+     run: |
+      set -euo pipefail
+      cd build/test-game/source
+      bash ./gradlew :app:assembleDebug --no-daemon
+      cp app/build/outputs/apk/debug/app-debug.apk ../minesweeper.apk
+      test -s ../minesweeper.apk
+      cd ../../..
+      sha256sum build/test-game/minesweeper.apk | tee build/test-game/SHA256SUMS
+   - name: Cache Maestro CLI
+     id: maestro-cache
+     uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+     with:
+      path: ~/.maestro-cli
+      key: maestro-cli-2.12.1-linux-x64
+   - name: Install pinned Maestro CLI
+     if: steps.maestro-cache.outputs.cache-hit != 'true'
+     run: |
+      set -euo pipefail
+      mkdir -p "$HOME/.maestro-cli"
+      BASE_URL="https://github.com/mobile-dev-inc/Maestro/releases/download/cli-2.12.1"
+      curl --fail --location --retry 3 "$BASE_URL/maestro.zip" --output "$RUNNER_TEMP/maestro.zip"
+      curl --fail --location --retry 3 "$BASE_URL/checksums_sha256.txt" --output "$RUNNER_TEMP/maestro-checksums.txt"
+      MAESTRO_SHA="$(awk '$2 == "maestro.zip" { print $1; exit }' "$RUNNER_TEMP/maestro-checksums.txt")"
+      test "${#MAESTRO_SHA}" -eq 64
+      printf '%s  %s\n' "$MAESTRO_SHA" "$RUNNER_TEMP/maestro.zip" | sha256sum --check -
+      unzip -q "$RUNNER_TEMP/maestro.zip" -d "$HOME/.maestro-cli"
+      MAESTRO_BIN="$(find "$HOME/.maestro-cli" -type f -name maestro -perm -111 -print -quit)"
+      test -n "$MAESTRO_BIN"
+   - name: Add Maestro CLI to PATH
+     run: |
+      MAESTRO_BIN="$(find "$HOME/.maestro-cli" -type f -name maestro -perm -111 -print -quit)"
+      test -n "$MAESTRO_BIN"
+      echo "$(dirname "$MAESTRO_BIN")" >> "$GITHUB_PATH"
+      "$MAESTRO_BIN" --version
+   - name: Enable KVM access
+     run: |
+      echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+      sudo udevadm control --reload-rules
+      sudo udevadm trigger --name-match=kvm
+   - name: Run real-game localization on Android emulator
+     uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+     with:
+      api-level: 35
+      target: google_apis
+      arch: x86_64
+      profile: pixel_5
+      disable-linux-hw-accel: false
+      pre-emulator-launch-script: |
+       adb kill-server || true
+       adb start-server
+       adb devices
+      emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+      disable-animations: true
+      script: |
+       bash .github/scripts/run-real-game-localization.sh
+   - name: Upload real-game localization test reports
+     if: always()
+     uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+     with:
+      name: arabify-real-game-localization-test
+      path: |
+       app/build/outputs/androidTest-results/connected/
+       app/build/reports/androidTests/connected/
+       build/test-game/SHA256SUMS
+       build/test-game/localized/
+       build/maestro/
+      if-no-files-found: ignore
+      retention-days: 14
+   - name: Upload final debug APK
+     if: always()
+     uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
      with:
       name: arabify-debug-apk
       path: app/build/outputs/apk/debug/app-debug.apk
       if-no-files-found: error
+      retention-days: 14
+   - name: Run Android lint
+     if: always()
+     run: gradle lintDebug
+   - name: Upload Android lint reports
+     if: always()
+     uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+     with:
+      name: arabify-lint-results
+      path: |
+       app/build/reports/lint-results-debug.html
+       app/build/reports/lint-results-debug.xml
+      if-no-files-found: ignore
       retention-days: 14

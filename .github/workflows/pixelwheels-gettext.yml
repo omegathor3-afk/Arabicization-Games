@@ -1,0 +1,69 @@
+name: Pixel Wheels gettext CI
+on:
+ push:
+  branches: [main, "feat/**"]
+  paths:
+   - "app/**"
+   - ".github/workflows/pixelwheels-gettext.yml"
+   - ".github/scripts/run-pixelwheels-gettext.sh"
+ workflow_dispatch:
+concurrency:
+ group: arabify-pixelwheels-${{ github.ref }}
+ cancel-in-progress: true
+permissions:
+ contents: read
+jobs:
+ pixelwheels-gettext:
+  runs-on: ubuntu-latest
+  timeout-minutes: 60
+  steps:
+   - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+   - name: Verify screenshot privacy
+     run: python3 .github/scripts/test-screenshot-privacy.py
+   - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+     with:
+      distribution: temurin
+      java-version: "17"
+   - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+     with:
+      gradle-version: "8.13"
+   - name: Download pinned Pixel Wheels APK from F-Droid
+     run: |
+      set -euo pipefail
+      mkdir -p build/test-game
+      curl --fail --location --retry 3 --retry-all-errors "https://f-droid.org/repo/com.agateau.tinywheels.android_33.apk" --output build/test-game/pixelwheels.apk
+      printf '%s  %s\n' '61a50936e728518ce90e7191f8454a98ff24a80b866fa58292a0b474d2dabcd1' build/test-game/pixelwheels.apk | sha256sum --check -
+   - name: Build app and instrumentation test APKs
+     run: gradle assembleDebug assembleDebugAndroidTest
+   - name: Enable KVM access
+     run: |
+      echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+      sudo udevadm control --reload-rules
+      sudo udevadm trigger --name-match=kvm
+   - name: Run Pixel Wheels gettext test on Android emulator
+     uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+     with:
+      api-level: 35
+      target: google_apis
+      arch: x86_64
+      profile: pixel_5
+      disable-linux-hw-accel: false
+      pre-emulator-launch-script: |
+       adb kill-server || true
+       adb start-server
+       adb devices
+      emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+      disable-animations: true
+      script: |
+       bash .github/scripts/run-pixelwheels-gettext.sh
+   - name: Upload Pixel Wheels gettext test reports
+     if: always()
+     uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+     with:
+      name: arabify-pixelwheels-gettext-test
+      path: |
+       app/build/outputs/androidTest-results/connected/
+       app/build/reports/androidTests/connected/
+       build/test-game/localized/
+      if-no-files-found: ignore
+      retention-days: 14

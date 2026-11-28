@@ -2,12 +2,110 @@ package com.omega.arabify
 
 import android.content.Context
 import com.google.mlkit.common.model.DownloadConditions
+import com.google.mlkit.common.model.RemoteModelManager
 import com.google.mlkit.nl.translate.TranslateLanguage
 import com.google.mlkit.nl.translate.Translation
+import com.google.mlkit.nl.translate.TranslateRemoteModel
 import com.google.mlkit.nl.translate.TranslatorOptions
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.tasks.await
 
+internal fun hasArabicTranslationModel(downloadedLanguages: Set<String>): Boolean =
+ TranslateLanguage.ARABIC in downloadedLanguages
+
+/** True when at least one supported offline English-to-Arabic engine is available. */
+internal fun hasUsableArabicTranslationEngine(mlKitModelDownloaded: Boolean, bundledEngineReady: Boolean): Boolean =
+ mlKitModelDownloaded || bundledEngineReady
+
+/** Bundle presence is only a capability check; prepare it only when ML Kit is not already ready. */
+internal fun shouldPrepareBundledTranslationEngine(
+ mlKitModelDownloaded: Boolean,
+ bundledEngineAvailable: Boolean
+): Boolean = bundledEngineAvailable && !mlKitModelDownloaded
+
+/** Prefer the bundled engine when the optional ML Kit model is not confirmed available. */
+internal fun shouldUseBundledTranslationEngine(mlKitModelDownloaded: Boolean, bundledEngineUsable: Boolean): Boolean =
+ bundledEngineUsable && !mlKitModelDownloaded
+
+/**
+ * Process-local ML Kit model state.
+ *
+ * A failed model-status query is treated as "not confirmed downloaded" so the
+ * bundled offline engine can still be used. A successful explicit download
+ * refreshes a previous negative result instead of leaving the cache stale.
+ */
+internal class MlKitModelAvailability {
+ @Volatile private var downloaded: Boolean? = null
+
+ fun markDownloaded() {
+  downloaded = true
+ }
+
+ fun markUnavailable() {
+  downloaded = false
+ }
+
+ suspend fun resolve(query: suspend () -> Boolean): Boolean {
+  downloaded?.let { return it }
+  val result = try {
+   query()
+  } catch (cancelled: CancellationException) {
+   throw cancelled
+  } catch (_: Exception) {
+   false
+  }
+  downloaded = result
+  return result
+ }
+}
+
+/**
+ * Runs the primary translator and falls back only for ordinary engine failures.
+ * Coroutine cancellation is control flow, not a translation failure: it must
+ * propagate from either engine without invalidating ML Kit state or starting
+ * additional native work.
+ */
+internal suspend fun <T> translateWithFallback(
+ primary: suspend () -> T,
+ fallbackAvailable: () -> Boolean,
+ onPrimaryFailure: (Exception) -> Unit,
+ fallback: suspend () -> T,
+): T {
+ try {
+  return primary()
+ } catch (cancelled: CancellationException) {
+  throw cancelled
+ } catch (error: Exception) {
+  onPrimaryFailure(error)
+  if (!fallbackAvailable()) throw error
+  return try {
+   fallback()
+  } catch (cancelled: CancellationException) {
+   throw cancelled
+  } catch (fallbackError: Exception) {
+   if (fallbackError !== error) error.addSuppressed(fallbackError)
+   throw error
+  }
+ }
+}
+
 internal class OfflineArabicTranslator(context: Context) {
+ private val translationMemory = TranslationMemory()
+
+ /** Bundled first-install offline engine (ships in the APK; Omega's 2026-11-27 decision). */
+ private val bundled = BundledBergamotTranslator(context)
+
+ /** Which engine produced the most recent translation: "mlkit" or "bundled-bergamot". */
+ var lastEngine: String? = null
+  private set
+
+ // Checked once per process: RemoteModelManager is too slow to consult per string.
+ private val mlKitAvailability = MlKitModelAvailability()
+
+ /** Translation-memory counters for the activity report. */
+ val translationMemoryStats: String
+  get() = with(translationMemory) { "TM exact=$exactHits fuzzy=$fuzzyHits miss=$misses size=$size" }
+
  private val translator = Translation.getClient(
   TranslatorOptions.Builder()
    .setSourceLanguage(TranslateLanguage.ENGLISH)
@@ -15,15 +113,85 @@ internal class OfflineArabicTranslator(context: Context) {
    .build()
  )
 
- suspend fun prepareForOfflineUse() {
-  val conditions = DownloadConditions.Builder().requireWifi().build()
-  translator.downloadModelIfNeeded(conditions).await()
+ suspend fun prepareForOfflineUse(requireWifi: Boolean = true) {
+  val conditionsBuilder = DownloadConditions.Builder()
+  if (requireWifi) conditionsBuilder.requireWifi()
+  translator.downloadModelIfNeeded(conditionsBuilder.build()).await()
+  // A user-triggered successful download must replace any earlier cached "missing" state.
+  mlKitAvailability.markDownloaded()
  }
+
+ // Reverse direction exists for round-trip verification audits (CI evidence
+ // paths), not for the user-facing pipeline.
+ private val backTranslator = Translation.getClient(
+  TranslatorOptions.Builder()
+   .setSourceLanguage(TranslateLanguage.ARABIC)
+   .setTargetLanguage(TranslateLanguage.ENGLISH)
+   .build()
+ )
+
+ suspend fun prepareReverseForOfflineUse(requireWifi: Boolean = true) {
+  val conditionsBuilder = DownloadConditions.Builder()
+  if (requireWifi) conditionsBuilder.requireWifi()
+  backTranslator.downloadModelIfNeeded(conditionsBuilder.build()).await()
+ }
+
+ suspend fun translateArabicToEnglish(text: String): String {
+  require(text.isNotBlank()) { "النص فارغ." }
+  return backTranslator.translate(text).await()
+ }
+
+ suspend fun isArabicModelDownloaded(): Boolean {
+  val downloadedLanguages = RemoteModelManager.getInstance()
+   .getDownloadedModels(TranslateRemoteModel::class.java)
+   .await()
+   .map { it.language }
+   .toSet()
+  return hasArabicTranslationModel(downloadedLanguages)
+ }
+
+ /** True when this APK has bundled model assets and a loadable native engine for this ABI. */
+ fun isBundledEngineUsable(): Boolean = bundled.isUsable()
+
+ /** Verify the bundled package, create the native session, and run a real Arabic smoke translation. */
+ fun prepareBundledEngine(): Boolean = bundled.prepare()
 
  suspend fun translateEnglishToArabic(text: String): String {
   require(text.isNotBlank()) { "النص فارغ." }
-  return translator.translate(text).await()
+  val hit = translationMemory.lookup(text)
+  if (hit.kind == TranslationMemory.MatchKind.EXACT) return hit.translation
+  if (hit.kind == TranslationMemory.MatchKind.FUZZY &&
+      translationMemory.placeholderSignature(text) == translationMemory.placeholderSignature(hit.source)) {
+   return hit.translation
+  }
+  val result = translateWithBestAvailableEngine(text)
+  translationMemory.add(text, result)
+  return result
  }
 
- fun close() = translator.close()
+ /**
+  * ML Kit stays the default once its Arabic model is on the device. When it
+  * is not (fresh install, never online), the Bergamot package bundled in the
+  * APK takes over — that is what makes first-install offline translation
+  * work. An ML Kit failure mid-run (model removed, service error) falls back
+  * the same way when the bundled package exists.
+  */
+ private suspend fun translateWithBestAvailableEngine(text: String): String {
+  // The status query can fail independently of both translation engines.
+  // Treat that as "not confirmed" and try the bundled model before ML Kit.
+  val mlKitReady = mlKitAvailability.resolve { isArabicModelDownloaded() }
+  if (shouldUseBundledTranslationEngine(mlKitReady, bundled.isUsable())) {
+   return bundled.translateEnglishToArabic(text).also { lastEngine = "bundled-bergamot" }
+  }
+  return translateWithFallback(
+   primary = { translator.translate(text).await().also { lastEngine = "mlkit" } },
+   fallbackAvailable = { bundled.isUsable() },
+   onPrimaryFailure = { mlKitAvailability.markUnavailable() },
+   fallback = {
+    bundled.translateEnglishToArabic(text).also { lastEngine = "bundled-bergamot" }
+   },
+  )
+ }
+
+ fun close() { translator.close(); backTranslator.close(); bundled.close() }
 }
