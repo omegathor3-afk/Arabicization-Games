@@ -277,12 +277,27 @@ fi
 # glyph shapes; frames stay in the private artifact per the privacy rule.
 if [[ "$test_status" -eq 0 && "$launch_status" -eq 0 ]]; then
   visual_status=0
+  # Foreground guard: the launch-leg flake (the game drops to the launcher
+  # minutes after a good launch) must not let the visual test screenshot the
+  # launcher. Verify and relaunch once before polling.
+  fg_dump="$(adb shell dumpsys activity activities 2>/dev/null | grep -m 1 'topResumedActivity' || true)"
+  if [[ "$fg_dump" != *"io.anuke.mindustry"* ]]; then
+    adb shell am start -W -n "io.anuke.mindustry/mindustry.android.AndroidLauncher" > build/test-game/localized/visual-relaunch.txt 2>&1 || true
+    sleep 10
+    fg_dump="$(adb shell dumpsys activity activities 2>/dev/null | grep -m 1 'topResumedActivity' || true)"
+    if [[ "$fg_dump" != *"io.anuke.mindustry"* ]]; then
+      echo "::notice::MINDUSTRY-VISUAL foreground not confirmed before the visual test (top=$fg_dump); screenshots may miss the game"
+    fi
+  fi
   run_connected_test com.omega.arabify.MindustryVisualArabicInstrumentedTest || visual_status=$?
   adb pull /sdcard/Download/ARABIFY/mindustry-visual-frame.png "$OUTPUT_DIR/mindustry-visual-frame.png" || true
   adb pull /sdcard/Download/ARABIFY/mindustry-visual-report.txt "$OUTPUT_DIR/mindustry-visual-report.txt" || true
   if [[ "$visual_status" -eq 0 && -s "$OUTPUT_DIR/mindustry-visual-report.txt" ]]; then
     echo "::notice::MINDUSTRY-VISUAL-RENDER $(tr '\n' ' ' < "$OUTPUT_DIR/mindustry-visual-report.txt" | head -c 700) (best frame retained in the private workflow artifact per the privacy rule)"
   else
+    # Emit the full report (histogram, per-mask band counts, ASCII luminance
+    # map) so the failure is diagnosable without artifact access.
+    [[ -s "$OUTPUT_DIR/mindustry-visual-report.txt" ]] && echo "::notice::MINDUSTRY-VISUAL-REPORT $(tr '\n' '~' < "$OUTPUT_DIR/mindustry-visual-report.txt" | head -c 3000)"
     note_failure "Mindustry visual Arabic render verification failed or produced no report (status $visual_status)"
     test_status=1
   fi

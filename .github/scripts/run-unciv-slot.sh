@@ -389,6 +389,17 @@ if [[ "$test_status" -eq 0 && "$launch_status" -eq 0 ]]; then
     adb shell pidof com.unciv.app > build/test-game/localized/visual-game-process.txt || { visual_status=1; note_failure "pseudo Unciv process not running after launch"; }
   fi
   if [[ "$visual_status" -eq 0 ]]; then
+    # Foreground guard: verify the game is the resumed activity before
+    # polling screenshots; relaunch once if it dropped to the launcher.
+    fg_dump="$(adb shell dumpsys activity activities 2>/dev/null | grep -m 1 'topResumedActivity' || true)"
+    if [[ "$fg_dump" != *"com.unciv.app"* ]]; then
+      adb shell monkey -p com.unciv.app 1 > /dev/null 2>&1 || true
+      sleep 10
+      fg_dump="$(adb shell dumpsys activity activities 2>/dev/null | grep -m 1 'topResumedActivity' || true)"
+      if [[ "$fg_dump" != *"com.unciv.app"* ]]; then
+        echo "::notice::UNCIV-VISUAL foreground not confirmed before the visual test (top=$fg_dump); screenshots may miss the game"
+      fi
+    fi
     run_connected_test com.omega.arabify.UncivVisualArabicInstrumentedTest || visual_status=$?
   fi
   adb_with_reconnect pull /sdcard/Download/ARABIFY/unciv-visual-frame.png "$OUTPUT_DIR/unciv-visual-frame.png" || true
@@ -396,6 +407,9 @@ if [[ "$test_status" -eq 0 && "$launch_status" -eq 0 ]]; then
   if [[ "$visual_status" -eq 0 && -s "$OUTPUT_DIR/unciv-visual-report.txt" ]]; then
     echo "::notice::UNCIV-VISUAL-RENDER $(tr '\n' ' ' < "$OUTPUT_DIR/unciv-visual-report.txt" | head -c 700) (best frame retained in the private workflow artifact per the privacy rule)"
   else
+    # Emit the full report (histogram, per-mask band counts, ASCII luminance
+    # map) so the failure is diagnosable without artifact access.
+    [[ -s "$OUTPUT_DIR/unciv-visual-report.txt" ]] && echo "::notice::UNCIV-VISUAL-REPORT $(tr '\n' '~' < "$OUTPUT_DIR/unciv-visual-report.txt" | head -c 3000)"
     note_failure "Unciv visual Arabic render verification failed or produced no report (status $visual_status)"
     test_status=1
   fi
