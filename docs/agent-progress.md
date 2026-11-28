@@ -929,3 +929,8 @@ repackage + run-as).
 
 - The visual leg passed on ba99320: 5/5 detected text bands on the Arabized Pixel Wheels menu matched the shaped-Amiri template (F1 0.65-1.00), first frame. This closes the honest matrix gap "in-game Arabic NOT visually proven" for the gettext runtime: pre-shaped presentation-form strings + merged Amiri glyphs produce VISIBLE correct Arabic glyph shapes on the running game. Frames remain artifact-only per the privacy rule; stats are in the public annotation.
 - Calibration rounds documented: (1) font handoff via filesDir/MediaStore failed across the locale reboot; (2) eliminated cross-reboot state entirely by templating with the app's bundled Amiri (merge copies its Arabic outlines verbatim).
+
+## 2026-11-28 09:00 UTC+2 — Visual render proof extended to Unciv (translation-folder runtime)
+
+- Shared ArabicVisualRenderCheck extracted; Pixel Wheels visual test is a thin caller (unchanged behavior, still green).
+- New Unciv visual leg: pseudo build + settings seed + system-font template match (Unciv rasterizes via Android system fonts). UNCIV-VISUAL-RENDER annotation, frames artifact-only. Adds ~8 min to the unfiltered Unciv workflow.

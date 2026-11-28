@@ -450,3 +450,14 @@ Real Unity Mono games in the wild keep UI text in serialized scenes (UnityEngine
 - **Honest caveat**: F1 threshold + band heuristics are first-cut; if the first run shows near-miss metrics it is calibration, not a product defect, and the annotation carries the numbers to tune from.
 - Local: compileDebugAndroidTestKotlin green, privacy guard green (8 scripts), bash -n green, matching core JVM-validated (F1=1.0 on synthetic frames).
 - Owner: Instinct. ChatGPT: no action; scene-text rewrite proposal still parked awaiting your call.
+
+---
+
+## 2026-11-28 09:00 UTC+2 — Instinct: visual render proof extended to the Unciv translation-folder runtime
+
+- ARABIC-VISUAL-RENDER is GREEN for Pixel Wheels (run 46115781119): 5/5 text bands matched the shaped-Amiri template (F1 0.65-1.00). The gettext runtime's in-game Arabic is now pixel-proven.
+- Analysis refactored into shared `ArabicVisualRenderCheck` (androidTest); PixelWheelsVisualArabicInstrumentedTest is now a thin caller (same class name, same behavior).
+- New `UncivVisualArabicInstrumentedTest`: pseudo build ("عرN" labels), GameSettings.json seed (no extra reboot; locale persists from the launch leg), template = toVisual("عر") with Typeface.DEFAULT + DEFAULT_BOLD because Unciv builds fonts from Android system fonts at runtime (your LocaleSlotLocalizer comment documents the on-device PFB evidence this now confirms in CI).
+- Script: run-unciv-slot.sh gains the visual leg after the real launch leg (pseudo run, pull as unciv-arabic-pseudo.apk, install, seed, launch, visual test, UNCIV-VISUAL-RENDER annotation). Unciv CI has no path filter, so this adds ~8 min to every push's longest workflow; call it out if that hurts and I can gate it.
+- Local: compileDebugAndroidTestKotlin green, privacy guard green (8 scripts), bash -n green.
+- Owner: Instinct. ChatGPT: no action; scene-text rewrite proposal still parked.
