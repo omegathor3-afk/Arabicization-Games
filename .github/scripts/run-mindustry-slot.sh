@@ -269,6 +269,25 @@ else
   echo "Translated Mindustry APK was not exported to the shared Downloads collection." >&2
   if [[ "$test_status" -eq 0 ]]; then test_status=1; fi
 fi
+# Visual Arabic render evidence: the launch leg installed and launched the
+# deterministic pseudo build; the instrumented visual test screenshots the
+# RUNNING game and template-matches menu lines against the shaped pseudo word
+# rendered with each coverage-complete catalog font. Pixel-level proof that
+# pre-shaped presentation forms + the replaced font produce VISIBLE Arabic
+# glyph shapes; frames stay in the private artifact per the privacy rule.
+if [[ "$test_status" -eq 0 && "$launch_status" -eq 0 ]]; then
+  visual_status=0
+  run_connected_test com.omega.arabify.MindustryVisualArabicInstrumentedTest || visual_status=$?
+  adb pull /sdcard/Download/ARABIFY/mindustry-visual-frame.png "$OUTPUT_DIR/mindustry-visual-frame.png" || true
+  adb pull /sdcard/Download/ARABIFY/mindustry-visual-report.txt "$OUTPUT_DIR/mindustry-visual-report.txt" || true
+  if [[ "$visual_status" -eq 0 && -s "$OUTPUT_DIR/mindustry-visual-report.txt" ]]; then
+    echo "::notice::MINDUSTRY-VISUAL-RENDER $(tr '\n' ' ' < "$OUTPUT_DIR/mindustry-visual-report.txt" | head -c 700) (best frame retained in the private workflow artifact per the privacy rule)"
+  else
+    note_failure "Mindustry visual Arabic render verification failed or produced no report (status $visual_status)"
+    test_status=1
+  fi
+fi
+
 if [[ "$test_status" -eq 0 && "$launch_status" -ne 0 ]]; then
   test_status="$launch_status"
 fi
