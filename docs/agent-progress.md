@@ -892,3 +892,9 @@ repackage + run-as).
 - Issue #6 fixture chosen after rejecting Daggerfall (needs non-redistributable assets), dragon-ball (IL2CPP), DoggyMan3D (507MB): Car Runner v1.2.0, MIT, Unity 2019 Mono, 39.6MB, pinned sha256. The leg asserts real-game Mono detection, the localizer's honest no-text refusal (zero in-scope files), and repackaging-route install/launch safety. ARM-only ABI on the x86_64 emulator is the empirical unknown, handled as environmental if it fails.
 - Handoff carries the serialized-scene MonoBehaviour text rewrite proposal - the actual Unity UI text location in every real game surveyed.
 - Validation: guard (8 scripts) + YAML + compile green; device verdict pending.
+
+## 2026-11-28 05:00 UTC+2 — Unity Mono real-player leg restructured (x86_64 limit confirmed)
+
+- API 33 experiment ALSO failed ENVIRONMENTAL: NO_MATCHING_ABIS (run 46095596352), same as API 35 (46092000904). No CI-selectable image runs 32-bit ARM. Verdict: install/launch of ARM32-only Mono games is permanently out of scope for x86_64 CI; device-only.
+- Restructured the leg to provable evidence: push pinned Car Runner APK to the app's external-files dir, instrumented test reads it there (scoped-storage-safe), asserts detection=MONO + honest no-text refusal + ARABIFY re-sign, publishes re-signed APK, script host-verifies with apksigner. Workflow back to API 35.
+- Local gates: compileDebugAndroidTestKotlin OK, screenshot privacy guard OK (8 scripts), bash -n OK.
