@@ -104,6 +104,8 @@ jobs:
       NINJA="$ANDROID_HOME/cmake/3.31.6/bin/ninja"
       if [[ ! -x "$NINJA" ]]; then sudo apt-get update && sudo apt-get install -y ninja-build; fi
       bash native/bergamot/build-android.sh
+   - name: Build pinned Bergamot JNI library (x86_64, emulator and x86_64 devices)
+     run: ANDROID_ABI=x86_64 bash native/bergamot/build-android.sh
    - name: Fetch and stage the verified bundled offline model (en-ar)
      run: |
       python3 native/bergamot/audit-mozilla-arabic-models.py
@@ -117,6 +119,9 @@ jobs:
       APK="app/build/outputs/apk/debug/app-debug.apk"
       test -s "$APK"
       unzip -t "$APK"
+      unzip -l "$APK" | grep -Fq 'lib/arm64-v8a/libarabify_bergamot.so'
+      unzip -l "$APK" | grep -Fq 'lib/x86_64/libarabify_bergamot.so'
+      unzip -l "$APK" | grep -Fq 'assets/arabify-models/en-ar/manifest.json'
       APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n1)"
       AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n1)"
       test -x "$APKSIGNER"
@@ -128,6 +133,33 @@ jobs:
       echo "::notice::APK-SIZE app-debug.apk $(stat -c %s "$APK") bytes (includes the bundled en-ar offline model)"
    - name: Build instrumentation test APK
      run: gradle assembleDebugAndroidTest
+   - name: Run first-install bundled translation offline on Android 15 x86_64
+     uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+     with:
+      api-level: 35
+      target: google_apis
+      arch: x86_64
+      profile: pixel_5
+      disable-linux-hw-accel: false
+      pre-emulator-launch-script: |
+       adb kill-server || true
+       adb start-server
+       adb devices
+      emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+      disable-animations: true
+      script: |
+       bash .github/scripts/run-bundled-first-install-offline.sh
+   - name: Upload bundled first-install offline evidence
+     if: always()
+     uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+     with:
+      name: arabify-bundled-first-install-offline
+      path: |
+       app/build/outputs/androidTest-results/connected/
+       app/build/reports/androidTests/connected/
+       build/bundled-first-install-offline/
+      if-no-files-found: ignore
+      retention-days: 14
    - name: Checkout pinned open-source Android game source
      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
      with:
