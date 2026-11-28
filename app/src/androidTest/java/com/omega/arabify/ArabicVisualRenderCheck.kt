@@ -46,11 +46,15 @@ internal object ArabicVisualRenderCheck {
 
         var bestFrame: Bitmap? = null
         var bestMatches = emptyList<LineMatch>()
+        var diagFrame: Bitmap? = null
+        var diagBands = -1
         var framesTried = 0
         var bandsSeenMax = 0
         var maxRowInkSeen = 0
         var maxInkPctSeen = 0.0
         var lastPolarity = "bright"
+        var lastHistogram = ""
+        var lastMaskBands = ""
 
         for (attempt in 1..maxFrames) {
             val shot = instrumentation.uiAutomation.takeScreenshot()
@@ -62,6 +66,13 @@ internal object ArabicVisualRenderCheck {
                 maxRowInkSeen = maxOf(maxRowInkSeen, analysis.maxRowInk)
                 maxInkPctSeen = maxOf(maxInkPctSeen, analysis.inkPct)
                 lastPolarity = analysis.polarity
+                lastHistogram = analysis.histogram
+                lastMaskBands = analysis.maskBands
+                if (analysis.bands > diagBands && shot !== bestFrame) {
+                    diagFrame?.recycle()
+                    diagFrame = shot.copy(shot.config ?: Bitmap.Config.ARGB_8888, false)
+                    diagBands = analysis.bands
+                }
                 if (matches.size > bestMatches.size ||
                     (matches.size == bestMatches.size && matches.sumOf { it.f1 } > bestMatches.sumOf { it.f1 })
                 ) {
@@ -76,20 +87,28 @@ internal object ArabicVisualRenderCheck {
             Thread.sleep(2_500)
         }
 
+        val frameForMap = bestFrame ?: diagFrame
         val report = buildString {
             appendLine("framesTried=$framesTried textBandsSeen=$bandsSeenMax linesMatched=${bestMatches.size} polarity=$lastPolarity maxRowInk=$maxRowInkSeen inkPct=${String.format(java.util.Locale.US, "%.4f", maxInkPctSeen)}")
+            if (lastHistogram.isNotEmpty()) appendLine(lastHistogram)
+            if (lastMaskBands.isNotEmpty()) appendLine(lastMaskBands)
             bestMatches.take(8).forEach {
                 appendLine("line y=${it.top} h=${it.height} f1=${String.format(java.util.Locale.US, "%.2f", it.f1)} fontIndex=${it.fontIndex}")
             }
+            frameForMap?.let { append(asciiLuminanceMap(it)) }
         }
         Log.i("ArabicVisualCheck", report)
 
-        bestFrame?.let {
+        // On a total match failure there is no best frame; publish the
+        // highest-band diagnostic frame so the artifact always carries what
+        // the camera actually saw.
+        (bestFrame ?: diagFrame)?.let {
             publish(context, it, "$reportPrefix-visual-frame.png", "image/png") { bitmap, stream ->
                 bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
             }
-            it.recycle()
         }
+        bestFrame?.recycle()
+        diagFrame?.recycle()
         publishText(context, report, "$reportPrefix-visual-report.txt")
         return Outcome(report, bestMatches.size, framesTried)
     }
@@ -107,14 +126,20 @@ internal object ArabicVisualRenderCheck {
         val maxRowInk: Int,
         val inkPct: Double,
         val polarity: String,
+        val histogram: String = "",
+        val maskBands: String = "",
     )
 
     /**
      * Returns matched lines plus detection diagnostics. Menus come in both
      * polarities (Pixel Wheels: bright text on a dark background; Unciv: dark
-     * text on a light tan background), so the frame is binarized both ways
-     * and the polarity that yields more text-line bands wins. The template is
-     * an alpha-mask glyph shape, so it matches either ink polarity unchanged.
+     * text on a light background) and at unknown contrast, so the frame is
+     * binarized four ways: fixed bright (>=130), fixed dark (<=110), and an
+     * Otsu-split pair (T+25 / T-25) that catches mid-gray text the fixed
+     * thresholds miss. The mask that yields more text-line bands wins; the
+     * template is an alpha-mask glyph shape, so it matches any ink polarity
+     * unchanged. The luminance histogram and all four band counts are
+     * reported so a bands=0 failure is diagnosable without the artifact.
      */
     internal fun analyzeFrame(
         frame: Bitmap,
@@ -127,23 +152,55 @@ internal object ArabicVisualRenderCheck {
         val pixels = IntArray(width * height)
         frame.getPixels(pixels, 0, width, 0, 0, width, height)
 
-        val bright = BooleanArray(width * height)
-        val dark = BooleanArray(width * height)
+        val lums = IntArray(width * height)
+        val hist = IntArray(256)
         for (i in pixels.indices) {
             val c = pixels[i]
             val lum = (Color.red(c) + Color.green(c) + Color.blue(c)) / 3
-            bright[i] = lum >= 130
-            dark[i] = lum <= 110
+            lums[i] = lum
+            hist[lum]++
         }
+        val (otsuT, otsuDarkMean, otsuBrightMean) = otsuThreshold(hist)
+        // Fixed margins around the Otsu split fail when the classes are far
+        // apart (T lands at a class edge); anchor the adaptive masks near the
+        // class MEANS instead, with a floor for near-uniform frames.
+        val otsuMargin = maxOf(15, ((otsuBrightMean - otsuDarkMean) * 0.25).toInt())
 
-        val brightBands = detectBands(bright, width, height)
-        val darkBands = detectBands(dark, width, height)
-        val ink = if (darkBands.first.size > brightBands.first.size) dark else bright
-        val (bands, maxRowInk) = if (darkBands.first.size > brightBands.first.size) darkBands else brightBands
-        val polarity = if (darkBands.first.size > brightBands.first.size) "dark" else "bright"
+        val brightFixed = maskOf(lums) { it >= 130 }
+        val darkFixed = maskOf(lums) { it <= 110 }
+        val brightOtsu = maskOf(lums) { it >= otsuBrightMean - otsuMargin }
+        val darkOtsu = maskOf(lums) { it <= otsuDarkMean + otsuMargin }
+
+        val candidates = listOf(
+            "bright" to detectBands(brightFixed, width, height),
+            "dark" to detectBands(darkFixed, width, height),
+            "brightOtsu" to detectBands(brightOtsu, width, height),
+            "darkOtsu" to detectBands(darkOtsu, width, height),
+        )
+        // maxByOrNull keeps the FIRST maximum (fixed masks preferred on ties).
+        val chosen = candidates.indices.maxByOrNull { candidates[it].second.first.size } ?: 0
+        val polarity = candidates[chosen].first
+        val (bands, maxRowInk) = candidates[chosen].second
+        val ink = when (polarity) {
+            "bright" -> brightFixed
+            "dark" -> darkFixed
+            "brightOtsu" -> brightOtsu
+            else -> darkOtsu
+        }
         var inkTotal = 0L
         for (v in ink) if (v) inkTotal++
         val inkPct = inkTotal.toDouble() / (width.toDouble() * height)
+
+        val histogram = buildString {
+            append("hist16=")
+            for (b in 0 until 16) {
+                var n = 0
+                for (l in b * 16 until b * 16 + 16) n += hist[l]
+                if (b > 0) append(',')
+                append(n)
+            }
+        }
+        val maskBands = "bandsByMask bright=${candidates[0].second.first.size} dark=${candidates[1].second.first.size} brightOtsu=${candidates[2].second.first.size} darkOtsu=${candidates[3].second.first.size} otsuT=$otsuT darkMean=${otsuDarkMean.toInt()} brightMean=${otsuBrightMean.toInt()}"
 
         val matches = mutableListOf<LineMatch>()
         for (band in bands) {
@@ -170,7 +227,74 @@ internal object ArabicVisualRenderCheck {
             }
             if (best != null && best!!.f1 >= minF1) matches.add(best!!)
         }
-        return FrameAnalysis(matches, bands.size, maxRowInk, inkPct, polarity)
+        return FrameAnalysis(matches, bands.size, maxRowInk, inkPct, polarity, histogram, maskBands)
+    }
+
+    private fun maskOf(lums: IntArray, pred: (Int) -> Boolean): BooleanArray {
+        val mask = BooleanArray(lums.size)
+        for (i in lums.indices) mask[i] = pred(lums[i])
+        return mask
+    }
+
+    /**
+     * Between-class-variance threshold over a 256-bin luminance histogram.
+     * Returns the split plus the dark/bright class means at that split.
+     */
+    internal fun otsuThreshold(hist: IntArray): Triple<Int, Double, Double> {
+        var total = 0L
+        var sum = 0.0
+        for (i in 0 until 256) {
+            total += hist[i]
+            sum += i.toDouble() * hist[i]
+        }
+        if (total == 0L) return Triple(128, 0.0, 255.0)
+        var sumB = 0.0
+        var wB = 0L
+        var best = -1.0
+        var bestT = 128
+        var bestMB = 0.0
+        var bestMF = 255.0
+        for (t in 0 until 256) {
+            wB += hist[t]
+            if (wB == 0L) continue
+            val wF = total - wB
+            if (wF == 0L) break
+            sumB += t.toDouble() * hist[t]
+            val mB = sumB / wB
+            val mF = (sum - sumB) / wF
+            val between = wB.toDouble() * wF * (mB - mF) * (mB - mF)
+            if (between > best) {
+                best = between
+                bestT = t
+                bestMB = mB
+                bestMF = mF
+            }
+        }
+        return Triple(bestT, bestMB, bestMF)
+    }
+
+    /**
+     * Compact luminance map of a frame (64x20 block averages, tagged rows so
+     * the map survives annotation newline flattening). Lets a bands=0 report
+     * be read as an image without opening the private artifact.
+     */
+    internal fun asciiLuminanceMap(frame: Bitmap): String {
+        val cols = 64
+        val rows = 20
+        val ramp = " .:-=+*#%@"
+        val scaled = Bitmap.createScaledBitmap(frame, cols, rows, true)
+        val out = StringBuilder()
+        for (y in 0 until rows) {
+            out.append("A").append(y).append(' ')
+            for (x in 0 until cols) {
+                val c = scaled.getPixel(x, y)
+                val lum = (Color.red(c) + Color.green(c) + Color.blue(c)) / 3
+                out.append(ramp[(lum * (ramp.length - 1)) / 255])
+            }
+            out.append('\n')
+        }
+        scaled.recycle()
+        return out.toString()
     }
 
     /** Text-line detection from the y-axis projection of ink pixels. Returns bands to the max row ink count. */
