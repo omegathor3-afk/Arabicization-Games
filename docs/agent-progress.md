@@ -924,3 +924,8 @@ repackage + run-as).
 ## 2026-11-28 08:15 UTC+2 — Visual leg calibration round 2: cross-reboot handoff eliminated
 
 - Round 1 (MediaStore handoff, run 46111890145) failed identically to filesDir: app-visible state does not survive the leg's locale reboot (installed packages do; MediaStore rows and filesDir apparently do not). Design fix instead of another storage retry: the visual test now renders its template with the app's bundled Amiri directly. The merge copies Amiri's Arabic glyph outlines verbatim into the game's fonts, so the template is exactly what a correct render looks like. Zero state crosses the reboot.
+
+## 2026-11-28 08:56 UTC+2 — ARABIC-VISUAL-RENDER GREEN: in-game Arabic visually proven (run 46115781119)
+
+- The visual leg passed on ba99320: 5/5 detected text bands on the Arabized Pixel Wheels menu matched the shaped-Amiri template (F1 0.65-1.00), first frame. This closes the honest matrix gap "in-game Arabic NOT visually proven" for the gettext runtime: pre-shaped presentation-form strings + merged Amiri glyphs produce VISIBLE correct Arabic glyph shapes on the running game. Frames remain artifact-only per the privacy rule; stats are in the public annotation.
+- Calibration rounds documented: (1) font handoff via filesDir/MediaStore failed across the locale reboot; (2) eliminated cross-reboot state entirely by templating with the app's bundled Amiri (merge copies its Arabic outlines verbatim).
