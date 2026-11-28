@@ -12,6 +12,7 @@ SCRIPT_WORKFLOWS = {
     ".github/scripts/run-andorstrail-resources.sh": (".github/workflows/andorstrail-resources.yml", "build/test-game/localized/"),
     ".github/scripts/run-mindustry-real-translation.sh": (".github/workflows/mindustry-real-translation.yml", "build/test-game/localized/"),
     ".github/scripts/run-pixelwheels-gettext.sh": (".github/workflows/pixelwheels-gettext.yml", "build/test-game/localized/"),
+    ".github/scripts/run-unitymono-real.sh": (".github/workflows/unity-mono-real.yml", "build/test-game/localized/"),
     ".github/scripts/run-arabify-ui-screenshot.sh": (".github/workflows/arabify-ui.yml", "build/arabify-ui/"),
 }
 FORBIDDEN_HOSTS = ("0x0.st", "catbox.moe", "temp.sh", "file.io", "transfer.sh")
