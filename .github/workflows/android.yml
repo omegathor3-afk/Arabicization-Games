@@ -119,9 +119,10 @@ jobs:
       APK="app/build/outputs/apk/debug/app-debug.apk"
       test -s "$APK"
       unzip -t "$APK"
-      unzip -l "$APK" | grep -Fq 'lib/arm64-v8a/libarabify_bergamot.so'
-      unzip -l "$APK" | grep -Fq 'lib/x86_64/libarabify_bergamot.so'
-      unzip -l "$APK" | grep -Fq 'assets/arabify-models/en-ar/manifest.json'
+      unzip -Z1 "$APK" > apk-entries.txt
+      grep -Fx 'lib/arm64-v8a/libarabify_bergamot.so' apk-entries.txt >/dev/null
+      grep -Fx 'lib/x86_64/libarabify_bergamot.so' apk-entries.txt >/dev/null
+      grep -Fx 'assets/arabify-models/en-ar/manifest.json' apk-entries.txt >/dev/null
       APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n1)"
       AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n1)"
       test -x "$APKSIGNER"
@@ -133,6 +134,11 @@ jobs:
       echo "::notice::APK-SIZE app-debug.apk $(stat -c %s "$APK") bytes (includes the bundled en-ar offline model)"
    - name: Build instrumentation test APK
      run: gradle assembleDebugAndroidTest
+   - name: Enable KVM access before offline first-install test
+     run: |
+      echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+      sudo udevadm control --reload-rules
+      sudo udevadm trigger --name-match=kvm
    - name: Run first-install bundled translation offline on Android 15 x86_64
      uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
      with:

@@ -45,9 +45,14 @@ adb shell getprop ro.build.fingerprint > "$EVIDENCE_DIR/build-fingerprint.txt"
 # This test installs the CI-built app/test APKs into a clean x86_64 emulator,
 # proves the ML Kit model is absent, stages the hash-verified bundled en-ar
 # files, and translates through OfflineArabicTranslator with no internet.
-gradle connectedDebugAndroidTest \
+test_status=0
+if gradle connectedDebugAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.class=com.omega.arabify.BundledFirstInstallOfflineInstrumentedTest \
-  --stacktrace
+  --stacktrace; then
+  test_status=0
+else
+  test_status=$?
+fi
 
 adb logcat -d -v threadtime -s BundledFirstInstall:I > "$EVIDENCE_DIR/instrumentation.log" || true
 adb logcat -b crash -d -v threadtime > "$EVIDENCE_DIR/crash-logcat.txt" || true
@@ -57,6 +62,11 @@ adb shell settings get global wifi_on > "$EVIDENCE_DIR/wifi-setting-after.txt" |
 adb shell settings get global mobile_data > "$EVIDENCE_DIR/mobile-data-after.txt" || true
 adb shell dumpsys connectivity > "$EVIDENCE_DIR/connectivity-after.txt" || true
 adb shell dumpsys wifi > "$EVIDENCE_DIR/wifi-after.txt" || true
+
+if [[ "$test_status" -ne 0 ]]; then
+  echo "::error::BundledFirstInstallOfflineInstrumentedTest failed with exit $test_status; device and crash evidence were captured." >&2
+  exit "$test_status"
+fi
 
 grep -q 'bundled-package:present' "$EVIDENCE_DIR/instrumentation.log"
 grep -q 'mlkit-arabic-model-downloaded=false' "$EVIDENCE_DIR/instrumentation.log"
