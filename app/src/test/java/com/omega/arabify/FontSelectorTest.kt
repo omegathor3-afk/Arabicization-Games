@@ -85,6 +85,15 @@ class FontSelectorTest {
     }
 
     @Test
+    fun explicitUiRoleCannotBypassTheFixedWidthSafetyGate() {
+        val failure = runCatching {
+            FontSelector.select(game("Terminal Mono", 400, mono = true), ArabicFontRole.UI) { font -> cov(font) }
+        }.exceptionOrNull()
+        assertTrue(failure is IllegalArgumentException)
+        assertTrue(failure?.message.orEmpty().contains("fixed-width"))
+    }
+
+    @Test
     fun roleInferenceUsesFontPathAndDoesNotMistakeMonoForGeometricSans() {
         val profile = game("Game Font", 400)
         assertEquals(ArabicFontRole.UI, FontSelector.inferRole(profile, "assets/fonts/font.ttf"))

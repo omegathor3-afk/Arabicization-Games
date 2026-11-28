@@ -36,9 +36,9 @@ internal object FontSelector {
         return when {
             game.monospace || Regex("(^|[/_. -])(mono|monospace|code|console)([/_. -]|$)").containsMatchIn(identity) ->
                 ArabicFontRole.MONO
-            game.pixelStyle || listOf("pixel", "bitmap", "retro").any(identity::contains) -> ArabicFontRole.PIXEL
-            listOf("title", "headline", "display", "logo").any(identity::contains) -> ArabicFontRole.TITLE
-            listOf("dialogue", "dialog").any(identity::contains) -> ArabicFontRole.DIALOGUE
+            game.pixelStyle || listOf("pixel", "bitmap", "retro").any { marker -> identity.contains(marker) } -> ArabicFontRole.PIXEL
+            listOf("title", "headline", "display", "logo").any { marker -> identity.contains(marker) } -> ArabicFontRole.TITLE
+            listOf("dialogue", "dialog").any { marker -> identity.contains(marker) } -> ArabicFontRole.DIALOGUE
             identity.contains("body") -> ArabicFontRole.BODY
             else -> ArabicFontRole.UI
         }
@@ -67,6 +67,9 @@ internal object FontSelector {
         role: ArabicFontRole,
         coverage: (SelectableFont) -> FontAnalyzer.FontProfile,
     ): FontChoice {
+        require(!game.monospace || role == ArabicFontRole.MONO) {
+            "A fixed-width game font cannot be replaced by a proportional role candidate; preserve the original font."
+        }
         val wanted = inferStyle(game)
         val candidates = catalog.filter {
             role in it.roles && it.supportsPresentationForms && (role != ArabicFontRole.MONO || it.monospace)

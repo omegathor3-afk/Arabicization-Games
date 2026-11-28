@@ -269,9 +269,12 @@ internal object GettextPoLocalizer {
                 "تعذر توفير خط عربي للعبة ($defaultFont غير قابل للدمج). " + reasons.joinToString(" "))
         }
         val newBold = boldFont?.takeIf { it.endsWith(".ttf") }?.let { mergedCopy(it, ArabicFontRole.UI) } ?: newDefault
-        val newTitle = titleFont?.takeIf { it.endsWith(".ttf") }?.let { mergedCopy(it, ArabicFontRole.TITLE) } ?: newBold
+        val titleCandidate = titleFont?.takeIf { it.endsWith(".ttf") }?.let { mergedCopy(it, ArabicFontRole.TITLE) }
+        val newTitle = titleCandidate ?: newBold
         if (titleFont != null && !titleFont.endsWith(".ttf")) {
             reasons.add("خط العنوان $titleFont غير قابل للدمج (CFF/OTF)؛ استُخدم خط عريض مدمج بدلاً منه.")
+        } else if (titleFont != null && titleCandidate == null) {
+            reasons.add("لم يتوفر مرشح عربي آمن لدور العنوان في $titleFont؛ استُخدم الخط العريض المدمج بدلاً منه.")
         }
         val newHud = hudFont?.takeIf { it.endsWith(".ttf") }?.let { mergedCopy(it, ArabicFontRole.UI) } ?: newDefault
 
