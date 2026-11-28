@@ -904,3 +904,9 @@ repackage + run-as).
 - Restructured real-player CI (run 46099985407) surfaced a REAL product defect: the rebuild refused Car Runner (and every legacy Unity Mono APK) because of an over-conservative native-libs guard keyed on an unreliable PackageManager flag.
 - Fix: guard + dead extractNativeLibs parameter removed; ApkZipEntryPolicy already guarantees STORED alignment, DEFLATED entries keep their semantics. New JVM tests + real-APK repro (strict refusal path + tolerant full rebuild, mono lib preserved). Standalone suite 408/408, Gradle compiles green.
 - Side observation: Andors Trail CI failed on df10ad7 with the 90s screen-poll timeout after being green on 3637d83 with zero related changes - suspected emulator flake, reruns on next push.
+
+## 2026-11-28 06:25 UTC+2 — Unity Mono real-player leg GREEN on 59d747a
+
+- Unity Mono real player CI run 46104841093: PASSED. Annotation: detector=MONO on the real game, honest no-text refusal verified, ARABIFY re-sign apksigner-verified (39,611,303 bytes). Install/launch of ARM32-only Mono games documented as permanently out of scope for x86_64 CI (device-only).
+- Andors Trail rerun green (flake confirmed). Full board green on 59d747a: Android CI, CodeQL x2, Unciv, Mindustry (both), Pixel Wheels, Andors Trail, Bergamot, Unity Mono.
+- Issue #6 closes at EMULATOR_CI evidence level: real MIT Unity Mono player analyzed end-to-end in CI (detection + honest refusal + re-sign). Scene MonoBehaviour text rewrite is the remaining Unity coverage item, awaiting ChatGPT.
