@@ -336,6 +336,56 @@ else
   note_failure "localized Unciv APK missing after a green test: /sdcard/Download/ARABIFY listing: ${downloads_listing:-<empty>}"
   if [[ "$test_status" -eq 0 ]]; then test_status=1; fi
 fi
+# Visual Arabic render evidence on the deterministic pseudo build: the
+# instrumented visual test screenshots the RUNNING game and template-matches
+# menu lines against an in-test render of the shaped pseudo word drawn with
+# the system typeface (Unciv builds fonts from Android system fonts at
+# runtime). Pixel-level proof that pre-shaped presentation forms produce
+# VISIBLE Arabic glyph shapes; frames stay in the private artifact.
+if [[ "$test_status" -eq 0 && "$launch_status" -eq 0 ]]; then
+  visual_status=0
+  run_connected_test com.omega.arabify.UncivLocaleSlotInstrumentedTest \
+    -Pandroid.testInstrumentationRunnerArguments.translationMode=pseudo || visual_status=$?
+  if [[ "$visual_status" -eq 0 ]]; then
+    adb_with_reconnect pull /sdcard/Download/ARABIFY/unciv-arabic.apk "$OUTPUT_DIR/unciv-arabic-pseudo.apk" || { visual_status=1; note_failure "pseudo Unciv APK pull failed"; }
+  fi
+  if [[ "$visual_status" -eq 0 ]]; then
+    adb_with_reconnect uninstall com.unciv.app || true
+    adb_with_reconnect install "$OUTPUT_DIR/unciv-arabic-pseudo.apk" || { visual_status=1; note_failure "install of the pseudo Unciv build failed"; }
+  fi
+  if [[ "$visual_status" -eq 0 ]]; then
+    SETTINGS_JSON='{"language":"العربية"}'
+    if adb_with_reconnect root >/dev/null 2>&1; then
+      sleep 2
+      adb wait-for-device
+      adb_with_reconnect shell "mkdir -p /data/data/com.unciv.app/files && echo '$SETTINGS_JSON' > /data/data/com.unciv.app/files/GameSettings.json" || { visual_status=1; note_failure "failed to seed GameSettings.json for the visual leg via adb root"; }
+      adb unroot >/dev/null 2>&1 || true
+      sleep 2
+      adb wait-for-device
+    else
+      adb_with_reconnect shell "run-as com.unciv.app sh -c "mkdir -p files && echo '$SETTINGS_JSON' > files/GameSettings.json"" || { visual_status=1; note_failure "failed to seed GameSettings.json for the visual leg via run-as"; }
+    fi
+  fi
+  if [[ "$visual_status" -eq 0 ]]; then
+    adb shell settings put secure immersive_mode_confirmations confirmed >/dev/null 2>&1 || true
+    adb shell settings put global policy_control immersive.confirmations=confirmed >/dev/null 2>&1 || true
+    adb shell monkey -p com.unciv.app 1 || { visual_status=1; note_failure "monkey launch of the pseudo Unciv build failed"; }
+    sleep 12
+    adb shell pidof com.unciv.app > build/test-game/localized/visual-game-process.txt || { visual_status=1; note_failure "pseudo Unciv process not running after launch"; }
+  fi
+  if [[ "$visual_status" -eq 0 ]]; then
+    run_connected_test com.omega.arabify.UncivVisualArabicInstrumentedTest || visual_status=$?
+  fi
+  adb_with_reconnect pull /sdcard/Download/ARABIFY/unciv-visual-frame.png "$OUTPUT_DIR/unciv-visual-frame.png" || true
+  adb_with_reconnect pull /sdcard/Download/ARABIFY/unciv-visual-report.txt "$OUTPUT_DIR/unciv-visual-report.txt" || true
+  if [[ "$visual_status" -eq 0 && -s "$OUTPUT_DIR/unciv-visual-report.txt" ]]; then
+    echo "::notice::UNCIV-VISUAL-RENDER $(tr '\n' ' ' < "$OUTPUT_DIR/unciv-visual-report.txt" | head -c 700) (best frame retained in the private workflow artifact per the privacy rule)"
+  else
+    note_failure "Unciv visual Arabic render verification failed or produced no report (status $visual_status)"
+    test_status=1
+  fi
+fi
+
 if [[ "$test_status" -eq 0 && "$launch_status" -ne 0 ]]; then
   test_status="$launch_status"
 fi
