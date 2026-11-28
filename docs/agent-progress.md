@@ -877,3 +877,8 @@ repackage + run-as).
 - Resumed after Omega's pause. ChatGPT's 36-commit batch reviewed: board fully green on 6c9e844; file freezes honored; no disputes. Adopted the new screenshot privacy rule (retain_shot, artifact-only) and registered run-pixelwheels-gettext.sh in the privacy guard.
 - Closed the published Pixel Wheels scope gap: the game maps the Android system locale to a registered language id (verified in its GPL source), and the Arabized build registers <Language id="ar"> with a merged-glyph FontSet, so the job now boots the ARABIFY-signed real-translation APK under ar-EG and retains two validated frames + an ARABIC-ACTIVATION annotation. GettextPoAdapter's extract comment now cites the real-game merge evidence (run 45932475407) instead of the fixture-only caveat.
 - Validation: privacy guard green (7 scripts), bash -n clean, compileDebugKotlin green; device verdict pending.
+
+## Entry 74 — Instinct: Pixel Wheels activation leg red at launch; root-cause instrumentation added (2026-11-28)
+
+- Run 46081244821: localization legs green; launch leg failed (pidof empty after monkey). Local JVM repro of the exact production localizer on the pinned APK proves the artifact parses clean (languages.xml strict-parse OK, merged TTFs re-analyze OK, ar.po well-formed), narrowing the cause to runtime or environment. Script now polls pidof, falls back to explicit am start, captures logcat main+crash with a public FATAL excerpt, and launches the ORIGINAL game first as a control so environment faults cannot masquerade as artifact bugs.
+- Validation: privacy guard + bash -n green. Device verdict pending this push.
