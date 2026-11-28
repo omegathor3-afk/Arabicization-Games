@@ -48,13 +48,20 @@ internal object ArabicVisualRenderCheck {
         var bestMatches = emptyList<LineMatch>()
         var framesTried = 0
         var bandsSeenMax = 0
+        var maxRowInkSeen = 0
+        var maxInkPctSeen = 0.0
+        var lastPolarity = "bright"
 
         for (attempt in 1..maxFrames) {
             val shot = instrumentation.uiAutomation.takeScreenshot()
             if (shot != null) {
                 framesTried++
-                val (matches, bands) = analyzeFrame(shot, typefaces, shapedTemplate, minF1)
-                bandsSeenMax = maxOf(bandsSeenMax, bands)
+                val analysis = analyzeFrame(shot, typefaces, shapedTemplate, minF1)
+                val matches = analysis.matches
+                bandsSeenMax = maxOf(bandsSeenMax, analysis.bands)
+                maxRowInkSeen = maxOf(maxRowInkSeen, analysis.maxRowInk)
+                maxInkPctSeen = maxOf(maxInkPctSeen, analysis.inkPct)
+                lastPolarity = analysis.polarity
                 if (matches.size > bestMatches.size ||
                     (matches.size == bestMatches.size && matches.sumOf { it.f1 } > bestMatches.sumOf { it.f1 })
                 ) {
@@ -70,7 +77,7 @@ internal object ArabicVisualRenderCheck {
         }
 
         val report = buildString {
-            appendLine("framesTried=$framesTried textBandsSeen=$bandsSeenMax linesMatched=${bestMatches.size}")
+            appendLine("framesTried=$framesTried textBandsSeen=$bandsSeenMax linesMatched=${bestMatches.size} polarity=$lastPolarity maxRowInk=$maxRowInkSeen inkPct=${String.format(java.util.Locale.US, "%.4f", maxInkPctSeen)}")
             bestMatches.take(8).forEach {
                 appendLine("line y=${it.top} h=${it.height} f1=${String.format(java.util.Locale.US, "%.2f", it.f1)} fontIndex=${it.fontIndex}")
             }
@@ -94,44 +101,49 @@ internal object ArabicVisualRenderCheck {
         return Typeface.createFromFile(file)
     }
 
-    /** Returns matched lines to total text bands detected. */
+    data class FrameAnalysis(
+        val matches: List<LineMatch>,
+        val bands: Int,
+        val maxRowInk: Int,
+        val inkPct: Double,
+        val polarity: String,
+    )
+
+    /**
+     * Returns matched lines plus detection diagnostics. Menus come in both
+     * polarities (Pixel Wheels: bright text on a dark background; Unciv: dark
+     * text on a light tan background), so the frame is binarized both ways
+     * and the polarity that yields more text-line bands wins. The template is
+     * an alpha-mask glyph shape, so it matches either ink polarity unchanged.
+     */
     internal fun analyzeFrame(
         frame: Bitmap,
         typefaces: List<Typeface>,
         shapedTemplate: String,
         minF1: Double,
-    ): Pair<List<LineMatch>, Int> {
+    ): FrameAnalysis {
         val width = frame.width
         val height = frame.height
         val pixels = IntArray(width * height)
         frame.getPixels(pixels, 0, width, 0, 0, width, height)
 
-        // Menu text is light on a dark background: binarize by luminance.
         val bright = BooleanArray(width * height)
+        val dark = BooleanArray(width * height)
         for (i in pixels.indices) {
             val c = pixels[i]
             val lum = (Color.red(c) + Color.green(c) + Color.blue(c)) / 3
             bright[i] = lum >= 130
+            dark[i] = lum <= 110
         }
 
-        // Text-line detection from the y-axis projection of bright pixels.
-        val rowCounts = IntArray(height)
-        for (y in 0 until height) {
-            var count = 0
-            val base = y * width
-            for (x in 0 until width) if (bright[base + x]) count++
-            rowCounts[y] = count
-        }
-        val bands = mutableListOf<Band>()
-        var y = 0
-        while (y < height) {
-            if (rowCounts[y] >= 12) {
-                var end = y
-                while (end + 1 < height && (rowCounts[end + 1] >= 4 || (end + 2 < height && rowCounts[end + 2] >= 4))) end++
-                if (end - y + 1 in 10..160) bands.add(Band(y, end + 1))
-                y = end + 1
-            } else y++
-        }
+        val brightBands = detectBands(bright, width, height)
+        val darkBands = detectBands(dark, width, height)
+        val ink = if (darkBands.first.size > brightBands.first.size) dark else bright
+        val (bands, maxRowInk) = if (darkBands.first.size > brightBands.first.size) darkBands else brightBands
+        val polarity = if (darkBands.first.size > brightBands.first.size) "dark" else "bright"
+        var inkTotal = 0L
+        for (v in ink) if (v) inkTotal++
+        val inkPct = inkTotal.toDouble() / (width.toDouble() * height)
 
         val matches = mutableListOf<LineMatch>()
         for (band in bands) {
@@ -141,7 +153,7 @@ internal object ArabicVisualRenderCheck {
             for (row in band.top until band.bottom) {
                 val base = row * width
                 for (x in 0 until width) {
-                    if (bright[base + x]) {
+                    if (ink[base + x]) {
                         if (x < left) left = x
                         if (x > right) right = x
                     }
@@ -152,13 +164,37 @@ internal object ArabicVisualRenderCheck {
             typefaces.forEachIndexed { fontIndex, typeface ->
                 for (scale in listOf(1.0, 1.2, 0.85)) {
                     val template = renderTemplate(shapedTemplate, typeface, bandHeight, scale)
-                    val f1 = slideMatch(bright, width, left, right, band.top, band.bottom, template)
+                    val f1 = slideMatch(ink, width, left, right, band.top, band.bottom, template)
                     if (best == null || f1 > best!!.f1) best = LineMatch(band.top, bandHeight, f1, fontIndex)
                 }
             }
             if (best != null && best!!.f1 >= minF1) matches.add(best!!)
         }
-        return matches to bands.size
+        return FrameAnalysis(matches, bands.size, maxRowInk, inkPct, polarity)
+    }
+
+    /** Text-line detection from the y-axis projection of ink pixels. Returns bands to the max row ink count. */
+    private fun detectBands(mask: BooleanArray, width: Int, height: Int): Pair<List<Band>, Int> {
+        val rowCounts = IntArray(height)
+        for (y in 0 until height) {
+            var count = 0
+            val base = y * width
+            for (x in 0 until width) if (mask[base + x]) count++
+            rowCounts[y] = count
+        }
+        var maxRow = 0
+        for (c in rowCounts) maxRow = maxOf(maxRow, c)
+        val bands = mutableListOf<Band>()
+        var y = 0
+        while (y < height) {
+            if (rowCounts[y] >= 12) {
+                var end = y
+                while (end + 1 < height && (rowCounts[end + 1] >= 4 || (end + 2 < height && rowCounts[end + 2] >= 4))) end++
+                if (end - y + 1 in 10..160) bands.add(Band(y, end + 1))
+                y = end + 1
+            } else y++
+        }
+        return bands to maxRow
     }
 
     /** Renders the shaped word in white with [typeface] and binarizes by alpha. */
