@@ -28,9 +28,14 @@ import org.junit.runner.RunWith
  *    synthetic fixture);
  *  - the production localizer's refusal is honest (right error, nothing
  *    silently produced);
- *  - the repackaging route (re-sign with ARABIFY's key, verified) works on a
- *    real Mono game - install/launch of that signed copy is asserted by the
- *    CI script leg that follows this test.
+ *  - the repackaging route's re-sign + verify step works on a real Mono
+ *    game APK.
+ *
+ * The CI script pushes the pinned APK to /sdcard instead of installing it:
+ * the game is armeabi-v7a-only and every x86_64 emulator image available to
+ * CI (verified on API 33 and API 35) rejects 32-bit ARM with
+ * NO_MATCHING_ABIS, so install/launch of this ARM32-only Mono game class is
+ * permanently out of scope for x86_64 CI - provable only on an ARM device.
  *
  * Translating this game's actual UI requires serialized-scene MonoBehaviour
  * text rewriting (UnityEngine.UI.Text / TMP m_Text), which is the proposed
@@ -41,13 +46,20 @@ class UnityMonoRealPlayerInstrumentedTest {
 
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val gamePackage = "com.PotneAEiI.CarRunner"
+    // Scoped storage: the script adb-pushes the pinned APK into the app's
+    // own external files dir, the only location readable without storage
+    // permissions on API 31+.
+    private val pushedApk: File
+        get() = File(context.getExternalFilesDir(null), "carrunner-original.apk")
 
     @Test
     fun realMonoPlayerDetectedRefusedHonestlyAndRepackaged() {
         runBlocking {
-            val pm = context.packageManager
-            val original = File(pm.getApplicationInfo(gamePackage, 0).sourceDir)
-            assertTrue("real Car Runner APK not readable", original.isFile && original.length() > 0)
+            val original = pushedApk
+            assertTrue(
+                "pinned Car Runner APK missing at ${pushedApk.absolutePath} (script pushes it before the test)",
+                original.isFile && original.length() > 0,
+            )
 
             // Real-game Mono detection (no synthetic fixture involved).
             val kind = UnityMonoPackageDetector.detect(original)
